@@ -4,6 +4,7 @@ import type {
   IntentRequirement,
   IntentTechnique,
 } from "./schema.js";
+import { defaultMotion } from "../context.js";
 import { objectsIn } from "../context.js";
 import {
   equivalentObjectName,
@@ -59,7 +60,7 @@ function explicitTechniques(text: string): IntentTechnique[] {
 }
 const inheritance = /аналогично|так\s+же|как\s+предыдущ|как\s+перв/i;
 const sequential =
-  /после\s+(?:заверш|оконч|перв)|когда\s*(?:он[аои]?\s*)?(?:законч|конча)|(?:а\s+)?(?:потом|затем)|сразу\s+(?:вслед|после)/i;
+  /(?:в\s+момент\s+)?как\s+законч|после\s+(?:заверш|оконч|перв)|когда\s*(?:он[аои]?\s*)?(?:законч|конча)|(?:а\s+)?(?:потом|затем)|сразу\s+(?:вслед|после)/i;
 const ordinals: Record<string, number> = {
   первой: 1,
   первую: 1,
@@ -76,6 +77,7 @@ export function inspectSemanticCoverage(
   project: LoadedProject,
   request: string,
   plan: IntentPlan,
+  fps = defaultMotion(project).settings.fps,
 ): CoverageReport {
   const report: CoverageReport = { status: "PASSED", issues: [], clauses: [] };
   const scenes = project.inspection.document.scenes;
@@ -89,6 +91,23 @@ export function inspectSemanticCoverage(
   )) {
     boundaries.add(m.index!);
     if (m[0]) boundaries.add(m.index! + m[0].length);
+  }
+  // Use verbatim requirement spans only as candidate boundaries, never as proof of
+  // coverage. This keeps postfix targets ("trim paths лента 2") with their verb.
+  for (const r of plan.requirements) {
+    if (r.kind === "sceneTiming" || r.sourceText.length === request.length)
+      continue;
+    if (
+      !explicitTechniques(r.sourceText).length &&
+      !inheritance.test(r.sourceText)
+    )
+      continue;
+    let at = request.indexOf(r.sourceText);
+    while (at >= 0) {
+      boundaries.add(at);
+      boundaries.add(at + r.sourceText.length);
+      at = request.indexOf(r.sourceText, at + r.sourceText.length);
+    }
   }
   // Split an unpunctuated change of object only after an actual technique phrase.
   const mentions = objects.flatMap((o) =>
@@ -106,6 +125,14 @@ export function inspectSemanticCoverage(
       .sort((a, b) => a.start - b.start)) {
       if (
         seenObject &&
+        !plan.requirements.some(
+          (r) =>
+            r.target.sourceNodeId === mention.object.targetId &&
+            r.sceneId === mention.object.sceneId &&
+            r.sourceText.length < request.length &&
+            request.slice(initial[i], initial[i + 1]).trim() ===
+              r.sourceText.trim(),
+        ) &&
         explicitTechniques(request.slice(last, mention.start)).length
       ) {
         boundaries.add(mention.start);
@@ -169,11 +196,12 @@ export function inspectSemanticCoverage(
     }
     if (header && /начина|starts|\bна\s/i.test(text)) {
       const time = text.match(
-        /(?:на|at)\s*(\d+(?:[.,]\d+)?|первой|первую|второй|вторую|третьей|третью|четв[её]ртой|пятой)\s*(?:сек|second)/i,
+        /(?:на|at)\s*(\d+(?:[.,]\d+)?|первой|первую|второй|вторую|третьей|третью|четв[её]ртой|пятой)\s*(?:сек|second|кадр|frames?)/i,
       );
       if (time && sceneId) {
-        const seconds =
+        const amount =
           ordinals[time[1].toLowerCase()] ?? Number(time[1].replace(",", "."));
+        const seconds = /кадр|frame/i.test(time[0]) ? amount / fps : amount;
         const rs = plan.requirements.filter(
           (r) => r.kind === "sceneTiming" && r.sceneId === sceneId,
         );

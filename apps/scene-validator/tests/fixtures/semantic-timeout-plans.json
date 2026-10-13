@@ -1,0 +1,966 @@
+{
+  "description": "Saved response contract replay on synthetic geometry; original project identifiers/assets/assumptions removed.",
+  "request": "сцена 2 начинается на 30 кадре: Абонементы на любимую еду и напитки и лого появляются сверху а image 1926988171 и куар появляются снизу\nсцена 3 начинается на 90 кадре: лента 1 появляется через trim paths и в момент как закончится анимация появляется через trim paths лента 2 , с выгодой до 80% и шейп под 80% появляются сверху",
+  "plans": [
+    {
+      "schemaVersion": "1.0.0",
+      "requirements": [
+        {
+          "requirementId": "r1",
+          "kind": "sceneTiming",
+          "sourceText": "сцена 2 начинается на 30 кадре:",
+          "sceneId": "s1",
+          "target": {
+            "sourceNodeId": null,
+            "logicalObjectId": null,
+            "name": null
+          },
+          "techniques": [],
+          "parameters": {
+            "property": null,
+            "seed": null,
+            "fromSceneId": null,
+            "toSceneId": null,
+            "moveToCenter": null,
+            "x": null,
+            "y": null,
+            "scaleFrom": null,
+            "scaleTo": null,
+            "durationSeconds": null,
+            "distance": null,
+            "direction": null,
+            "amplitude": null,
+            "frequencyFactor": null,
+            "frequency": null,
+            "decay": null,
+            "easing": null,
+            "durationFactor": null,
+            "amplitudeFactor": null
+          },
+          "timing": {
+            "startSeconds": 1,
+            "relation": "unchanged",
+            "anchorRequirementId": null,
+            "delaySeconds": 0
+          },
+          "inheritFromRequirementId": null,
+          "inheritanceExplanation": null,
+          "constraints": [],
+          "unresolvedReason": null
+        },
+        {
+          "requirementId": "r2",
+          "kind": "objectAnimation",
+          "sourceText": "Абонементы на любимую еду и напитки и лого появляются сверху",
+          "sceneId": "s1",
+          "target": {
+            "sourceNodeId": "text",
+            "logicalObjectId": null,
+            "name": "Абонементы на любимую еду и напитки"
+          },
+          "techniques": ["slideDown"],
+          "parameters": {
+            "property": "y",
+            "seed": null,
+            "fromSceneId": null,
+            "toSceneId": null,
+            "moveToCenter": null,
+            "x": null,
+            "y": null,
+            "scaleFrom": null,
+            "scaleTo": null,
+            "durationSeconds": null,
+            "distance": null,
+            "direction": null,
+            "amplitude": null,
+            "frequencyFactor": null,
+            "frequency": null,
+            "decay": null,
+            "easing": null,
+            "durationFactor": null,
+            "amplitudeFactor": null
+          },
+          "timing": {
+            "startSeconds": null,
+            "relation": "sceneStart",
+            "anchorRequirementId": null,
+            "delaySeconds": 0
+          },
+          "inheritFromRequirementId": null,
+          "inheritanceExplanation": null,
+          "constraints": [],
+          "unresolvedReason": null
+        },
+        {
+          "requirementId": "r3",
+          "kind": "objectAnimation",
+          "sourceText": "Абонементы на любимую еду и напитки и лого появляются сверху",
+          "sceneId": "s1",
+          "target": {
+            "sourceNodeId": "logo",
+            "logicalObjectId": null,
+            "name": "лого"
+          },
+          "techniques": ["slideDown"],
+          "parameters": {
+            "property": "y",
+            "seed": null,
+            "fromSceneId": null,
+            "toSceneId": null,
+            "moveToCenter": null,
+            "x": null,
+            "y": null,
+            "scaleFrom": null,
+            "scaleTo": null,
+            "durationSeconds": null,
+            "distance": null,
+            "direction": null,
+            "amplitude": null,
+            "frequencyFactor": null,
+            "frequency": null,
+            "decay": null,
+            "easing": null,
+            "durationFactor": null,
+            "amplitudeFactor": null
+          },
+          "timing": {
+            "startSeconds": null,
+            "relation": "sceneStart",
+            "anchorRequirementId": null,
+            "delaySeconds": 0
+          },
+          "inheritFromRequirementId": null,
+          "inheritanceExplanation": null,
+          "constraints": [],
+          "unresolvedReason": null
+        },
+        {
+          "requirementId": "r4",
+          "kind": "objectAnimation",
+          "sourceText": "image 1926988171 и куар появляются снизу",
+          "sceneId": "s1",
+          "target": {
+            "sourceNodeId": "image",
+            "logicalObjectId": null,
+            "name": "image 1926988171"
+          },
+          "techniques": ["slideUp"],
+          "parameters": {
+            "property": "y",
+            "seed": null,
+            "fromSceneId": null,
+            "toSceneId": null,
+            "moveToCenter": null,
+            "x": null,
+            "y": null,
+            "scaleFrom": null,
+            "scaleTo": null,
+            "durationSeconds": null,
+            "distance": null,
+            "direction": null,
+            "amplitude": null,
+            "frequencyFactor": null,
+            "frequency": null,
+            "decay": null,
+            "easing": null,
+            "durationFactor": null,
+            "amplitudeFactor": null
+          },
+          "timing": {
+            "startSeconds": null,
+            "relation": "sceneStart",
+            "anchorRequirementId": null,
+            "delaySeconds": 0
+          },
+          "inheritFromRequirementId": null,
+          "inheritanceExplanation": null,
+          "constraints": [],
+          "unresolvedReason": null
+        },
+        {
+          "requirementId": "r5",
+          "kind": "objectAnimation",
+          "sourceText": "image 1926988171 и куар появляются снизу",
+          "sceneId": "s1",
+          "target": {
+            "sourceNodeId": "qr",
+            "logicalObjectId": null,
+            "name": "куар"
+          },
+          "techniques": ["slideUp"],
+          "parameters": {
+            "property": "y",
+            "seed": null,
+            "fromSceneId": null,
+            "toSceneId": null,
+            "moveToCenter": null,
+            "x": null,
+            "y": null,
+            "scaleFrom": null,
+            "scaleTo": null,
+            "durationSeconds": null,
+            "distance": null,
+            "direction": null,
+            "amplitude": null,
+            "frequencyFactor": null,
+            "frequency": null,
+            "decay": null,
+            "easing": null,
+            "durationFactor": null,
+            "amplitudeFactor": null
+          },
+          "timing": {
+            "startSeconds": null,
+            "relation": "sceneStart",
+            "anchorRequirementId": null,
+            "delaySeconds": 0
+          },
+          "inheritFromRequirementId": null,
+          "inheritanceExplanation": null,
+          "constraints": [],
+          "unresolvedReason": null
+        },
+        {
+          "requirementId": "r6",
+          "kind": "sceneTiming",
+          "sourceText": "сцена 3 начинается на 90 кадре:",
+          "sceneId": "s2",
+          "target": {
+            "sourceNodeId": null,
+            "logicalObjectId": null,
+            "name": null
+          },
+          "techniques": [],
+          "parameters": {
+            "property": null,
+            "seed": null,
+            "fromSceneId": null,
+            "toSceneId": null,
+            "moveToCenter": null,
+            "x": null,
+            "y": null,
+            "scaleFrom": null,
+            "scaleTo": null,
+            "durationSeconds": null,
+            "distance": null,
+            "direction": null,
+            "amplitude": null,
+            "frequencyFactor": null,
+            "frequency": null,
+            "decay": null,
+            "easing": null,
+            "durationFactor": null,
+            "amplitudeFactor": null
+          },
+          "timing": {
+            "startSeconds": 3,
+            "relation": "unchanged",
+            "anchorRequirementId": null,
+            "delaySeconds": 0
+          },
+          "inheritFromRequirementId": null,
+          "inheritanceExplanation": null,
+          "constraints": [],
+          "unresolvedReason": null
+        },
+        {
+          "requirementId": "r7",
+          "kind": "objectAnimation",
+          "sourceText": "лента 1 появляется через trim paths",
+          "sceneId": "s2",
+          "target": {
+            "sourceNodeId": "ribbon1",
+            "logicalObjectId": null,
+            "name": "лента 1"
+          },
+          "techniques": ["trimPath"],
+          "parameters": {
+            "property": null,
+            "seed": null,
+            "fromSceneId": null,
+            "toSceneId": null,
+            "moveToCenter": null,
+            "x": null,
+            "y": null,
+            "scaleFrom": null,
+            "scaleTo": null,
+            "durationSeconds": 1,
+            "distance": null,
+            "direction": null,
+            "amplitude": null,
+            "frequencyFactor": null,
+            "frequency": null,
+            "decay": null,
+            "easing": null,
+            "durationFactor": null,
+            "amplitudeFactor": null
+          },
+          "timing": {
+            "startSeconds": null,
+            "relation": "sceneStart",
+            "anchorRequirementId": null,
+            "delaySeconds": 0
+          },
+          "inheritFromRequirementId": null,
+          "inheritanceExplanation": null,
+          "constraints": [],
+          "unresolvedReason": null
+        },
+        {
+          "requirementId": "r8",
+          "kind": "objectAnimation",
+          "sourceText": "и в момент как закончится анимация появляется через trim paths лента 2",
+          "sceneId": "s2",
+          "target": {
+            "sourceNodeId": "ribbon2",
+            "logicalObjectId": null,
+            "name": "лента 2"
+          },
+          "techniques": ["trimPath"],
+          "parameters": {
+            "property": null,
+            "seed": null,
+            "fromSceneId": null,
+            "toSceneId": null,
+            "moveToCenter": null,
+            "x": null,
+            "y": null,
+            "scaleFrom": null,
+            "scaleTo": null,
+            "durationSeconds": 1,
+            "distance": null,
+            "direction": null,
+            "amplitude": null,
+            "frequencyFactor": null,
+            "frequency": null,
+            "decay": null,
+            "easing": null,
+            "durationFactor": null,
+            "amplitudeFactor": null
+          },
+          "timing": {
+            "startSeconds": null,
+            "relation": "afterRequirement",
+            "anchorRequirementId": "r7",
+            "delaySeconds": 0
+          },
+          "inheritFromRequirementId": null,
+          "inheritanceExplanation": null,
+          "constraints": [],
+          "unresolvedReason": null
+        },
+        {
+          "requirementId": "r9",
+          "kind": "objectAnimation",
+          "sourceText": "с выгодой до 80% и шейп под 80% появляются сверху",
+          "sceneId": "s2",
+          "target": {
+            "sourceNodeId": "discount",
+            "logicalObjectId": null,
+            "name": "с выгодой до 80%"
+          },
+          "techniques": ["slideDown"],
+          "parameters": {
+            "property": "y",
+            "seed": null,
+            "fromSceneId": null,
+            "toSceneId": null,
+            "moveToCenter": null,
+            "x": null,
+            "y": null,
+            "scaleFrom": null,
+            "scaleTo": null,
+            "durationSeconds": null,
+            "distance": null,
+            "direction": null,
+            "amplitude": null,
+            "frequencyFactor": null,
+            "frequency": null,
+            "decay": null,
+            "easing": null,
+            "durationFactor": null,
+            "amplitudeFactor": null
+          },
+          "timing": {
+            "startSeconds": null,
+            "relation": "sceneStart",
+            "anchorRequirementId": null,
+            "delaySeconds": 0
+          },
+          "inheritFromRequirementId": null,
+          "inheritanceExplanation": null,
+          "constraints": [],
+          "unresolvedReason": null
+        },
+        {
+          "requirementId": "r10",
+          "kind": "objectAnimation",
+          "sourceText": "с выгодой до 80% и шейп под 80% появляются сверху",
+          "sceneId": "s2",
+          "target": {
+            "sourceNodeId": "shape",
+            "logicalObjectId": null,
+            "name": "шейп под 80%"
+          },
+          "techniques": ["slideDown"],
+          "parameters": {
+            "property": "y",
+            "seed": null,
+            "fromSceneId": null,
+            "toSceneId": null,
+            "moveToCenter": null,
+            "x": null,
+            "y": null,
+            "scaleFrom": null,
+            "scaleTo": null,
+            "durationSeconds": null,
+            "distance": null,
+            "direction": null,
+            "amplitude": null,
+            "frequencyFactor": null,
+            "frequency": null,
+            "decay": null,
+            "easing": null,
+            "durationFactor": null,
+            "amplitudeFactor": null
+          },
+          "timing": {
+            "startSeconds": null,
+            "relation": "sceneStart",
+            "anchorRequirementId": null,
+            "delaySeconds": 0
+          },
+          "inheritFromRequirementId": null,
+          "inheritanceExplanation": null,
+          "constraints": [],
+          "unresolvedReason": null
+        }
+      ],
+      "coverage": [
+        {
+          "sourceText": "сцена 2 начинается на 30 кадре: ",
+          "requirementIds": ["r1"],
+          "classification": "executable",
+          "explanation": "Перенести начало сцены 2 на 1 секунду."
+        },
+        {
+          "sourceText": "Абонементы на любимую еду и напитки и лого появляются сверху а ",
+          "requirementIds": ["r2", "r3"],
+          "classification": "executable",
+          "explanation": "Оба объекта сцены 2 появляются сверху через slideDown."
+        },
+        {
+          "sourceText": "image 1926988171 и куар появляются снизу\n",
+          "requirementIds": ["r4", "r5"],
+          "classification": "executable",
+          "explanation": "Оба объекта сцены 2 появляются снизу через slideUp."
+        },
+        {
+          "sourceText": "сцена 3 начинается на 90 кадре: ",
+          "requirementIds": ["r6"],
+          "classification": "executable",
+          "explanation": "Новая область сцены 3; начало на 3 секунде."
+        },
+        {
+          "sourceText": "лента 1 появляется через trim paths ",
+          "requirementIds": ["r7"],
+          "classification": "executable",
+          "explanation": "Прорисовать первую ленту через trimPath."
+        },
+        {
+          "sourceText": "и в момент как закончится анимация появляется через trim paths лента 2 , ",
+          "requirementIds": ["r7", "r8"],
+          "classification": "executable",
+          "explanation": "Прорисовка второй ленты начинается сразу после завершения первой; зависимость сохраняется относительно r7."
+        },
+        {
+          "sourceText": "с выгодой до 80% и шейп под 80% появляются сверху",
+          "requirementIds": ["r9", "r10"],
+          "classification": "executable",
+          "explanation": "Текст скидки и его подложка в сцене 3 появляются сверху."
+        }
+      ],
+      "assumptions": []
+    },
+    {
+      "schemaVersion": "1.0.0",
+      "requirements": [
+        {
+          "requirementId": "r1",
+          "kind": "sceneTiming",
+          "sourceText": "сцена 2 начинается на 30 кадре:",
+          "sceneId": "s1",
+          "target": {
+            "sourceNodeId": null,
+            "logicalObjectId": null,
+            "name": null
+          },
+          "techniques": [],
+          "parameters": {
+            "property": null,
+            "seed": null,
+            "fromSceneId": null,
+            "toSceneId": null,
+            "moveToCenter": null,
+            "x": null,
+            "y": null,
+            "scaleFrom": null,
+            "scaleTo": null,
+            "durationSeconds": null,
+            "distance": null,
+            "direction": null,
+            "amplitude": null,
+            "frequencyFactor": null,
+            "frequency": null,
+            "decay": null,
+            "easing": null,
+            "durationFactor": null,
+            "amplitudeFactor": null
+          },
+          "timing": {
+            "startSeconds": 1,
+            "relation": "unchanged",
+            "anchorRequirementId": null,
+            "delaySeconds": 0
+          },
+          "inheritFromRequirementId": null,
+          "inheritanceExplanation": null,
+          "constraints": [],
+          "unresolvedReason": null
+        },
+        {
+          "requirementId": "r2",
+          "kind": "objectAnimation",
+          "sourceText": "Абонементы на любимую еду и напитки и лого появляются сверху",
+          "sceneId": "s1",
+          "target": {
+            "sourceNodeId": "text",
+            "logicalObjectId": null,
+            "name": "Абонементы на любимую еду и напитки"
+          },
+          "techniques": ["slideDown"],
+          "parameters": {
+            "property": "y",
+            "seed": null,
+            "fromSceneId": null,
+            "toSceneId": null,
+            "moveToCenter": null,
+            "x": null,
+            "y": null,
+            "scaleFrom": null,
+            "scaleTo": null,
+            "durationSeconds": null,
+            "distance": null,
+            "direction": null,
+            "amplitude": null,
+            "frequencyFactor": null,
+            "frequency": null,
+            "decay": null,
+            "easing": null,
+            "durationFactor": null,
+            "amplitudeFactor": null
+          },
+          "timing": {
+            "startSeconds": null,
+            "relation": "sceneStart",
+            "anchorRequirementId": null,
+            "delaySeconds": 0
+          },
+          "inheritFromRequirementId": null,
+          "inheritanceExplanation": null,
+          "constraints": [],
+          "unresolvedReason": null
+        },
+        {
+          "requirementId": "r3",
+          "kind": "objectAnimation",
+          "sourceText": "Абонементы на любимую еду и напитки и лого появляются сверху",
+          "sceneId": "s1",
+          "target": {
+            "sourceNodeId": "logo",
+            "logicalObjectId": null,
+            "name": "лого"
+          },
+          "techniques": ["slideDown"],
+          "parameters": {
+            "property": "y",
+            "seed": null,
+            "fromSceneId": null,
+            "toSceneId": null,
+            "moveToCenter": null,
+            "x": null,
+            "y": null,
+            "scaleFrom": null,
+            "scaleTo": null,
+            "durationSeconds": null,
+            "distance": null,
+            "direction": null,
+            "amplitude": null,
+            "frequencyFactor": null,
+            "frequency": null,
+            "decay": null,
+            "easing": null,
+            "durationFactor": null,
+            "amplitudeFactor": null
+          },
+          "timing": {
+            "startSeconds": null,
+            "relation": "sceneStart",
+            "anchorRequirementId": null,
+            "delaySeconds": 0
+          },
+          "inheritFromRequirementId": null,
+          "inheritanceExplanation": null,
+          "constraints": [],
+          "unresolvedReason": null
+        },
+        {
+          "requirementId": "r4",
+          "kind": "objectAnimation",
+          "sourceText": "image 1926988171 и куар появляются снизу",
+          "sceneId": "s1",
+          "target": {
+            "sourceNodeId": "image",
+            "logicalObjectId": null,
+            "name": "image 1926988171"
+          },
+          "techniques": ["slideUp"],
+          "parameters": {
+            "property": "y",
+            "seed": null,
+            "fromSceneId": null,
+            "toSceneId": null,
+            "moveToCenter": null,
+            "x": null,
+            "y": null,
+            "scaleFrom": null,
+            "scaleTo": null,
+            "durationSeconds": null,
+            "distance": null,
+            "direction": null,
+            "amplitude": null,
+            "frequencyFactor": null,
+            "frequency": null,
+            "decay": null,
+            "easing": null,
+            "durationFactor": null,
+            "amplitudeFactor": null
+          },
+          "timing": {
+            "startSeconds": null,
+            "relation": "sceneStart",
+            "anchorRequirementId": null,
+            "delaySeconds": 0
+          },
+          "inheritFromRequirementId": null,
+          "inheritanceExplanation": null,
+          "constraints": [],
+          "unresolvedReason": null
+        },
+        {
+          "requirementId": "r5",
+          "kind": "objectAnimation",
+          "sourceText": "image 1926988171 и куар появляются снизу",
+          "sceneId": "s1",
+          "target": {
+            "sourceNodeId": "qr",
+            "logicalObjectId": null,
+            "name": "куар"
+          },
+          "techniques": ["slideUp"],
+          "parameters": {
+            "property": "y",
+            "seed": null,
+            "fromSceneId": null,
+            "toSceneId": null,
+            "moveToCenter": null,
+            "x": null,
+            "y": null,
+            "scaleFrom": null,
+            "scaleTo": null,
+            "durationSeconds": null,
+            "distance": null,
+            "direction": null,
+            "amplitude": null,
+            "frequencyFactor": null,
+            "frequency": null,
+            "decay": null,
+            "easing": null,
+            "durationFactor": null,
+            "amplitudeFactor": null
+          },
+          "timing": {
+            "startSeconds": null,
+            "relation": "sceneStart",
+            "anchorRequirementId": null,
+            "delaySeconds": 0
+          },
+          "inheritFromRequirementId": null,
+          "inheritanceExplanation": null,
+          "constraints": [],
+          "unresolvedReason": null
+        },
+        {
+          "requirementId": "r6",
+          "kind": "sceneTiming",
+          "sourceText": "сцена 3 начинается на 90 кадре:",
+          "sceneId": "s2",
+          "target": {
+            "sourceNodeId": null,
+            "logicalObjectId": null,
+            "name": null
+          },
+          "techniques": [],
+          "parameters": {
+            "property": null,
+            "seed": null,
+            "fromSceneId": null,
+            "toSceneId": null,
+            "moveToCenter": null,
+            "x": null,
+            "y": null,
+            "scaleFrom": null,
+            "scaleTo": null,
+            "durationSeconds": null,
+            "distance": null,
+            "direction": null,
+            "amplitude": null,
+            "frequencyFactor": null,
+            "frequency": null,
+            "decay": null,
+            "easing": null,
+            "durationFactor": null,
+            "amplitudeFactor": null
+          },
+          "timing": {
+            "startSeconds": 3,
+            "relation": "unchanged",
+            "anchorRequirementId": null,
+            "delaySeconds": 0
+          },
+          "inheritFromRequirementId": null,
+          "inheritanceExplanation": null,
+          "constraints": [],
+          "unresolvedReason": null
+        },
+        {
+          "requirementId": "r7",
+          "kind": "objectAnimation",
+          "sourceText": "лента 1 появляется через trim paths",
+          "sceneId": "s2",
+          "target": {
+            "sourceNodeId": "ribbon1",
+            "logicalObjectId": null,
+            "name": "лента 1"
+          },
+          "techniques": ["trimPath"],
+          "parameters": {
+            "property": null,
+            "seed": null,
+            "fromSceneId": null,
+            "toSceneId": null,
+            "moveToCenter": null,
+            "x": null,
+            "y": null,
+            "scaleFrom": null,
+            "scaleTo": null,
+            "durationSeconds": 1,
+            "distance": null,
+            "direction": null,
+            "amplitude": null,
+            "frequencyFactor": null,
+            "frequency": null,
+            "decay": null,
+            "easing": null,
+            "durationFactor": null,
+            "amplitudeFactor": null
+          },
+          "timing": {
+            "startSeconds": null,
+            "relation": "sceneStart",
+            "anchorRequirementId": null,
+            "delaySeconds": 0
+          },
+          "inheritFromRequirementId": null,
+          "inheritanceExplanation": null,
+          "constraints": [],
+          "unresolvedReason": null
+        },
+        {
+          "requirementId": "r8",
+          "kind": "objectAnimation",
+          "sourceText": "и в момент как закончится анимация появляется через trim paths лента 2",
+          "sceneId": "s2",
+          "target": {
+            "sourceNodeId": "ribbon2",
+            "logicalObjectId": null,
+            "name": "лента 2"
+          },
+          "techniques": ["trimPath"],
+          "parameters": {
+            "property": null,
+            "seed": null,
+            "fromSceneId": null,
+            "toSceneId": null,
+            "moveToCenter": null,
+            "x": null,
+            "y": null,
+            "scaleFrom": null,
+            "scaleTo": null,
+            "durationSeconds": 1,
+            "distance": null,
+            "direction": null,
+            "amplitude": null,
+            "frequencyFactor": null,
+            "frequency": null,
+            "decay": null,
+            "easing": null,
+            "durationFactor": null,
+            "amplitudeFactor": null
+          },
+          "timing": {
+            "startSeconds": null,
+            "relation": "afterRequirement",
+            "anchorRequirementId": "r7",
+            "delaySeconds": 0
+          },
+          "inheritFromRequirementId": null,
+          "inheritanceExplanation": null,
+          "constraints": [],
+          "unresolvedReason": null
+        },
+        {
+          "requirementId": "r9",
+          "kind": "objectAnimation",
+          "sourceText": "с выгодой до 80% и шейп под 80% появляются сверху",
+          "sceneId": "s2",
+          "target": {
+            "sourceNodeId": "discount",
+            "logicalObjectId": null,
+            "name": "с выгодой до 80%"
+          },
+          "techniques": ["slideDown"],
+          "parameters": {
+            "property": "y",
+            "seed": null,
+            "fromSceneId": null,
+            "toSceneId": null,
+            "moveToCenter": null,
+            "x": null,
+            "y": null,
+            "scaleFrom": null,
+            "scaleTo": null,
+            "durationSeconds": null,
+            "distance": null,
+            "direction": null,
+            "amplitude": null,
+            "frequencyFactor": null,
+            "frequency": null,
+            "decay": null,
+            "easing": null,
+            "durationFactor": null,
+            "amplitudeFactor": null
+          },
+          "timing": {
+            "startSeconds": null,
+            "relation": "sceneStart",
+            "anchorRequirementId": null,
+            "delaySeconds": 0
+          },
+          "inheritFromRequirementId": null,
+          "inheritanceExplanation": null,
+          "constraints": [],
+          "unresolvedReason": null
+        },
+        {
+          "requirementId": "r10",
+          "kind": "objectAnimation",
+          "sourceText": "с выгодой до 80% и шейп под 80% появляются сверху",
+          "sceneId": "s2",
+          "target": {
+            "sourceNodeId": "shape",
+            "logicalObjectId": null,
+            "name": "шейп под 80%"
+          },
+          "techniques": ["slideDown"],
+          "parameters": {
+            "property": "y",
+            "seed": null,
+            "fromSceneId": null,
+            "toSceneId": null,
+            "moveToCenter": null,
+            "x": null,
+            "y": null,
+            "scaleFrom": null,
+            "scaleTo": null,
+            "durationSeconds": null,
+            "distance": null,
+            "direction": null,
+            "amplitude": null,
+            "frequencyFactor": null,
+            "frequency": null,
+            "decay": null,
+            "easing": null,
+            "durationFactor": null,
+            "amplitudeFactor": null
+          },
+          "timing": {
+            "startSeconds": null,
+            "relation": "sceneStart",
+            "anchorRequirementId": null,
+            "delaySeconds": 0
+          },
+          "inheritFromRequirementId": null,
+          "inheritanceExplanation": null,
+          "constraints": [],
+          "unresolvedReason": null
+        }
+      ],
+      "coverage": [
+        {
+          "sourceText": "сцена 2 начинается на 30 кадре: ",
+          "requirementIds": ["r1"],
+          "classification": "executable",
+          "explanation": "Начало сцены 2 на абсолютной секунде 1 при FPS 30."
+        },
+        {
+          "sourceText": "Абонементы на любимую еду и напитки и лого появляются сверху а ",
+          "requirementIds": ["r2", "r3"],
+          "classification": "executable",
+          "explanation": "Текст и логотип сцены 2 появляются сверху через slideDown."
+        },
+        {
+          "sourceText": "image 1926988171 и куар появляются снизу\n",
+          "requirementIds": ["r4", "r5"],
+          "classification": "executable",
+          "explanation": "Изображение и QR сцены 2 появляются снизу через slideUp."
+        },
+        {
+          "sourceText": "сцена 3 начинается на 90 кадре: ",
+          "requirementIds": ["r6"],
+          "classification": "executable",
+          "explanation": "Начало сцены 3 на абсолютной секунде 3; объявление закрывает область сцены 2."
+        },
+        {
+          "sourceText": "лента 1 появляется через trim paths ",
+          "requirementIds": ["r7"],
+          "classification": "executable",
+          "explanation": "Первая лента прорисовывается через trimPath."
+        },
+        {
+          "sourceText": "и в момент как закончится анимация появляется через trim paths лента 2 ,",
+          "requirementIds": ["r7", "r8"],
+          "classification": "executable",
+          "explanation": "Вторая лента прорисовывается через trimPath непосредственно после завершения первой; сохранена относительная зависимость afterRequirement от r7."
+        },
+        {
+          "sourceText": " с выгодой до 80% и шейп под 80% появляются сверху",
+          "requirementIds": ["r9", "r10"],
+          "classification": "executable",
+          "explanation": "Текст скидки и подложка сцены 3 появляются сверху через slideDown. Эта фраза не относится к r8 и не запрашивает trimPath для текста или подложки."
+        }
+      ],
+      "assumptions": []
+    }
+  ]
+}

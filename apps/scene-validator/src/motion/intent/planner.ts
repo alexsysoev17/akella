@@ -21,23 +21,95 @@ For follow-ups "сделай её мягче", resolve the actual existing track
 For relative frequency edits use frequencyFactor ("в полтора раза" =1.5), do not compute the existing value yourself.
 Explicit constraints override defaults. Artistic ambiguity choose reasonable parameters; identity ambiguity keep unresolved. The plan is a contract, not a partial technique list.
 Use moveTo with moveToCenter=true for moving to canvas center; offsets x/y are not absolute source positions. For growing an object use scaleIn with scaleFrom=1 and scaleTo>1, not an entrance 0.8 to1. Source geometry remains immutable. For "QR увеличивается между сценами" use objectStateTransition with the existing logicalObjectId, fromSceneId and toSceneId from its source states; sceneId and sourceNodeId refer to the FROM instance. Never invent a second logical object. For the exact factor "вдвое слабее" editAnimation inertialOvershoot amplitudeFactor=0.5; preserve base tracks. Procedural inertia after moveTo uses the base position track, never keyframes.`;
+/** Semantic planning consumes identities/current motion, not executable operation schemas. */
+export function semanticContext(context: unknown): unknown {
+  if (!context || typeof context !== "object") return context;
+  const c = context as Record<string, unknown>;
+  const pick = (v: unknown, keys: string[]) =>
+    v && typeof v === "object"
+      ? Object.fromEntries(Object.entries(v).filter(([k]) => keys.includes(k)))
+      : v;
+  const rows = (v: unknown, keys: string[]) =>
+    Array.isArray(v) ? v.map((x) => pick(x, keys)) : v;
+  const knowledge = c.motionKnowledge as Record<string, unknown> | undefined;
+  const { userRequest: _duplicate, ...rest } = c;
+  return {
+    ...rest,
+    logicalObjects: Array.isArray(c.logicalObjects)
+      ? c.logicalObjects.map((v) => {
+          const o = v as Record<string, unknown>;
+          return {
+            ...(pick(o, [
+              "logicalObjectId",
+              "name",
+              "sourceInstances",
+              "ambiguousScenes",
+            ]) as object),
+            states: rows(o.states, [
+              "sceneId",
+              "sourceNodeId",
+              "width",
+              "height",
+              "opacity",
+              "visible",
+            ]),
+          };
+        })
+      : c.logicalObjects,
+    motionKnowledge: knowledge
+      ? {
+          ...knowledge,
+          capabilities: rows(knowledge.capabilities, [
+            "id",
+            "kind",
+            "description",
+            "semanticTechniques",
+            "supportedProperties",
+            "supportedObjectTypes",
+            "constraints",
+          ]),
+          expressions: rows(knowledge.expressions, ["id", "description"]),
+        }
+      : undefined,
+  };
+}
+export function semanticFailureCategory(error: unknown) {
+  if (/BUDGET|timeout|aborted/i.test(String(error))) return "TIMEOUT";
+  if (error instanceof SemanticCoverageError)
+    return "COVERAGE_VALIDATION_FAILURE";
+  if (
+    /TRANSPORT|UNAVAILABLE|CANCELLED|authentication|login|401|403/i.test(
+      String(error),
+    )
+  )
+    return "PROVIDER_FAILURE";
+  return "SEMANTIC_PLAN_FAILURE";
+}
 export class SemanticProvider implements IntentProvider {
+  private phases = new Map<string, number>();
+  private provider(phase: string) {
+    const count = (this.phases.get(phase) ?? 0) + 1;
+    this.phases.set(phase, count);
+    return this.providerFor(count === 1 ? phase : `${phase}-${count}`);
+  }
   constructor(private providerFor: (phase: string) => Promise<CodexProvider>) {}
   async interpret(context: unknown, request: string, feedback?: unknown) {
-    return (await this.providerFor("interpret")).structured(
-      { ...(context as object), feedback },
+    return (await this.provider("interpret")).structured(
+      { ...(semanticContext(context) as object), feedback },
       request,
       semanticInstructions,
       intentPlanSchema,
+      "semantic-planning",
     );
   }
   async audit(context: unknown, request: string, plan: IntentPlan) {
-    return (await this.providerFor("coverage-audit")).structured(
-      { ...(context as object), candidatePlan: plan },
+    return (await this.provider("coverage-audit")).structured(
+      { ...(semanticContext(context) as object), candidatePlan: plan },
       request,
       semanticInstructions +
         "\nAUDIT MODE: independently compare each clause and inherited/temporal constraint against candidatePlan. Repair omissions, wrong scene binding or inheritance, preserve valid IDs, return the complete corrected contract. An unsupported requirement counts as tracked, never pretend it is executable.",
       intentPlanSchema,
+      "semantic-repair",
     );
   }
 }
@@ -47,6 +119,7 @@ export function validateIntentPlan(
   project: LoadedProject,
   request: string,
   input: unknown,
+  fps?: number,
 ): IntentPlan {
   const plan = intentPlanSchema.parse(input),
     ids = new Set<string>();
@@ -168,7 +241,7 @@ export function validateIntentPlan(
       );
     }
   }
-  const coverage = inspectSemanticCoverage(project, request, plan);
+  const coverage = inspectSemanticCoverage(project, request, plan, fps);
   if (coverage.status !== "PASSED") throw new SemanticCoverageError(coverage);
   for (const r of plan.requirements)
     if (
@@ -190,34 +263,91 @@ export async function semanticPlan(
     auditAlways: true,
   },
 ) {
+  const fps = (context as { motion?: { settings?: { fps?: number } } })?.motion
+    ?.settings?.fps;
   let feedback: unknown;
   let previousFailure: string | undefined;
-  for (let attempt = 1; attempt <= (options.maxAttempts ?? 3); attempt++) {
+  let calls = 0;
+  let previousDraft: IntentPlan | undefined;
+  const maxCalls = Math.min(options.maxAttempts ?? 2, 2);
+  for (let attempt = 1; calls < maxCalls; attempt++) {
+    let correctionUsed = false;
     try {
+      calls++;
       const draft = await provider.interpret(context, request, feedback);
       await trace("draft-" + attempt, draft);
-      const audited = options.auditAlways
-        ? await provider.audit(context, request, draft)
-        : draft;
+      if (attempt > 1)
+        await trace("semantic-retry-result-" + attempt, {
+          planChanged: previousDraft
+            ? JSON.stringify(previousDraft.requirements) !==
+              JSON.stringify(draft.requirements)
+            : null,
+          previousPlanAvailable: Boolean(previousDraft),
+          afterRequirementIds: draft.requirements.map((r) => r.requirementId),
+        });
+      previousDraft = draft;
+      let audited = draft;
+      if (options.auditAlways) {
+        if (calls >= maxCalls) throw new Error("SEMANTIC_CALL_BUDGET");
+        calls++;
+        correctionUsed = true;
+        audited = await provider.audit(context, request, draft);
+      }
       await trace("audit-" + attempt, audited);
       let plan: IntentPlan;
       try {
-        plan = validateIntentPlan(project, request, audited);
+        plan = validateIntentPlan(project, request, audited, fps);
       } catch (error) {
-        if (!(error instanceof SemanticCoverageError) || options.auditAlways)
+        if (
+          !(error instanceof SemanticCoverageError) ||
+          correctionUsed ||
+          calls >= maxCalls
+        )
           throw error;
         await trace("coverage-suspicious-" + attempt, error.report);
+        await trace("semantic-retry-" + attempt, {
+          category: "COVERAGE_VALIDATION_FAILURE",
+          source: "coverage-validator",
+          providerReturnedJSON: true,
+          errors: error.report.issues,
+          requirementIds: [
+            ...new Set(error.report.issues.flatMap((i) => i.requirementIds)),
+          ],
+          action: "selective-audit",
+          callsRemaining: maxCalls - calls,
+        });
+        calls++;
+        correctionUsed = true;
         const repaired = await provider.audit(
-          { ...(context as object), coverageFeedback: error.report },
+          {
+            ...(context as object),
+            coverageFeedback: {
+              issues: error.report.issues,
+              clauses: error.report.clauses.filter((c) =>
+                error.report.issues.some((i) => i.sourceText === c.sourceText),
+              ),
+            },
+          },
           request,
           audited,
         );
         await trace("selective-audit-" + attempt, repaired);
-        plan = validateIntentPlan(project, request, repaired);
+        await trace("semantic-retry-result-" + attempt, {
+          planChanged:
+            JSON.stringify(audited.requirements) !==
+            JSON.stringify(repaired.requirements),
+          beforeRequirementIds: audited.requirements.map(
+            (r) => r.requirementId,
+          ),
+          afterRequirementIds: repaired.requirements.map(
+            (r) => r.requirementId,
+          ),
+        });
+        plan = validateIntentPlan(project, request, repaired, fps);
       }
       await trace(
         "coverage-validated",
-        inspectSemanticCoverage(project, request, plan),
+        inspectSemanticCoverage(project, request, plan, fps),
       );
       await trace("contract", plan);
       return plan;
@@ -226,7 +356,16 @@ export async function semanticPlan(
       const repeated = previousFailure === failure;
       previousFailure = failure;
       feedback = {
+        category: semanticFailureCategory(error),
         failureReason: failure,
+        source:
+          error instanceof SemanticCoverageError
+            ? "coverage-validator"
+            : "planner-or-provider",
+        errors:
+          error instanceof SemanticCoverageError
+            ? error.report.issues
+            : undefined,
         allowedRepairActions: [
           "restore source excerpts",
           "resolve real targets",
@@ -234,13 +373,20 @@ export async function semanticPlan(
         ],
       };
       await trace("failure-" + attempt, feedback);
-      if (repeated) throw error;
       if (
-        /BUDGET|CANCELLED|UNSUPPORTED_TOOL_CALL|UNSUPPORTED_CAPABILITY|timeout|aborted|authentication|401|403|login/i.test(
-          String(error),
+        correctionUsed ||
+        repeated ||
+        calls >= maxCalls ||
+        /BUDGET|CANCELLED|UNSUPPORTED_TOOL_CALL|UNSUPPORTED_CAPABILITY|timeout|aborted|authentication|401|403|login|TRANSPORT|UNAVAILABLE/i.test(
+          failure,
         )
       )
         throw error;
+      await trace("semantic-retry-" + attempt, {
+        ...(feedback as object),
+        action: "correct-structural-plan",
+        callsRemaining: maxCalls - calls,
+      });
     }
   }
   throw new Error(

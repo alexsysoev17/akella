@@ -25,6 +25,13 @@ export class HarnessRun {
   readonly signal: AbortSignal;
   readonly createdAt = new Date().toISOString();
   calls: {
+    purpose?: ProviderRequest["purpose"];
+    requestBytes?: {
+      messages: number;
+      schema: number;
+      system: number;
+      user: number;
+    };
     provider: string;
     mode: "live" | "mock";
     model: string;
@@ -51,6 +58,7 @@ export class HarnessRun {
   private timer: ReturnType<typeof setTimeout>;
   private memoryTimer: ReturnType<typeof setInterval>;
   private finished = false;
+  private repairStarted: number | undefined;
   private constructor(
     readonly project: LoadedProject,
     readonly runId: string,
@@ -119,6 +127,9 @@ export class HarnessRun {
   }
   async record(stage: string, data: unknown) {
     this.checkpoint();
+    await this.diagnostic(stage, data);
+  }
+  async diagnostic(stage: string, data: unknown) {
     this.events.push({
       stage,
       at: new Date().toISOString(),
@@ -142,7 +153,59 @@ export class HarnessRun {
       known >= this.config.maxEstimatedCost
     )
       throw new BudgetError("COST_BUDGET");
+    const now = performance.now();
+    const purpose = request.purpose ?? "motion-repair";
+    const semantic = purpose.startsWith("semantic");
+    if (!semantic && this.repairStarted === undefined) this.repairStarted = now;
+    const phaseRemaining = semantic
+      ? this.config.semanticPlanningTimeoutMs - (now - this.started)
+      : this.config.repairBudgetMs - (now - this.repairStarted!);
+    const totalRemaining = this.config.maxDurationMs - (now - this.started);
+    const available = Math.min(phaseRemaining, totalRemaining);
+    const completed = this.calls.filter((c) => c.status === "SUCCESS");
+    const estimated = Math.max(
+      this.config.minimumRetryBudgetMs,
+      ...completed.map((c) => c.latencyMs * 1.05),
+    );
+    if (
+      available <= 0 ||
+      (this.calls.length > 0 &&
+        available < estimated + this.config.executionReserveMs)
+    ) {
+      const code = semantic ? "SEMANTIC_TIME_BUDGET" : "REPAIR_TIME_BUDGET";
+      await this.record("provider-call-skipped", {
+        code,
+        purpose,
+        availableMs: available,
+        estimatedCallMs: estimated,
+        reserveMs: this.config.executionReserveMs,
+      });
+      throw new BudgetError(code);
+    }
+    const timeoutMs = Math.max(
+      1,
+      Math.floor(Math.min(request.timeoutMs, available)),
+    );
     const call = {
+      purpose,
+      requestBytes: {
+        messages: Buffer.byteLength(
+          request.messages.map((m) => m.content).join(""),
+        ),
+        schema: Buffer.byteLength(JSON.stringify(request.responseSchema)),
+        system: Buffer.byteLength(
+          request.messages
+            .filter((m) => m.role === "system")
+            .map((m) => m.content)
+            .join(""),
+        ),
+        user: Buffer.byteLength(
+          request.messages
+            .filter((m) => m.role === "user")
+            .map((m) => m.content)
+            .join(""),
+        ),
+      },
       provider: adapter.id,
       mode: adapter.mode,
       model: request.model ?? "provider-default",
@@ -158,23 +221,21 @@ export class HarnessRun {
       callIndex: this.calls.length,
       provider: adapter.id,
       model: call.model,
+      purpose,
+      timeoutMs,
+      availableMs: available,
+      requestBytes: call.requestBytes,
     });
     try {
       const limit = AbortSignal.any([
         this.signal,
-        AbortSignal.timeout(
-          Math.max(
-            1,
-            Math.floor(
-              Math.min(
-                request.timeoutMs,
-                this.config.maxDurationMs - (performance.now() - this.started),
-              ),
-            ),
-          ),
-        ),
+        AbortSignal.timeout(timeoutMs),
       ]);
-      const pending = adapter.generate({ ...request, signal: limit });
+      const pending = adapter.generate({
+        ...request,
+        timeoutMs,
+        signal: limit,
+      });
       const result = await abortable(pending, limit);
       if (result.toolCalls.length)
         throw new BudgetError("UNSUPPORTED_TOOL_CALL");

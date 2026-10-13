@@ -161,6 +161,12 @@ export async function inspectorRun(root: string, id: string, raw = false) {
       "error.json",
       "intent-draft-1.json",
       "intent-audit-1.json",
+      "intent-selective-audit-1.json",
+      "intent-coverage-suspicious-1.json",
+      "intent-failure-1.json",
+      "intent-failure-2.json",
+      "semantic-coverage-audit/raw-response.json",
+      "semantic-coverage-audit/provider-trace.json",
       "intent-contract.json",
       "semantic-interpret/raw-response.json",
       "semantic-interpret/provider-trace.json",
@@ -220,6 +226,17 @@ export async function inspectorRun(root: string, id: string, raw = false) {
   const view = clean({
     run: raw ? run : { ...run, result: undefined },
     trace,
+    semanticDiagnostics: Array.isArray(trace)
+      ? trace.filter((e) =>
+          [
+            "semantic-coverage",
+            "semantic-diagnostic",
+            "provider-call-skipped",
+            "provider-started",
+            "provider-completed",
+          ].includes(e.stage),
+        )
+      : "NOT_AVAILABLE",
     request,
     understanding: tasks,
     stateChanges: changes,
@@ -228,7 +245,12 @@ export async function inspectorRun(root: string, id: string, raw = false) {
         ? "AVAILABLE"
         : "NOT_AVAILABLE",
     qa,
-    qaAvailability: attempts.length > 20 ? "PARTIAL: QA_ATTEMPT_LIMIT" : qa.length ? "AVAILABLE" : "NOT_TESTED",
+    qaAvailability:
+      attempts.length > 20
+        ? "PARTIAL: QA_ATTEMPT_LIMIT"
+        : qa.length
+          ? "AVAILABLE"
+          : "NOT_TESTED",
     rawSources: raw ? sources : undefined,
     artisticQA: "NOT_TESTED",
     missingData: "NOT_AVAILABLE",

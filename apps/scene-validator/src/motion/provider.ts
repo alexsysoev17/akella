@@ -163,6 +163,12 @@ export class AIClient implements AIProvider {
       throw new Error("Manual response required");
     const adapter = createProvider(this.settings.provider, this.directory);
     const input: ProviderRequest = {
+      purpose:
+        mode === "semantic" || mode === "semantic-planning"
+          ? "semantic-planning"
+          : mode === "semantic-repair"
+            ? "semantic-repair"
+            : "motion-repair",
       messages: [
         { role: "system", content: instructions },
         { role: "user", content: compact },

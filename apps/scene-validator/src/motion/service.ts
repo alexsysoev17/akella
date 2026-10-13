@@ -248,11 +248,21 @@ export async function proposeMotion(
           enrichedContext,
           semanticProvider,
           async (stage, value) => {
-            if (harness && stage.startsWith("coverage"))
-              await harness.record("semantic-coverage", {
-                phase: stage,
-                report: value,
-              });
+            if (
+              harness &&
+              (stage.startsWith("coverage") ||
+                stage.startsWith("semantic-retry") ||
+                stage.startsWith("failure"))
+            )
+              await harness.diagnostic(
+                stage.startsWith("coverage")
+                  ? "semantic-coverage"
+                  : "semantic-diagnostic",
+                {
+                  phase: stage,
+                  report: value,
+                },
+              );
             await atomicJson(
               path.join(directory, `intent-${stage}.json`),
               value,
@@ -483,7 +493,7 @@ export async function proposeMotion(
       await harness.finish(
         /CANCELLED/.test(String(error))
           ? "CANCELLED"
-          : /TIMEOUT/.test(String(error))
+          : /TIMEOUT|timeout|aborted|TIME_BUDGET/i.test(String(error))
             ? "TIMEOUT"
             : "FAILED",
         undefined,
