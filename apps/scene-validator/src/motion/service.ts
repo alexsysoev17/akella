@@ -252,7 +252,8 @@ export async function proposeMotion(
               harness &&
               (stage.startsWith("coverage") ||
                 stage.startsWith("semantic-retry") ||
-                stage.startsWith("failure"))
+                stage.startsWith("failure") ||
+                stage === "target-resolution")
             )
               await harness.diagnostic(
                 stage.startsWith("coverage")
@@ -268,7 +269,13 @@ export async function proposeMotion(
               value,
             );
           },
-          { auditAlways: false, maxAttempts: harness?.config.maxLLMCalls ?? 3 },
+          {
+            auditAlways: false,
+            maxAttempts: harness?.config.maxLLMCalls ?? 3,
+            motionState: doc.state,
+            activeSceneId: request.activeSceneId,
+            selectedObjectId: request.selectedObjectId,
+          },
         );
         if (harness) {
           await harness.record("intent-plan", {

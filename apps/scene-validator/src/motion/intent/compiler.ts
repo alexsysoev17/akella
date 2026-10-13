@@ -334,6 +334,29 @@ export function compileRequirement(
       for (const a of targets) {
         const next = structuredClone(a);
         if (requirementEasing(r)) next.easing = requirementEasing(r)!;
+        if (
+          (next.effect === "trimPath" || next.effect === "maskReveal") &&
+          r.parameters.direction !== null
+        )
+          next.parameters.direction = r.parameters.direction;
+        if (next.effect === "moveTo") {
+          if (r.parameters.x !== null) next.parameters.toX = r.parameters.x;
+          if (r.parameters.y !== null) next.parameters.toY = r.parameters.y;
+        }
+        if (next.effect === "scaleIn" || next.effect === "scaleOut") {
+          if (r.parameters.scaleFrom !== null)
+            next.parameters.from = r.parameters.scaleFrom;
+          if (r.parameters.scaleTo !== null)
+            next.parameters.to = r.parameters.scaleTo;
+        }
+        if (
+          (next.effect === "slideUp" ||
+            next.effect === "slideDown" ||
+            next.effect === "slideLeft" ||
+            next.effect === "slideRight") &&
+          r.parameters.distance !== null
+        )
+          next.parameters.distance = r.parameters.distance;
         if (r.parameters.durationFactor !== null)
           next.durationFrames = Math.max(
             1,

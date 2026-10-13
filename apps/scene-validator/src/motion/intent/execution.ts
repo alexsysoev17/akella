@@ -264,6 +264,14 @@ export function requirementChecks(
         !a.effect.startsWith("slide") ||
         ("distance" in a.parameters &&
           a.parameters.distance === r.parameters.distance)) &&
+      (a.effect !== "moveTo" ||
+        ((r.parameters.x === null || a.parameters.toX === r.parameters.x) &&
+          (r.parameters.y === null || a.parameters.toY === r.parameters.y))) &&
+      ((a.effect !== "scaleIn" && a.effect !== "scaleOut") ||
+        ((r.parameters.scaleFrom === null ||
+          a.parameters.from === r.parameters.scaleFrom) &&
+          (r.parameters.scaleTo === null ||
+            a.parameters.to === r.parameters.scaleTo))) &&
       (r.parameters.direction === null ||
         (a.effect !== "trimPath" && a.effect !== "maskReveal") ||
         a.parameters.direction === r.parameters.direction);

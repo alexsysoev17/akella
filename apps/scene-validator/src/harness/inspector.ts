@@ -168,6 +168,7 @@ export async function inspectorRun(root: string, id: string, raw = false) {
       "semantic-coverage-audit/raw-response.json",
       "semantic-coverage-audit/provider-trace.json",
       "intent-contract.json",
+      "intent-target-resolution.json",
       "semantic-interpret/raw-response.json",
       "semantic-interpret/provider-trace.json",
       "attempt-1.json",
@@ -236,6 +237,15 @@ export async function inspectorRun(root: string, id: string, raw = false) {
             "provider-completed",
           ].includes(e.stage),
         )
+      : "NOT_AVAILABLE",
+    targetResolution: Array.isArray(trace)
+      ? trace
+          .filter(
+            (e) =>
+              e.stage === "semantic-diagnostic" &&
+              e.data?.phase === "target-resolution",
+          )
+          .flatMap((e) => e.data?.report ?? [])
       : "NOT_AVAILABLE",
     request,
     understanding: tasks,

@@ -20,6 +20,7 @@ const components = [
   "motion/intent/compiler",
   "motion/intent/coverage",
   "motion/object-aliases",
+  "motion/object-resolution",
   "motion-library/techniques/registry",
   "motion/intent/planner",
   "motion/intent/schema",

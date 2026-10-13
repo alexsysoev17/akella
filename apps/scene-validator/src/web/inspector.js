@@ -96,6 +96,10 @@ export function attachInspector(container, url) {
     if (tab === 1)
       body.innerHTML =
         "<h3>Требования и привязки объектов</h3>" +
+        block(
+          "Разрешение объектов и существующие анимации",
+          data.targetResolution,
+        ) +
         (Array.isArray(requirements)
           ? cards(requirements)
           : "<p>NOT_AVAILABLE</p>");

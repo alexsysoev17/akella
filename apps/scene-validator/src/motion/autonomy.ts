@@ -8,6 +8,7 @@ import {
   validateTechnique,
   MotionFailure,
 } from "./qa/technical.js";
+import { resolveObjectReference } from "./object-resolution.js";
 import { buildRegistry } from "./registry.js";
 import type { LoadedProject } from "../types.js";
 import type { MotionState, Plan } from "./schema.js";
@@ -35,7 +36,28 @@ export function resolveTarget(
   let target =
     matching(mention?.sourceNodeId, mention?.sceneId) ??
     matching(request.selectedObjectId, request.selectedSceneId);
-  const registry = buildRegistry(project.inspection.document,project.inspection.fingerprint);
+  if (!target) {
+    const resolved = resolveObjectReference(project, state, {
+      referenceText: request.request,
+      activeSceneId: request.activeSceneId,
+      preferExisting: true,
+    });
+    if (resolved.status === "AMBIGUOUS_TARGET")
+      throw new Error(
+        "AMBIGUOUS_TARGET: " + JSON.stringify(resolved.candidates),
+      );
+    if (resolved.target) {
+      target = matching(resolved.target.sourceNodeId, resolved.target.sceneId);
+      if (resolved.rejectedCandidates.length)
+        assumptions.push(
+          `«${resolved.target.canonicalName}»: выбран ${resolved.target.sourceNodeId} в ${resolved.target.sceneId}; ограничения: ${[...new Set(resolved.rejectedCandidates.map((c) => c.reason))].join(", ")}.`,
+        );
+    }
+  }
+  const registry = buildRegistry(
+    project.inspection.document,
+    project.inspection.fingerprint,
+  );
   const explicit = registry.objects
     .filter((o) => o.name.length > 0 && request.request.includes(o.name))
     .sort((a, b) => b.name.length - a.name.length)[0];

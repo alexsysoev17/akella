@@ -1,3 +1,4 @@
+import { resolveObjectReference } from "../motion/object-resolution.js";
 import { logicalId } from "../motion/registry.js";
 import { objectAliases, objectMentioned } from "../motion/object-aliases.js";
 import { codeVersions } from "./versions.js";
@@ -32,6 +33,9 @@ export async function agentContext(
     name: scene.name,
     objects: objectsIn(scene),
   }));
+  const rootIds = new Set(
+    project.inspection.document.scenes.map((s) => s.figmaNodeId),
+  );
   const named = new Set<string>((input.mentions ?? []).map((m) => m.sceneId));
   // Scene declarations and structured selection are authoritative. Ambiguous cross-scene
   // names use the active scene; the complete compact index still exposes every local object.
@@ -52,15 +56,24 @@ export async function agentContext(
       )
       .forEach((s) => named.add(s.sceneId));
   if (!explicitScenes.length) {
+    const reference = resolveObjectReference(project, state, {
+      referenceText: input.request,
+      activeSceneId: input.activeSceneId,
+      selectedObjectId: input.selectedObjectId,
+      preferExisting: true,
+    });
+    if (reference.target) named.add(reference.target.sceneId);
     const names = new Set(
       catalog.flatMap((s) =>
-        s.objects.filter((o) => o.parentId).map((o) => o.name),
+        s.objects
+          .filter((o) => o.parentId && !rootIds.has(o.targetId))
+          .map((o) => o.name),
       ),
     );
     for (const name of names)
       if (objectMentioned(name, input.request)) {
         const matches = catalog.filter((s) =>
-          s.objects.some((o) => o.name === name),
+          s.objects.some((o) => o.name === name && !rootIds.has(o.targetId)),
         );
         if (matches.length === 1) named.add(matches[0].sceneId);
       }
@@ -71,9 +84,6 @@ export async function agentContext(
     named.add(
       input.activeSceneId ?? input.selectedSceneId ?? catalog[0].sceneId,
     );
-  const rootIds = new Set(
-    project.inspection.document.scenes.map((s) => s.figmaNodeId),
-  );
   const selectedScenes = catalog.filter((s) => named.has(s.sceneId)),
     hints = input.request.toLowerCase();
   const objects = selectedScenes
@@ -220,6 +230,22 @@ export async function agentContext(
           logicalObjectId: logicalId(o.name),
           objectType: o.type,
           aliases: objectAliases(o.name),
+          existingAnimations: state.animations
+            .filter(
+              (a) =>
+                a.enabled &&
+                a.sceneId === o.sceneId &&
+                a.targetId === o.targetId,
+            )
+            .map((a) => ({ animationId: a.animationId, effect: a.effect })),
+          existingExpressions: (state.expressions ?? [])
+            .filter(
+              (e) =>
+                e.enabled &&
+                e.sceneId === o.sceneId &&
+                e.targetId === o.targetId,
+            )
+            .map((e) => ({ expressionId: e.expressionId, type: e.type })),
         })),
     ),
     motion,
