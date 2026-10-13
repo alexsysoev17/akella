@@ -12,6 +12,7 @@ export const emptyParameters: IntentRequirement["parameters"] = {
   distance: null,
   direction: null,
   amplitude: null,
+  intensity: null,
   frequencyFactor:null,
   frequency: null,
   decay: null,

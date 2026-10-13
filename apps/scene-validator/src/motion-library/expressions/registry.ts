@@ -102,3 +102,8 @@ export const expressionRegistry = expressionSchema.options.map((option) => ({
     loop: "Loop a base track, as an additive difference from its endpoint. Cycle requires equal endpoints; pingPong permits unequal.",
   }[option.shape.type.value],
 }));
+export const inertiaIntensityDefaults = {
+  subtle: { amplitude: 0.1, frequency: 2.5, decay: 3 },
+  normal: { amplitude: 0.25, frequency: 2.5, decay: 3 },
+  strong: { amplitude: 0.4, frequency: 2.5, decay: 3 },
+} as const;

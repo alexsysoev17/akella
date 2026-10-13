@@ -1,4 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
+import { inertiaIntensityDefaults } from "../../motion-library/expressions/registry.js";
+import { semanticBindings } from "../../motion-library/techniques/registry.js";
 import type { LoadedProject } from "../../types.js";
 import type { MotionState, Plan } from "../schema.js";
 import type { IntentPlan, IntentRequirement } from "./schema.js";
@@ -213,6 +215,40 @@ export function requirementChecks(
             : "FAILED",
       });
     }
+  }
+  if (
+    r.parameters.intensity != null &&
+    r.parameters.amplitude === null &&
+    r.parameters.amplitudeFactor === null
+  ) {
+    const defaults = inertiaIntensityDefaults[r.parameters.intensity];
+    const matches =
+      state.expressions?.filter(
+        (e) =>
+          e.type === "inertialOvershoot" &&
+          e.sceneId === r.sceneId &&
+          e.targetId === r.target.sourceNodeId &&
+          (!r.parameters.property || e.property === r.parameters.property),
+      ) ?? [];
+    checks.push({
+      name: "qualitativeIntensity",
+      requirementId: r.requirementId,
+      status:
+        matches.length &&
+        matches.every((e) => {
+          const old = previous?.expressions?.find(
+            (old) => old.expressionId === e.expressionId,
+          );
+          const expected =
+            r.kind === "editAnimation" && old
+              ? (old.parameters.amplitude * defaults.amplitude) /
+                inertiaIntensityDefaults.normal.amplitude
+              : defaults.amplitude;
+          return Math.abs(e.parameters.amplitude - expected) < 1e-10;
+        })
+          ? "PASSED"
+          : "FAILED",
+    });
   }
   const base = state.animations.filter(
     (a) =>
@@ -476,26 +512,39 @@ export async function runIntentTasks(
       let generated: Plan | undefined;
       hooks.checkpoint?.();
       try {
-        generated =
-          attempt === 1
-            ? compileRequirement(project, current, plan, task)
-            : parsePlan(
-                await hooks.repair(
-                  {
-                    motion: current,
-                    intentRequirement: plan.requirements.filter((r) =>
-                      task.requirementIds.includes(r.requirementId),
-                    ),
-                    repairFeedback: feedback,
-                  },
-                  task.userIntent,
-                  task,
-                  attempt,
+        if (attempt === 1) {
+          try {
+            generated = compileRequirement(project, current, plan, task);
+          } catch (error) {
+            throw new Error("COMPILER_COVERAGE_ERROR: " + String(error));
+          }
+        } else
+          generated = parsePlan(
+            await hooks.repair(
+              {
+                motion: current,
+                intentRequirement: plan.requirements.filter((r) =>
+                  task.requirementIds.includes(r.requirementId),
                 ),
-              );
+                repairFeedback: feedback,
+              },
+              task.userIntent,
+              task,
+              attempt,
+            ),
+          );
         if (generated.status !== "ready" || !generated.operations.length)
           throw new Error("Requirement produced no executable operations");
-        const next = applyOperations(current, generated.operations, project);
+        let next: MotionState;
+        try {
+          next = applyOperations(current, generated.operations, project);
+        } catch (error) {
+          throw new Error(
+            (attempt === 1
+              ? "OPERATION_VALIDATION_ERROR: "
+              : "MODEL_OPERATION_VALIDATION_ERROR: ") + String(error),
+          );
+        }
         assertIntentScope(project, current, next, plan, task);
         const checks = plan.requirements
           .filter((r) => task.requirementIds.includes(r.requirementId))
@@ -507,9 +556,74 @@ export async function runIntentTasks(
             : "PASSED",
           checks,
         };
+        task.operationCoverage = {
+          expectedActions: plan.requirements
+            .filter((r) => task.requirementIds.includes(r.requirementId))
+            .flatMap((r) => [
+              ...r.techniques.map((technique) => ({
+                technique,
+                action:
+                  semanticBindings[technique] === "expression"
+                    ? current.expressions?.some(
+                        (e) =>
+                          e.sceneId === r.sceneId &&
+                          e.targetId === r.target.sourceNodeId &&
+                          e.type === technique,
+                      )
+                      ? "updateExpression"
+                      : "createExpression"
+                    : semanticBindings[technique] === "easing"
+                      ? "updateEasing"
+                      : r.kind === "editAnimation"
+                        ? "updateAnimation"
+                        : "create required effect",
+              })),
+              ...Object.entries(r.parameters)
+                .filter(
+                  ([key, value]) =>
+                    value != null &&
+                    [
+                      "easing",
+                      "durationSeconds",
+                      "durationFactor",
+                      "amplitude",
+                      "amplitudeFactor",
+                      "frequency",
+                      "frequencyFactor",
+                      "direction",
+                      "x",
+                      "y",
+                      "scaleFrom",
+                      "scaleTo",
+                      "intensity",
+                    ].includes(key),
+                )
+                .map(([parameter, value]) => ({ parameter, value })),
+            ]),
+          compiledActions: generated.operations.map((op) => ({
+            type: op.type,
+            ...(op.type === "updateAnimation" || op.type === "addAnimation"
+              ? {
+                  animationId: op.animation.animationId,
+                  effect: op.animation.effect,
+                }
+              : op.type === "setExpression"
+                ? {
+                    expressionId: op.expression.expressionId,
+                    effect: op.expression.type,
+                  }
+                : {}),
+          })),
+          missing: checks.filter((c) => c.status === "FAILED"),
+          status: checks.some((c) => c.status === "FAILED")
+            ? "FAILED"
+            : "PASSED",
+        };
         if (checks.some((c) => c.status === "FAILED"))
           throw new Error(
-            "INTENT_REQUIREMENT_MISMATCH: " +
+            (attempt === 1
+              ? "COMPILER_COVERAGE_ERROR: "
+              : "INTENT_REQUIREMENT_MISMATCH: ") +
               JSON.stringify(checks.filter((c) => c.status === "FAILED")),
           );
         hooks.checkpoint?.();
@@ -555,6 +669,7 @@ export async function runIntentTasks(
             failedChecks,
             operations: generated?.operations,
           });
+        task.primaryFailureReason ??= failureReason;
         feedback = {
           taskId: task.taskId,
           requirementIds: task.requirementIds,
@@ -584,18 +699,24 @@ export async function runIntentTasks(
             "do not change other requirements",
           ],
           previousResponse: generated ?? previousCandidate,
+          operationCoverage: task.operationCoverage,
         };
         task.repairHistory.push({ attempt, feedback });
         await hooks.trace(tasks, { status: "repair", feedback });
         if (
           signature === previousSignature ||
           attempt === (hooks.maxAttempts ?? 3) ||
-          /BUDGET|CANCELLED|authentication|timeout|aborted|401|403|login|Исходный дизайн|Анимация уже изменилась/i.test(
+          /COMPILER_COVERAGE_ERROR|UNSUPPORTED_COMPOUND_EDIT|^Error: OPERATION_VALIDATION_ERROR|BUDGET|CANCELLED|authentication|timeout|aborted|401|403|login|Исходный дизайн|Анимация уже изменилась/i.test(
             failureReason,
           )
         ) {
           task.status = "FAILED";
-          task.error = failureReason;
+          task.error =
+            task.primaryFailureReason === failureReason
+              ? failureReason
+              : task.primaryFailureReason +
+                "; repair stopped: " +
+                failureReason;
           break;
         }
         previousSignature = signature;

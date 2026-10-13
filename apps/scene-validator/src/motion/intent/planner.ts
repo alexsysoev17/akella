@@ -21,7 +21,7 @@ AE Easy Ease is aeEasyEase, a temporal Bezier with zero endpoint speed and 33.33
 Explicit TEXT Mask Reveal uses maskReveal, never fadeIn as a substitute: forward reveals bottom-to-top, reverse top-to-bottom, leftToRight/rightToLeft horizontally. Ordinary Slide + Fade does not create masks.
 "появляется снизу" means slideUp (from positive Y toward its OWN source geometry), "с фейдом" means fadeIn opacity 0 to1, "с колебаниями/инерцией" after entrance means inertialOvershoot after the slide endpoint. "Лого аналогично" inherits all relevant previous entrance techniques, duration/easing and artistic character, NOT another object's position. Record inheritFromRequirementId if source is a requirement in this plan; if from current motion/history, expand techniques/parameters from that context and explain inheritance. A new scene declaration closes previous scene scope even without punctuation. No trim on logo just because next scene contains trim.
 "Лента 1 прорисовывается. Когда она закончится, лента 2 аналогично" creates two trimPath requirements with direction inherited; second timing relation afterRequirement, anchorRequirementId=first ID. Retain relative dependencies; do NOT compute absolute frames. Seconds remain seconds: runtime uses FPS. Start scene at first second means startSeconds=1. Default object entrance timing=sceneStart; afterRequirement waits for the anchor's base action, not its settling inertia. before/with/sceneEnd/delay are explicit. For two ribbons in a scene choose reasonable shared duration that fits both consecutively. Parameters not specified are null: harness computes defaults. direction leftToRight or rightToLeft describes scene-space spatial direction, not SVG authoring direction.
-Adding inertia to an existing movement is objectAnimation if the expression does not yet exist; do not try to edit a missing expression.
+Adding inertia alone is objectAnimation when the expression is absent. A compound edit (easing/duration plus inertia) uses editAnimation with the existing base technique and inertialOvershoot; the compiler edits the base and creates missing expressions atomically. Use parameters.intensity=subtle|normal|strong for qualitative intensity, including stronger when no expression exists; amplitudeFactor is relative to an existing expression only.
 For follow-ups "сделай её мягче", resolve the actual existing track from selected target, applied history and state; use kind editAnimation with same target/techniques, easing or relative durationFactor/amplitudeFactor, timing unchanged. Do not create a new entrance when editing existing movement. Relative edits preserve unrelated effects. "аналогично, но быстрее" inherits techniques and sets durationFactor<1. Unknown technique remains unsupported with exact reason; never silently drop it.
 For relative frequency edits use frequencyFactor ("в полтора раза" =1.5), do not compute the existing value yourself.
 Explicit constraints override defaults. Artistic ambiguity choose reasonable parameters; identity ambiguity keep unresolved. The plan is a contract, not a partial technique list.
@@ -74,6 +74,12 @@ export function semanticContext(context: unknown): unknown {
             "constraints",
           ]),
           expressions: rows(knowledge.expressions, ["id", "description"]),
+          customEasings: rows(knowledge.customEasings, [
+            "id",
+            "name",
+            "description",
+            "defaultParameters",
+          ]),
         }
       : undefined,
   };
@@ -133,6 +139,15 @@ export function validateIntentPlan(
   const plan = intentPlanSchema.parse(input),
     ids = new Set<string>();
   for (const r of plan.requirements) {
+    // Backfill qualitative intensity in historical plans that lacked a typed field.
+    if (
+      r.techniques.includes("inertialOvershoot") &&
+      r.parameters.intensity === null &&
+      r.parameters.amplitude === null &&
+      r.parameters.amplitudeFactor === null &&
+      /сильнее|сильн\w*|stronger|strong inertia/iu.test(r.sourceText)
+    )
+      r.parameters.intensity = "strong";
     if (ids.has(r.requirementId)) throw new Error("Duplicate requirementId");
     ids.add(r.requirementId);
     if (!request.includes(r.sourceText))
@@ -277,6 +292,7 @@ export function validateIntentPlan(
       r.parameters.durationSeconds,
       r.parameters.amplitudeFactor,
       r.parameters.amplitude,
+      r.parameters.intensity,
       r.parameters.frequencyFactor,
       r.parameters.frequency,
       r.parameters.decay,

@@ -58,6 +58,10 @@ export const intentRequirementSchema = z
           .enum(["forward", "reverse", "leftToRight", "rightToLeft"])
           .nullable(),
         amplitude: z.number().min(0).max(10000).nullable(),
+        intensity: z
+          .enum(["subtle", "normal", "strong"])
+          .nullable()
+          .default(null),
         frequencyFactor: z.number().positive().max(10).nullable().default(null),
         frequency: z.number().min(0.01).max(30).nullable(),
         decay: z.number().min(0).max(30).nullable(),

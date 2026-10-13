@@ -106,6 +106,7 @@ export function attachInspector(container, url) {
     if (tab === 2)
       body.innerHTML =
         cards(tasks) +
+        block("Полнота операций — ожидается / скомпилировано / пропущено", tasks.map(t => ({taskId:t.taskId,target:t.targetReference,coverage:t.operationCoverage ?? "NOT_AVAILABLE",primaryFailureReason:t.primaryFailureReason ?? null}))) +
         block("Сравнение попыток ремонта", data.repairComparisons) +
         block("Evaluator и метод выборки скорости", data.evaluator) +
         block(

@@ -15,6 +15,7 @@ import type { MotionState, Plan, Animation } from "../schema.js";
 import { channels, applyOperations } from "../operations.js";
 import { objectsIn } from "../context.js";
 import { resolveBaseMotion } from "../base-motion.js";
+import { inertiaIntensityDefaults } from "../../motion-library/expressions/registry.js";
 export interface IntentTask {
   taskId: string;
   requirementIds: string[];
@@ -30,6 +31,8 @@ export interface IntentTask {
   qaResult?: unknown;
   repairHistory: unknown[];
   error?: string;
+  operationCoverage?: unknown;
+  primaryFailureReason?: string;
 }
 const stable = (v: unknown) =>
   createHash("sha256").update(JSON.stringify(v)).digest("hex").slice(0, 16);
@@ -145,7 +148,11 @@ export function requirementAnimations(
   );
   if (effects.length)
     return own.filter((a) => effects.includes(a.effect as IntentTechnique));
-  if (!r.techniques.some((t) => semanticBindings[t] === "easing")) return [];
+  if (
+    !r.techniques.some((t) => semanticBindings[t] === "easing") &&
+    r.parameters.easing === null
+  )
+    return [];
   const matching = r.parameters.property
     ? own.filter((a) => channels(a).includes(r.parameters.property!))
     : own;
@@ -168,6 +175,7 @@ export function isParameterOnlyEdit(r: IntentRequirement) {
       r.parameters.durationSeconds,
       r.parameters.durationFactor,
       r.parameters.amplitude,
+      r.parameters.intensity,
       r.parameters.amplitudeFactor,
       r.parameters.frequency,
       r.parameters.frequencyFactor,
@@ -330,8 +338,10 @@ export function compileRequirement(
             r.techniques.includes(e.type as IntentTechnique) &&
             (!r.parameters.property || e.property === r.parameters.property),
         ) ?? [];
-      if (!targets.length && !expressions.length)
-        throw new Error("No matching existing effect to edit");
+      if (!targets.length && !expressions.length && !hasInertia)
+        throw new Error(
+          "UNSUPPORTED_COMPOUND_EDIT: No matching existing effect to edit",
+        );
       for (const a of targets) {
         const next = structuredClone(a);
         if (requirementEasing(r)) next.easing = requirementEasing(r)!;
@@ -437,6 +447,15 @@ export function compileRequirement(
           );
         if (r.parameters.amplitudeFactor !== null)
           next.parameters.amplitude *= r.parameters.amplitudeFactor;
+        else if (
+          next.type === "inertialOvershoot" &&
+          r.parameters.intensity !== null &&
+          r.parameters.intensity !== "normal" &&
+          r.parameters.amplitude === null
+        )
+          next.parameters.amplitude *=
+            inertiaIntensityDefaults[r.parameters.intensity].amplitude /
+            inertiaIntensityDefaults.normal.amplitude;
         if (r.parameters.amplitude !== null)
           next.parameters.amplitude = r.parameters.amplitude;
         if (
@@ -449,6 +468,10 @@ export function compileRequirement(
         if ("decay" in next.parameters && r.parameters.decay !== null)
           next.parameters.decay = r.parameters.decay;
         operations.push({ type: "setExpression", expression: next });
+      }
+      if (hasInertia) {
+        const candidate = applyOperations(state, operations, project);
+        operations.push(...compileInertiaAttachments(candidate, r, true));
       }
     } else {
       const requested: (IntentTechnique | "property")[] = r.techniques.filter(
@@ -483,17 +506,6 @@ export function compileRequirement(
           });
         } else requested.push("property");
       }
-      let source: Animation | undefined;
-      const existingBase =
-        hasInertia &&
-        !requested.some((t) => t.startsWith("slide") || t === "moveTo")
-          ? resolveBaseMotion(state, r.sceneId!, r.target.sourceNodeId!)
-          : undefined;
-      if (
-        hasInertia &&
-        !requested.some((t) => t.startsWith("slide") || t === "moveTo")
-      )
-        source = existingBase?.tracks[0]?.animation;
       for (const effect of requested) {
         const old = state.animations.find((a) => own(a) && a.effect === effect);
         const animationId =
@@ -649,7 +661,6 @@ export function compileRequirement(
             });
           }
         operations.push({ type: "addAnimation", animation: a });
-        if (writes.some((c) => c === "x" || c === "y")) source = a;
         if (anchor && r.timing.relation.endsWith("Requirement"))
           operations.push({
             type: "setTimingDependency",
@@ -714,75 +725,8 @@ export function compileRequirement(
         });
       }
       if (hasInertia) {
-        if (existingBase && existingBase.status !== "RESOLVED")
-          throw new Error(existingBase.status);
-        if (!source) throw new Error("BASE_POSITION_ANIMATION_MISSING");
-        for (const base of existingBase?.tracks ?? [
-          {
-            animation: source,
-            properties: channels(source).filter(
-              (c): c is "x" | "y" => c === "x" || c === "y",
-            ),
-            endFrame: source.startFrame + source.durationFrames,
-          },
-        ]) {
-          const inertiaSource = base.animation;
-          const end = base.endFrame,
-            settle = Math.min(
-              Math.round(1.2 * fps),
-              block.startFrame + block.durationFrames - end - 1,
-              state.settings.durationFrames - end - 1,
-            );
-          if (settle < 4)
-            throw new Error("Insufficient settling interval after Position");
-          const inertiaProperties =
-            inertiaSource.effect === "moveTo"
-              ? base.properties.filter((property) =>
-                  property === "x"
-                    ? inertiaSource.parameters.toX !==
-                      inertiaSource.parameters.fromX
-                    : inertiaSource.parameters.toY !==
-                      inertiaSource.parameters.fromY,
-                )
-              : base.properties;
-          if (!inertiaProperties.length)
-            throw new Error("POSITION_HAS_NO_VELOCITY");
-          for (const property of inertiaProperties) {
-            const existing = state.expressions?.find(
-              (e) =>
-                own(e) &&
-                e.type === "inertialOvershoot" &&
-                e.property === property,
-            );
-            operations.push({
-              type: "setExpression",
-              expression: {
-                expressionId:
-                  existing?.expressionId ??
-                  "intent_inertia_" +
-                    stable([r.sceneId, r.target.sourceNodeId, property]),
-                sceneId: r.sceneId!,
-                targetId: r.target.sourceNodeId!,
-                property,
-                type: "inertialOvershoot",
-                sourceAnimationId: inertiaSource.animationId,
-                startFrame: end,
-                durationFrames: settle,
-                enabled: true,
-                parameters: {
-                  mode: "ae",
-                  amplitude: r.parameters.amplitude ?? 0.25,
-                  frequency: r.parameters.frequency ?? 2.5,
-                  decay: r.parameters.decay ?? 3,
-                  velocityLookbackFrames: Math.min(
-                    inertiaSource.durationFrames,
-                    30,
-                  ),
-                },
-              },
-            });
-          }
-        }
+        const candidate = applyOperations(state, operations, project);
+        operations.push(...compileInertiaAttachments(candidate, r));
       }
     }
   }
@@ -793,6 +737,74 @@ export function compileRequirement(
     warnings,
     operations,
   };
+}
+/** Shared creation path for standalone and compound edits, evaluated after base edits. */
+function compileInertiaAttachments(
+  state: MotionState,
+  r: IntentRequirement,
+  missingOnly = false,
+): Plan["operations"] {
+  const base = resolveBaseMotion(state, r.sceneId!, r.target.sourceNodeId!);
+  if (base.status !== "RESOLVED") throw new Error(base.status);
+  const block = state.blocks.find((b) => b.sceneId === r.sceneId)!;
+  const operations: Plan["operations"] = [];
+  for (const track of base.tracks) {
+    const settle = Math.min(
+      Math.round(1.2 * state.settings.fps),
+      block.startFrame + block.durationFrames - track.endFrame - 1,
+      state.settings.durationFrames - track.endFrame - 1,
+    );
+    if (settle < 4)
+      throw new Error(
+        "UNSUPPORTED_COMPOUND_EDIT: Insufficient settling interval after Position",
+      );
+    for (const property of track.properties) {
+      if (r.parameters.property && property !== r.parameters.property) continue;
+      const a = track.animation;
+      if (
+        a.effect === "moveTo" &&
+        (property === "x"
+          ? a.parameters.toX === a.parameters.fromX
+          : a.parameters.toY === a.parameters.fromY)
+      )
+        continue;
+      const existing = state.expressions?.find(
+        (e) =>
+          e.sceneId === r.sceneId &&
+          e.targetId === r.target.sourceNodeId &&
+          e.type === "inertialOvershoot" &&
+          e.property === property,
+      );
+      if (missingOnly && existing) continue;
+      const defaults =
+        inertiaIntensityDefaults[r.parameters.intensity ?? "normal"];
+      operations.push({
+        type: "setExpression",
+        expression: {
+          expressionId:
+            existing?.expressionId ??
+            "intent_inertia_" +
+              stable([r.sceneId, r.target.sourceNodeId, property]),
+          sceneId: r.sceneId!,
+          targetId: r.target.sourceNodeId!,
+          property,
+          type: "inertialOvershoot",
+          sourceAnimationId: a.animationId,
+          startFrame: track.endFrame,
+          durationFrames: settle,
+          enabled: true,
+          parameters: {
+            mode: "ae",
+            amplitude: r.parameters.amplitude ?? defaults.amplitude,
+            frequency: r.parameters.frequency ?? defaults.frequency,
+            decay: r.parameters.decay ?? defaults.decay,
+            velocityLookbackFrames: Math.min(a.durationFrames, 30),
+          },
+        },
+      });
+    }
+  }
+  return operations;
 }
 export function validateRequirement(state: MotionState, r: IntentRequirement) {
   if (r.kind === "unsupported" || r.unresolvedReason)
