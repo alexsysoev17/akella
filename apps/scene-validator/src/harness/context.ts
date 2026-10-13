@@ -1,3 +1,5 @@
+import { logicalId } from "../motion/registry.js";
+import { objectAliases, objectMentioned } from "../motion/object-aliases.js";
 import { codeVersions } from "./versions.js";
 import { createHash } from "node:crypto";
 import type { LoadedProject } from "../types.js";
@@ -31,23 +33,37 @@ export async function agentContext(
     objects: objectsIn(scene),
   }));
   const named = new Set<string>((input.mentions ?? []).map((m) => m.sceneId));
-  // Lexical retrieval selects context; the LLM performs semantic interpretation.
-  for (const scene of catalog) {
-    if (
-      new RegExp(
-        `(?:сцен[аыуе]?|scene)\\s*${scene.index + 1}(?!\\d)`,
-        "i",
-      ).test(input.request)
-    )
-      named.add(scene.sceneId);
-    if (
-      scene.objects.some(
-        (o) =>
-          o.name.length >= 3 &&
-          input.request.toLowerCase().includes(o.name.toLowerCase()),
+  // Scene declarations and structured selection are authoritative. Ambiguous cross-scene
+  // names use the active scene; the complete compact index still exposes every local object.
+  const explicitScenes = catalog.filter((scene) =>
+    new RegExp(`(?:сцен[аыуе]?|scene)\\s*${scene.index + 1}(?!\\d)`, "i").test(
+      input.request,
+    ),
+  );
+  explicitScenes.forEach((scene) => named.add(scene.sceneId));
+  if (input.selectedObjectId)
+    catalog
+      .filter((s) =>
+        s.objects.some(
+          (o) =>
+            o.targetId === input.selectedObjectId &&
+            (!input.selectedSceneId || s.sceneId === input.selectedSceneId),
+        ),
       )
-    )
-      named.add(scene.sceneId);
+      .forEach((s) => named.add(s.sceneId));
+  if (!explicitScenes.length) {
+    const names = new Set(
+      catalog.flatMap((s) =>
+        s.objects.filter((o) => o.parentId).map((o) => o.name),
+      ),
+    );
+    for (const name of names)
+      if (objectMentioned(name, input.request)) {
+        const matches = catalog.filter((s) =>
+          s.objects.some((o) => o.name === name),
+        );
+        if (matches.length === 1) named.add(matches[0].sceneId);
+      }
   }
   if (/все.{0,12}сцен|между|all.{0,12}scene|across scenes/i.test(input.request))
     catalog.forEach((s) => named.add(s.sceneId));
@@ -55,6 +71,9 @@ export async function agentContext(
     named.add(
       input.activeSceneId ?? input.selectedSceneId ?? catalog[0].sceneId,
     );
+  const rootIds = new Set(
+    project.inspection.document.scenes.map((s) => s.figmaNodeId),
+  );
   const selectedScenes = catalog.filter((s) => named.has(s.sceneId)),
     hints = input.request.toLowerCase();
   const objects = selectedScenes
@@ -62,11 +81,12 @@ export async function agentContext(
     .filter(
       (o) =>
         o.parentId &&
+        !rootIds.has(o.targetId) &&
         (o.targetId === input.selectedObjectId ||
           (input.mentions ?? []).some(
             (m) => m.sourceNodeId === o.targetId && m.sceneId === o.sceneId,
           ) ||
-          (hints.includes(o.name.toLowerCase()) && o.name.length >= 2) ||
+          objectMentioned(o.name, input.request) ||
           (/вектор|лини[яию]/i.test(hints) && o.type === "VECTOR")),
     );
   const targetIds = new Set(objects.map((o) => o.targetId)),
@@ -190,6 +210,18 @@ export async function agentContext(
       name,
     })),
     scenes,
+    objectIndex: selectedScenes.flatMap((s) =>
+      s.objects
+        .filter((o) => o.parentId && !rootIds.has(o.targetId))
+        .map((o) => ({
+          name: o.name,
+          sceneId: o.sceneId,
+          sourceNodeId: o.targetId,
+          logicalObjectId: logicalId(o.name),
+          objectType: o.type,
+          aliases: objectAliases(o.name),
+        })),
+    ),
     motion,
     selectedObjectId: base.selectedObjectId,
     selectedLogicalObjectId: base.selectedLogicalObjectId,
@@ -217,6 +249,7 @@ export async function agentContext(
     disclosure: {
       omittedScenes: catalog.length - scenes.length,
       objectsDetailed: detailed,
+      objectIndexCompleteForSelectedScenes: true,
       fullDocumentSent: false,
       unresolvedReferences:
         "Do not guess targets absent from supplied context; retain unresolved requirement",

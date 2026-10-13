@@ -1,3 +1,4 @@
+import type { IntentTechnique } from "../../motion/intent/schema.js";
 export const techniques = [
   {
     id: "maskReveal",
@@ -154,3 +155,29 @@ export function retrieveTechniques(request: string) {
               : /крив|easing|ускор|резче/i.test(request),
   );
 }
+
+/** Semantic techniques bind to engine representations, not just animation effect names. */
+export const semanticBindings = {
+  slideUp: "animation",
+  slideDown: "animation",
+  slideLeft: "animation",
+  slideRight: "animation",
+  fadeIn: "animation",
+  fadeOut: "animation",
+  trimPath: "animation",
+  maskReveal: "animation",
+  scaleIn: "animation",
+  scaleOut: "animation",
+  rotation: "animation",
+  moveTo: "animation",
+  inertialOvershoot: "expression",
+  wiggle: "expression",
+  spring: "easing",
+  customCurve: "easing",
+  objectStateTransition: "transition",
+} as const satisfies Record<
+  IntentTechnique,
+  "animation" | "expression" | "easing" | "transition"
+>;
+export const isCustomEasing = (e: string | { type: string }) =>
+  typeof e === "object" && ["cubicBezier", "piecewise"].includes(e.type);

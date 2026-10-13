@@ -248,6 +248,11 @@ export async function proposeMotion(
           enrichedContext,
           semanticProvider,
           async (stage, value) => {
+            if (harness && stage.startsWith("coverage"))
+              await harness.record("semantic-coverage", {
+                phase: stage,
+                report: value,
+              });
             await atomicJson(
               path.join(directory, `intent-${stage}.json`),
               value,

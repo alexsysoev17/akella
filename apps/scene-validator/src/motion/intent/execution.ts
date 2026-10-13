@@ -3,6 +3,7 @@ import type { LoadedProject } from "../../types.js";
 import type { MotionState, Plan } from "../schema.js";
 import type { IntentPlan, IntentRequirement } from "./schema.js";
 import {
+  requirementAnimations,
   compileTasks,
   compileRequirement,
   validateRequirement,
@@ -27,7 +28,9 @@ const desiredChannels = (r: IntentRequirement) =>
                 ? ["rotation"]
                 : t === "moveTo"
                   ? ["x", "y"]
-                  : [],
+                  : t === "spring" || t === "customCurve"
+                    ? [r.parameters.property ?? "y"]
+                    : [],
     ),
   );
 export function assertIntentScope(
@@ -49,20 +52,26 @@ export function assertIntentScope(
       );
     return;
   }
-  const r = plan.requirements.find(
+  const r = expandInheritance(plan).requirements.find(
     (r) => r.requirementId === task.requirementIds[0],
   )!;
   const own = (a: { sceneId: string; targetId: string }) =>
     a.sceneId === r.sceneId && a.targetId === r.target.sourceNodeId;
   const writes = desiredChannels(r),
     allEdits = r.kind === "editAnimation";
+  const permittedIds = new Set(
+    [
+      ...requirementAnimations(before, r),
+      ...requirementAnimations(next, r),
+    ].map((a) => a.animationId),
+  );
   const allowed = (a: MotionState["animations"][number]) =>
     own(a) &&
     (allEdits
       ? r.techniques.includes(a.effect as (typeof r.techniques)[number]) ||
-        r.techniques.includes("spring") ||
-        r.techniques.includes("customCurve")
-      : channels(a).some((c) => writes.has(c)) ||
+        permittedIds.has(a.animationId)
+      : permittedIds.has(a.animationId) ||
+        channels(a).some((c) => writes.has(c)) ||
         (r.techniques.includes("trimPath") &&
           /reveal|ribbon|trim/i.test(a.animationId) &&
           channels(a).some((c) => c.startsWith("scale"))));
@@ -152,13 +161,7 @@ export function requirementChecks(
       requirementId: r.requirementId,
       status: changed ? "PASSED" : "FAILED",
     });
-    const prior = previous.animations.filter(
-      (a) =>
-        a.enabled &&
-        a.sceneId === r.sceneId &&
-        a.targetId === r.target.sourceNodeId &&
-        r.techniques.includes(a.effect as (typeof r.techniques)[number]),
-    );
+    const prior = requirementAnimations(previous, r);
     for (const old of prior) {
       const now = state.animations.find(
         (a) => a.animationId === old.animationId,
@@ -242,9 +245,8 @@ export function requirementChecks(
             : "FAILED",
       });
   }
-  for (const a of base.filter((a) =>
-    r.techniques.includes(a.effect as (typeof r.techniques)[number]),
-  )) {
+  const related = requirementAnimations(state, r);
+  for (const a of related) {
     const ok =
       (r.parameters.durationSeconds === null ||
         a.durationFrames ===
@@ -271,7 +273,8 @@ export function requirementChecks(
       status: ok ? "PASSED" : "FAILED",
     });
   }
-  const primary = base.find((a) => !a.effect.startsWith("fade")) ?? base[0],
+  const primary =
+      related.find((a) => !a.effect.startsWith("fade")) ?? related[0],
     block = state.blocks.find((b) => b.sceneId === r.sceneId);
   if (primary && block && r.kind !== "editAnimation") {
     const anchorReq = plan.requirements.find(
@@ -310,11 +313,7 @@ export function requirementChecks(
       checks.push({
         name: "requirementTiming",
         requirementId: r.requirementId,
-        status: base
-          .filter((a) =>
-            r.techniques.includes(a.effect as (typeof r.techniques)[number]),
-          )
-          .every((a) => a.startFrame === expected)
+        status: related.every((a) => a.startFrame === expected)
           ? "PASSED"
           : "FAILED",
       });
@@ -330,6 +329,45 @@ export function requirementChecks(
           ? "PASSED"
           : "FAILED",
       });
+  }
+  for (const e of (state.expressions ?? []).filter(
+    (e) =>
+      e.enabled &&
+      e.sceneId === r.sceneId &&
+      e.targetId === r.target.sourceNodeId &&
+      r.techniques.includes(e.type as (typeof r.techniques)[number]),
+  )) {
+    if (r.parameters.property && e.property !== r.parameters.property) continue;
+    const ok =
+      (r.parameters.amplitude === null ||
+        e.parameters.amplitude === r.parameters.amplitude) &&
+      (r.parameters.frequency === null ||
+        !("frequency" in e.parameters) ||
+        e.parameters.frequency === r.parameters.frequency) &&
+      (e.type !== "wiggle" ||
+        r.parameters.seed == null ||
+        e.parameters.seed === r.parameters.seed);
+    checks.push({
+      name: "expressionParameters",
+      requirementId: r.requirementId,
+      status: ok ? "PASSED" : "FAILED",
+    });
+    if (e.type === "wiggle" && r.kind !== "editAnimation") {
+      const expected =
+        r.timing.startSeconds !== null
+          ? Math.round(r.timing.startSeconds * state.settings.fps)
+          : block?.startFrame;
+      if (r.timing.relation === "sceneStart" && expected !== undefined)
+        checks.push({
+          name: "expressionTiming",
+          requirementId: r.requirementId,
+          status:
+            e.startFrame ===
+            expected + Math.round(r.timing.delaySeconds * state.settings.fps)
+              ? "PASSED"
+              : "FAILED",
+        });
+    }
   }
   if (r.techniques.includes("inertialOvershoot")) {
     const e = state.expressions?.find(

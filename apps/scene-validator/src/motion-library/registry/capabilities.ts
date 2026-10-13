@@ -1,3 +1,4 @@
+import { semanticBindings } from "../techniques/registry.js";
 import { z } from "zod";
 import {
   animationSchema,
@@ -66,6 +67,15 @@ const catalog = [
     };
     return {
       ...data,
+      semanticTechniques: Object.entries(semanticBindings)
+        .filter(
+          ([id, kind]) =>
+            kind === data.kind &&
+            (id === data.id ||
+              (id === "customCurve" &&
+                ["cubicBezier", "piecewise"].includes(data.id))),
+        )
+        .map(([id]) => id),
       description: `${data.kind}: ${data.id} executed by existing Motion Engine`,
       supportedObjectTypes:
         data.id === "maskReveal"
@@ -103,6 +113,7 @@ const catalog = [
   }),
   {
     id: "objectStateTransition",
+    semanticTechniques: ["objectStateTransition"],
     kind: "transition",
     parameterSchema: z.toJSONSchema(objectTransitionSchema),
     description:

@@ -1,3 +1,5 @@
+import { inspectSemanticCoverage, SemanticCoverageError } from "./coverage.js";
+import { equivalentObjectName } from "../object-aliases.js";
 import {
   intentPlanSchema,
   type IntentPlan,
@@ -60,13 +62,6 @@ export function validateIntentPlan(
       (r.timing.startSeconds === null || !r.sceneId)
     )
       throw new Error("Scene timing requires scene and seconds");
-    if (
-      r.kind !== "sceneTiming" &&
-      r.kind !== "unsupported" &&
-      !r.techniques.length &&
-      !r.inheritFromRequirementId
-    )
-      throw new Error("Object requirement missing techniques");
   }
   const covered = new Uint8Array(request.length);
   for (const row of plan.coverage) {
@@ -124,8 +119,8 @@ export function validateIntentPlan(
         ),
       );
     } else if (r.target.name)
-      candidates = candidates.filter(
-        (o) => normalize(o.name) === normalize(r.target.name!),
+      candidates = candidates.filter((o) =>
+        equivalentObjectName(o.name, r.target.name!),
       );
     else candidates = [];
     if (candidates.length !== 1) {
@@ -135,7 +130,7 @@ export function validateIntentPlan(
       continue;
     }
     const target = candidates[0];
-    if (r.target.name && normalize(target.name) !== normalize(r.target.name)) {
+    if (r.target.name && !equivalentObjectName(target.name, r.target.name)) {
       r.unresolvedReason = "TARGET_NAME_ID_MISMATCH";
       continue;
     }
@@ -173,6 +168,16 @@ export function validateIntentPlan(
       );
     }
   }
+  const coverage = inspectSemanticCoverage(project, request, plan);
+  if (coverage.status !== "PASSED") throw new SemanticCoverageError(coverage);
+  for (const r of plan.requirements)
+    if (
+      r.kind !== "sceneTiming" &&
+      r.kind !== "unsupported" &&
+      !r.techniques.length &&
+      !r.inheritFromRequirementId
+    )
+      throw new Error("Object requirement missing techniques");
   return plan;
 }
 export async function semanticPlan(
@@ -195,7 +200,25 @@ export async function semanticPlan(
         ? await provider.audit(context, request, draft)
         : draft;
       await trace("audit-" + attempt, audited);
-      const plan = validateIntentPlan(project, request, audited);
+      let plan: IntentPlan;
+      try {
+        plan = validateIntentPlan(project, request, audited);
+      } catch (error) {
+        if (!(error instanceof SemanticCoverageError) || options.auditAlways)
+          throw error;
+        await trace("coverage-suspicious-" + attempt, error.report);
+        const repaired = await provider.audit(
+          { ...(context as object), coverageFeedback: error.report },
+          request,
+          audited,
+        );
+        await trace("selective-audit-" + attempt, repaired);
+        plan = validateIntentPlan(project, request, repaired);
+      }
+      await trace(
+        "coverage-validated",
+        inspectSemanticCoverage(project, request, plan),
+      );
       await trace("contract", plan);
       return plan;
     } catch (error) {

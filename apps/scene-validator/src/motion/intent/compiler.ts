@@ -1,3 +1,8 @@
+import {
+  semanticBindings,
+  isCustomEasing,
+} from "../../motion-library/techniques/registry.js";
+import type { Easing } from "../../motion-library/easings/registry.js";
 import { buildRegistry, resolveState } from "../registry.js";
 import { createHash } from "node:crypto";
 import type { LoadedProject } from "../../types.js";
@@ -123,6 +128,85 @@ export function compileTasks(
   }
   return tasks;
 }
+/** Pick one existing base for a standalone easing edit; explicit effect/property always wins. */
+export function requirementAnimations(
+  state: MotionState,
+  r: IntentRequirement,
+): Animation[] {
+  const own = state.animations.filter(
+    (a) =>
+      a.enabled &&
+      a.sceneId === r.sceneId &&
+      a.targetId === r.target.sourceNodeId,
+  );
+  const effects = r.techniques.filter(
+    (t) => semanticBindings[t] === "animation",
+  );
+  if (effects.length)
+    return own.filter((a) => effects.includes(a.effect as IntentTechnique));
+  if (!r.techniques.some((t) => semanticBindings[t] === "easing")) return [];
+  const matching = r.parameters.property
+    ? own.filter((a) => channels(a).includes(r.parameters.property!))
+    : own;
+  const movement = matching.filter(
+    (a) => !["fadeIn", "fadeOut", "trimPath", "maskReveal"].includes(a.effect),
+  );
+  return [...(movement.length ? movement : matching)]
+    .sort(
+      (a, b) =>
+        b.startFrame - a.startFrame ||
+        a.animationId.localeCompare(b.animationId),
+    )
+    .slice(0, 1);
+}
+export function isParameterOnlyEdit(r: IntentRequirement) {
+  return (
+    r.kind === "editAnimation" &&
+    r.parameters.easing === null &&
+    [
+      r.parameters.durationSeconds,
+      r.parameters.durationFactor,
+      r.parameters.amplitude,
+      r.parameters.amplitudeFactor,
+      r.parameters.frequency,
+      r.parameters.frequencyFactor,
+      r.parameters.decay,
+      r.parameters.seed,
+    ].some((v) => v != null)
+  );
+}
+export function requirementEasing(r: IntentRequirement): Easing | undefined {
+  if (isParameterOnlyEdit(r)) return undefined;
+  if (r.techniques.includes("spring") && r.techniques.includes("customCurve"))
+    throw new Error("Conflicting easing techniques");
+  if (r.techniques.includes("spring")) {
+    if (
+      r.parameters.easing &&
+      !(
+        typeof r.parameters.easing === "object" &&
+        r.parameters.easing.type === "spring"
+      )
+    )
+      throw new Error("Spring requires structured spring easing");
+    return (
+      r.parameters.easing ?? {
+        type: "spring",
+        parameters: { stiffness: 100, damping: 10, mass: 1 },
+      }
+    );
+  }
+  if (r.techniques.includes("customCurve")) {
+    if (r.parameters.easing && !isCustomEasing(r.parameters.easing))
+      throw new Error("customCurve requires cubicBezier or piecewise easing");
+    return (
+      r.parameters.easing ?? {
+        type: "cubicBezier",
+        parameters: { x1: 0.85, y1: 0, x2: 0.15, y2: 1 },
+      }
+    );
+  }
+  return r.parameters.easing ?? undefined;
+}
 export function compileRequirement(
   project: LoadedProject,
   state: MotionState,
@@ -236,26 +320,20 @@ export function compileRequirement(
         layerPolicy: { type: "switch", switchProgress: 1 },
       });
     } else if (task.kind === "editAnimation") {
-      const targets = state.animations.filter(
-        (a) =>
-          own(a) &&
-          a.enabled &&
-          (r.techniques.includes(a.effect as IntentTechnique) ||
-            r.techniques.includes("customCurve") ||
-            r.techniques.includes("spring")),
-      );
+      const targets = requirementAnimations(state, r);
       const expressions =
         state.expressions?.filter(
           (e) =>
             own(e) &&
             e.enabled &&
-            r.techniques.includes(e.type as IntentTechnique),
+            r.techniques.includes(e.type as IntentTechnique) &&
+            (!r.parameters.property || e.property === r.parameters.property),
         ) ?? [];
       if (!targets.length && !expressions.length)
         throw new Error("No matching existing effect to edit");
       for (const a of targets) {
         const next = structuredClone(a);
-        if (r.parameters.easing) next.easing = r.parameters.easing;
+        if (requirementEasing(r)) next.easing = requirementEasing(r)!;
         if (r.parameters.durationFactor !== null)
           next.durationFrames = Math.max(
             1,
@@ -320,6 +398,19 @@ export function compileRequirement(
         const next = structuredClone(
           updated?.type === "setExpression" ? updated.expression : e,
         );
+        if (r.parameters.property) next.property = r.parameters.property;
+        if (next.type === "wiggle" && r.parameters.seed != null)
+          next.parameters.seed = r.parameters.seed;
+        if (!targets.length && r.parameters.durationSeconds !== null)
+          next.durationFrames = Math.max(
+            1,
+            Math.round(r.parameters.durationSeconds * fps),
+          );
+        else if (!targets.length && r.parameters.durationFactor !== null)
+          next.durationFrames = Math.max(
+            1,
+            Math.round(next.durationFrames * r.parameters.durationFactor),
+          );
         if (r.parameters.amplitudeFactor !== null)
           next.parameters.amplitude *= r.parameters.amplitudeFactor;
         if (r.parameters.amplitude !== null)
@@ -336,7 +427,38 @@ export function compileRequirement(
         operations.push({ type: "setExpression", expression: next });
       }
     } else {
-      const requested = r.techniques.filter((t) => t !== "inertialOvershoot");
+      const requested: (IntentTechnique | "property")[] = r.techniques.filter(
+        (t) => semanticBindings[t] === "animation",
+      );
+      const modifier = r.techniques.some(
+        (t) => semanticBindings[t] === "easing",
+      );
+      if (modifier && !requested.length) {
+        const previous = requirementAnimations(state, r)[0];
+        if (previous) {
+          const animation = {
+            ...structuredClone(previous),
+            easing: requirementEasing(r)!,
+          };
+          if (r.parameters.durationSeconds !== null)
+            animation.durationFrames = Math.max(
+              1,
+              Math.round(r.parameters.durationSeconds * fps),
+            );
+          else if (r.parameters.durationFactor !== null)
+            animation.durationFrames = Math.max(
+              1,
+              Math.round(
+                animation.durationFrames * r.parameters.durationFactor,
+              ),
+            );
+          operations.push({
+            type: "updateAnimation",
+            animationId: previous.animationId,
+            animation,
+          });
+        } else requested.push("property");
+      }
       let source: Animation | undefined;
       if (
         hasInertia &&
@@ -360,7 +482,7 @@ export function compileRequirement(
           startFrame: start,
           durationFrames: duration,
           easing:
-            r.parameters.easing ??
+            requirementEasing(r) ??
             (effect === "trimPath"
               ? "linear"
               : hasInertia
@@ -372,7 +494,23 @@ export function compileRequirement(
           enabled: true,
         } as const;
         let a: Animation;
-        if (effect.startsWith("slide"))
+        if (effect === "property")
+          a = {
+            ...common,
+            effect: "property",
+            parameters: {
+              property: r.parameters.property ?? "y",
+              from: r.parameters.distance ?? 80,
+              to: 0,
+            },
+          };
+        else if (effect === "rotation")
+          a = {
+            ...common,
+            effect: "rotation",
+            parameters: { from: 0, to: r.parameters.distance ?? 15 },
+          };
+        else if (effect.startsWith("slide"))
           a = {
             ...common,
             effect: effect as "slideUp",
@@ -506,6 +644,51 @@ export function compileRequirement(
             },
           });
       }
+      if (r.techniques.includes("wiggle")) {
+        const old = state.expressions?.find(
+          (e) =>
+            own(e) &&
+            e.type === "wiggle" &&
+            (!r.parameters.property || e.property === r.parameters.property),
+        );
+        const frames = Math.min(
+          duration,
+          block.startFrame + block.durationFrames - start,
+          state.settings.durationFrames - start - 1,
+        );
+        if (frames < 1)
+          throw new Error("Wiggle requires a finite visible interval");
+        operations.push({
+          type: "setExpression",
+          expression: {
+            expressionId:
+              old?.expressionId ??
+              "intent_wiggle_" +
+                stable([
+                  r.sceneId,
+                  r.target.sourceNodeId,
+                  r.parameters.property ?? "y",
+                ]),
+            sceneId: r.sceneId!,
+            targetId: r.target.sourceNodeId!,
+            type: "wiggle",
+            property: r.parameters.property ?? "y",
+            startFrame: start,
+            durationFrames: frames,
+            enabled: true,
+            parameters: {
+              amplitude: r.parameters.amplitude ?? 10,
+              frequency: r.parameters.frequency ?? 2,
+              seed:
+                r.parameters.seed ??
+                parseInt(
+                  stable([r.sceneId, r.target.sourceNodeId]).slice(0, 7),
+                  16,
+                ),
+            },
+          },
+        });
+      }
       if (hasInertia) {
         if (!source) throw new Error("POSITION_DEPENDENCY_MISSING");
         const end = source.startFrame + source.durationFrames,
@@ -592,11 +775,10 @@ export function validateRequirement(state: MotionState, r: IntentRequirement) {
           : "FAILED",
       },
     ];
-  const checks = r.techniques.map((technique) => ({
-    name: "requiredTechnique",
-    technique,
-    status: (
-      technique === "objectStateTransition"
+  const checks = r.techniques.map((technique) => {
+    const kind = semanticBindings[technique];
+    const found =
+      kind === "transition"
         ? state.objectTransitions?.some(
             (t) =>
               t.logicalObjectId === r.target.logicalObjectId &&
@@ -604,28 +786,48 @@ export function validateRequirement(state: MotionState, r: IntentRequirement) {
               (!r.parameters.toSceneId ||
                 t.toSceneId === r.parameters.toSceneId),
           )
-        : technique === "inertialOvershoot"
+        : kind === "expression"
           ? state.expressions?.some(
               (e) =>
                 e.enabled &&
                 e.type === technique &&
-                (r.kind === "editAnimation" || e.parameters.mode === "ae") &&
                 e.sceneId === r.sceneId &&
-                e.targetId === r.target.sourceNodeId,
+                e.targetId === r.target.sourceNodeId &&
+                (technique !== "inertialOvershoot" ||
+                  r.kind === "editAnimation" ||
+                  (e.type === "inertialOvershoot" &&
+                    e.parameters.mode === "ae")) &&
+                (!r.parameters.property ||
+                  e.property === r.parameters.property),
             )
-          : state.animations.some(
-              (a) =>
-                a.enabled &&
-                a.effect === technique &&
-                a.sceneId === r.sceneId &&
-                a.targetId === r.target.sourceNodeId,
-            ) ||
-            (r.kind === "editAnimation" &&
-              ["customCurve", "spring"].includes(technique))
-    )
-      ? "PASSED"
-      : "FAILED",
-  }));
+          : kind === "easing"
+            ? requirementAnimations(state, r).some((a) =>
+                technique === "spring"
+                  ? typeof a.easing === "object" && a.easing.type === "spring"
+                  : isCustomEasing(a.easing) || isParameterOnlyEdit(r),
+              ) ||
+              (technique === "spring" &&
+                r.kind === "editAnimation" &&
+                state.expressions?.some(
+                  (e) =>
+                    e.type === "spring" &&
+                    e.enabled &&
+                    e.sceneId === r.sceneId &&
+                    e.targetId === r.target.sourceNodeId,
+                ))
+            : state.animations.some(
+                (a) =>
+                  a.enabled &&
+                  a.effect === technique &&
+                  a.sceneId === r.sceneId &&
+                  a.targetId === r.target.sourceNodeId,
+              );
+    return {
+      name: "requiredTechnique",
+      technique,
+      status: found ? "PASSED" : "FAILED",
+    };
+  });
   if (
     r.techniques.includes("inertialOvershoot") &&
     (r.parameters.easing === "aeEasyEase" ||

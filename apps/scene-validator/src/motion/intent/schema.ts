@@ -40,6 +40,11 @@ export const intentRequirementSchema = z
     techniques: z.array(intentTechnique).max(8),
     parameters: z
       .object({
+        property: z
+          .enum(["x", "y", "rotation", "scaleX", "scaleY", "opacity"])
+          .nullable()
+          .optional(),
+        seed: z.number().int().min(0).max(2147483647).nullable().optional(),
         fromSceneId: z.string().nullable().default(null),
         toSceneId: z.string().nullable().default(null),
         moveToCenter: z.boolean().nullable().default(null),
@@ -52,7 +57,7 @@ export const intentRequirementSchema = z
         direction: z
           .enum(["forward", "reverse", "leftToRight", "rightToLeft"])
           .nullable(),
-        amplitude: z.number().min(0).max(2).nullable(),
+        amplitude: z.number().min(0).max(10000).nullable(),
         frequencyFactor: z.number().positive().max(10).nullable().default(null),
         frequency: z.number().min(0.01).max(30).nullable(),
         decay: z.number().min(0).max(30).nullable(),

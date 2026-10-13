@@ -1,0 +1,371 @@
+import type { LoadedProject } from "../../types.js";
+import type {
+  IntentPlan,
+  IntentRequirement,
+  IntentTechnique,
+} from "./schema.js";
+import { objectsIn } from "../context.js";
+import {
+  equivalentObjectName,
+  objectMentionRanges,
+} from "../object-aliases.js";
+export interface CoverageIssue {
+  code: string;
+  sourceText: string;
+  requirementIds: string[];
+  expected?: unknown;
+  actual?: unknown;
+}
+export class SemanticCoverageError extends Error {
+  constructor(public report: CoverageReport) {
+    super("SEMANTIC_COVERAGE: " + JSON.stringify(report.issues));
+  }
+}
+export interface CoverageReport {
+  status: "PASSED" | "SUSPICIOUS";
+  issues: CoverageIssue[];
+  clauses: {
+    start: number;
+    end: number;
+    sourceText: string;
+    sceneId: string | null;
+    requirementIds: string[];
+    explicitTechniques: IntentTechnique[];
+    inheritedFrom: string | null;
+  }[];
+}
+/** Sanity-check explicit, locally bound instructions. LLM still interprets natural language. */
+function explicitTechniques(text: string): IntentTechnique[] {
+  const techniques: IntentTechnique[] = [];
+  if (/(?:снизу|slide\s*up)/i.test(text)) techniques.push("slideUp");
+  if (/(?:сверху|slide\s*down)/i.test(text)) techniques.push("slideDown");
+  if (/(?:trim\s*paths?|прорисов|прорисуй|рисуется|рисуются)/i.test(text))
+    techniques.push("trimPath");
+  if (/fade\s*out|фейд.*исчез|исчез.*фейд/i.test(text))
+    techniques.push("fadeOut");
+  else if (/\bfade(?:\s*in)?\b|fadeIn|ф[еэ]йд/i.test(text))
+    techniques.push("fadeIn");
+  if (/wiggle/i.test(text)) techniques.push("wiggle");
+  if (/spring|пружин/i.test(text)) techniques.push("spring");
+  if (/custom\s*(?:curve|easing)|авторск.*крив/i.test(text))
+    techniques.push("customCurve");
+  if (
+    /overshoot|инерц|затуха.*колеб|колеб.*затух|колебани|колебания|с\s+колеб|после.*останов.*покач/i.test(
+      text,
+    )
+  )
+    techniques.push("inertialOvershoot");
+  return techniques;
+}
+const inheritance = /аналогично|так\s+же|как\s+предыдущ|как\s+перв/i;
+const sequential =
+  /после\s+(?:заверш|оконч|перв)|когда\s*(?:он[аои]?\s*)?(?:законч|конча)|(?:а\s+)?(?:потом|затем)|сразу\s+(?:вслед|после)/i;
+const ordinals: Record<string, number> = {
+  первой: 1,
+  первую: 1,
+  первом: 1,
+  второй: 2,
+  вторую: 2,
+  третьей: 3,
+  третью: 3,
+  четвертой: 4,
+  четвёртой: 4,
+  пятой: 5,
+};
+export function inspectSemanticCoverage(
+  project: LoadedProject,
+  request: string,
+  plan: IntentPlan,
+): CoverageReport {
+  const report: CoverageReport = { status: "PASSED", issues: [], clauses: [] };
+  const scenes = project.inspection.document.scenes;
+  const roots = new Set(scenes.map((s) => s.figmaNodeId));
+  const objects = scenes
+    .flatMap(objectsIn)
+    .filter((o) => o.parentId && !roots.has(o.targetId));
+  const boundaries = new Set<number>([0, request.length]);
+  for (const m of request.matchAll(
+    /(?:[!?;\n]+|(?<!\d)[.,]|[.,](?!\d)|(?=сцен[аыуе]?\s*\d+\s*(?:нач|на\s|start)))/gi,
+  )) {
+    boundaries.add(m.index!);
+    if (m[0]) boundaries.add(m.index! + m[0].length);
+  }
+  // Split an unpunctuated change of object only after an actual technique phrase.
+  const mentions = objects.flatMap((o) =>
+    objectMentionRanges(o.name, request).map((range) => ({
+      ...range,
+      object: o,
+    })),
+  );
+  const initial = [...boundaries].sort((a, b) => a - b);
+  for (let i = 0; i < initial.length - 1; i++) {
+    let last = initial[i],
+      seenObject = false;
+    for (const mention of mentions
+      .filter((m) => m.start >= initial[i] && m.start < initial[i + 1])
+      .sort((a, b) => a.start - b.start)) {
+      if (
+        seenObject &&
+        explicitTechniques(request.slice(last, mention.start)).length
+      ) {
+        boundaries.add(mention.start);
+        last = mention.start;
+      }
+      seenObject = true;
+      last = Math.max(last, mention.end);
+    }
+  }
+  const spans = [...boundaries].sort((a, b) => a - b);
+  let sceneId: string | null = null,
+    activeIds: string[] = [],
+    pendingIds: string[] = [],
+    previous: IntentRequirement | undefined,
+    pendingAfter: string | undefined;
+  const issue = (
+    code: string,
+    text: string,
+    rs: IntentRequirement[],
+    expected?: unknown,
+    actual?: unknown,
+  ) =>
+    report.issues.push({
+      code,
+      sourceText: text,
+      requirementIds: rs.map((r) => r.requirementId),
+      expected,
+      actual,
+    });
+  const effective = (r: IntentRequirement): Set<IntentTechnique> => {
+    const result = new Set(r.techniques);
+    const seen = new Set<string>();
+    let current = r;
+    while (
+      current.inheritFromRequirementId &&
+      !seen.has(current.requirementId)
+    ) {
+      seen.add(current.requirementId);
+      const parent = plan.requirements.find(
+        (p) => p.requirementId === current.inheritFromRequirementId,
+      );
+      if (!parent) break;
+      parent.techniques.forEach((t) => result.add(t));
+      current = parent;
+    }
+    return result;
+  };
+  for (let i = 0; i < spans.length - 1; i++) {
+    const start = spans[i],
+      end = spans[i + 1],
+      text = request.slice(start, end);
+    if (!text.trim() || /^[.,!?;\s]+$/.test(text)) continue;
+    const header = text.match(/сцен[аыуе]?\s*(\d+)/i);
+    if (header) {
+      sceneId =
+        scenes.find((s) => s.index === Number(header[1]) - 1)?.sceneId ?? null;
+      activeIds = [];
+      pendingIds = [];
+      previous = undefined;
+      pendingAfter = undefined;
+    }
+    if (header && /начина|starts|\bна\s/i.test(text)) {
+      const time = text.match(
+        /(?:на|at)\s*(\d+(?:[.,]\d+)?|первой|первую|второй|вторую|третьей|третью|четв[её]ртой|пятой)\s*(?:сек|second)/i,
+      );
+      if (time && sceneId) {
+        const seconds =
+          ordinals[time[1].toLowerCase()] ?? Number(time[1].replace(",", "."));
+        const rs = plan.requirements.filter(
+          (r) => r.kind === "sceneTiming" && r.sceneId === sceneId,
+        );
+        if (!rs.some((r) => r.timing.startSeconds === seconds))
+          issue("MISSING_SCENE_TIMING", text, rs, {
+            sceneId,
+            startSeconds: seconds,
+          });
+      }
+    }
+    const inferredScenes = new Set(
+      plan.requirements
+        .filter(
+          (r) =>
+            r.kind !== "sceneTiming" &&
+            r.sceneId &&
+            r.sourceText.includes(text.trim()),
+        )
+        .map((r) => r.sceneId!),
+    );
+    const here = mentions.filter(
+      (m) =>
+        m.start >= start &&
+        m.start < end &&
+        (sceneId
+          ? m.object.sceneId === sceneId
+          : !inferredScenes.size || inferredScenes.has(m.object.sceneId)),
+    );
+    const ids = [
+      ...new Set(here.map((m) => m.object.sceneId + "/" + m.object.targetId)),
+    ];
+    const techs = explicitTechniques(text),
+      inherit = inheritance.test(text);
+    const targetIds = ids.length
+      ? [...new Set([...pendingIds, ...ids])]
+      : pendingIds.length
+        ? pendingIds
+        : activeIds;
+    const unresolvedMention = (r: IntentRequirement, id?: string) =>
+      Boolean(
+        r.unresolvedReason &&
+          r.target.name &&
+          objects.some(
+            (o) =>
+              (!id || o.sceneId + "/" + o.targetId === id) &&
+              equivalentObjectName(o.name, r.target.name!) &&
+              objectMentionRanges(o.name, text).length,
+          ),
+      );
+    let rs = plan.requirements.filter(
+      (r) =>
+        r.kind !== "sceneTiming" &&
+        (!sceneId || !r.sceneId || r.sceneId === sceneId) &&
+        (targetIds.includes(r.sceneId + "/" + r.target.sourceNodeId) ||
+          unresolvedMention(r)),
+    );
+    if (!targetIds.length)
+      rs = plan.requirements.filter(
+        (r) =>
+          r.kind !== "sceneTiming" &&
+          (!sceneId || r.sceneId === sceneId) &&
+          r.sourceText.includes(text.trim()),
+      );
+    if (ids.length && !techs.length && !inherit && !sequential.test(text)) {
+      pendingIds = [...new Set([...pendingIds, ...ids])];
+      activeIds = ids;
+      continue;
+    }
+    if (!ids.length && !techs.length && !inherit && !sequential.test(text))
+      continue;
+    if (techs.length && targetIds.length)
+      for (const id of targetIds) {
+        if (
+          !rs.some(
+            (r) =>
+              r.sceneId + "/" + r.target.sourceNodeId === id ||
+              unresolvedMention(r, id),
+          )
+        )
+          issue("MISSING_OBJECT_REQUIREMENT", text, [], {
+            target: id,
+            techniques: techs,
+          });
+      }
+    if (sequential.test(text) && previous)
+      pendingAfter = previous.requirementId;
+    if (
+      techs.length &&
+      !targetIds.length &&
+      rs.filter((r) => !r.unresolvedReason).length > 1
+    )
+      issue(
+        "AMBIGUOUS_CLAUSE_LINKAGE",
+        text,
+        rs,
+        "precise sourceText for each target",
+      );
+    const linkedIds = new Set(
+      plan.coverage
+        .filter(
+          (row) =>
+            row.sourceText.includes(text.trim()) ||
+            text.includes(row.sourceText.trim()),
+        )
+        .flatMap((row) => row.requirementIds),
+    );
+    for (const r of rs)
+      if (!linkedIds.has(r.requirementId))
+        issue(
+          "UNLINKED_CLAUSE_REQUIREMENT",
+          text,
+          [r],
+          "coverage link to this requirement",
+        );
+    const negated =
+      /\b(?:not|without)\b|(?:не\s+(?:добав|дела|нуж|использ)|без\s+фейд|убер|удали)/i.test(
+        text,
+      );
+    for (const r of rs) {
+      if (r.kind === "unsupported" || r.unresolvedReason) continue;
+      if (
+        inherit &&
+        previous &&
+        previous.requirementId !== r.requirementId &&
+        !negated &&
+        !r.inheritFromRequirementId
+      )
+        r.inheritFromRequirementId = previous.requirementId;
+      const have = effective(r);
+      if (!negated)
+        for (const technique of techs)
+          if (!have.has(technique))
+            issue("MISSING_EXPLICIT_TECHNIQUE", text, [r], technique, [
+              ...have,
+            ]);
+      if (inherit && previous && !negated)
+        for (const technique of effective(previous))
+          if (!have.has(technique))
+            issue("INCOMPLETE_INHERITANCE", text, [r], technique, [...have]);
+      if (
+        pendingAfter &&
+        pendingAfter !== r.requirementId &&
+        (r.timing.relation !== "afterRequirement" ||
+          r.timing.anchorRequirementId !== pendingAfter)
+      )
+        issue(
+          "MISSING_SEQUENTIAL_DEPENDENCY",
+          text,
+          [r],
+          { relation: "afterRequirement", anchorRequirementId: pendingAfter },
+          r.timing,
+        );
+      if (
+        inherit &&
+        /быстрее|faster/i.test(text) &&
+        !((r.parameters.durationFactor ?? 1) < 1) &&
+        r.parameters.durationSeconds === null
+      )
+        issue(
+          "MISSING_FASTER_MODIFIER",
+          text,
+          [r],
+          "durationFactor < 1 or explicit duration",
+        );
+      if (
+        /в(?:двое|\s*2\s*раза)\s*(?:слаб|меньше)/i.test(text) &&
+        (r.kind !== "editAnimation" || r.parameters.amplitudeFactor !== 0.5)
+      )
+        issue("MISSING_RELATIVE_EDIT", text, [r], {
+          kind: "editAnimation",
+          amplitudeFactor: 0.5,
+        });
+    }
+    if (techs.length && !rs.length && !header)
+      issue("UNBOUND_EXPLICIT_INSTRUCTION", text, [], techs);
+    report.clauses.push({
+      start,
+      end,
+      sourceText: text,
+      sceneId,
+      requirementIds: rs.map((r) => r.requirementId),
+      explicitTechniques: techs,
+      inheritedFrom: inherit ? (previous?.requirementId ?? null) : null,
+    });
+    if (rs.length && (techs.length || inherit)) {
+      if (rs.some((r) => r.requirementId !== pendingAfter))
+        pendingAfter = undefined;
+      previous = rs.at(-1);
+    }
+    activeIds = targetIds;
+    pendingIds = [];
+  }
+  report.status = report.issues.length ? "SUSPICIOUS" : "PASSED";
+  return report;
+}

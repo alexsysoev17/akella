@@ -4,16 +4,16 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-13T14:44:26+00:00 — частичное обновление Git metadata/policy |
+| Last Updated | 2026-10-13T15:19:11.414Z — частичное P0 A01–A03 обновление |
 | Last Full Audit | 2026-10-13 — структурный аудит исходников перечисленных подсистем; не полный production E2E и не формальная верификация каждой ветви |
-| Git Commit | Baseline `Initial Motion Platform baseline`; hash: `git rev-parse HEAD`. Документ входит в этот baseline; commit hash не вписан в собственное содержимое. |
+| Git Commit | Pre-change checkpoint `c65544d`; P0 source/docs changes are committed after verification, identify by commit message `Fix P0 semantic technique parity and intent coverage`. |
 | Git Branch | `main`; локальный репозиторий создан после первоначального аудита |
-| Working Tree Status | Baseline включает проверенные исходники/config/tests/docs; после коммита проверяется чистое `git status --short`. Ignored пользовательские материалы не входят в историю. |
-| Documentation Version | 1.0.1 |
-| Scope of Last Update | Частичное обновление Git metadata/checkpoint policy после первичного аудита: import, identity, semantic execution, engine, renderer, QA, providers, harness, inspector, storage, риски и проверки |
-| Code snapshot SHA-256 | `d39e40349a8ba6ff6bbb92946a648aff9402fe5f21c244da1e3bda0c8829ce83` |
+| Working Tree Status | Reviewed P0 source/tests/docs changes; ignored user projects/assets remain outside history. Final status checked after local commit. |
+| Documentation Version | 1.0.2 |
+| Scope of Last Update | Partial P0 repair: semantic representations, clause coverage/selective audit, compact Object Index/aliases, regression verification. Other findings remain from full audit. |
+| Code snapshot SHA-256 | `b29a854488d37a0d294080f6eb8f999fe046ad97c6c80a61568fe5fd8a0d79de` (P0 post-build snapshot) |
 
-Git 2.54.0 (Apple Git-157): локальная история на main, без remote/network/push. Код приложения не менялся. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
+Git 2.54.0 (Apple Git-157): локальная история на main, без remote/network/push. В P0 update изменены context, semantic compiler/checks и coverage; математический Engine/Renderer не изменены. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
 
 Snapshot вычислен над отсортированными файлами `apps/scene-validator/src/`, `figma-motion-exporter/src/`, `scripts/`, а также package.json, package-lock.json и manifest плагина: relative path, NUL, bytes, NUL. Это локальный идентификатор просмотренного состояния, не Git commit и не криптографическая аттестация запуска приложения. Документ и AGENTS.md не входят в этот hash.
 
@@ -38,14 +38,14 @@ Motion Platform — локальное файловое приложение д�
 
 Основные выводы аудита:
 
-1. **High / CONFIRMED BUG:** semantic create flow не согласован с wiggle/spring/customCurve. Engine/Library их умеют, compiler часть не компилирует, а create requirement checks не принимают нужное представление.
-2. **High / CONFIRMED VALIDATION GAP:** текстовое coverage не доказывает semantic completeness: план без Fade, покрывающий весь исходный текст, проходит validateIntentPlan.
-3. **High / CONFIRMED CONTEXT LOSS:** lexical retrieval способен удалить объект из LLM context при наличии другого точного совпадения. Полного tool-based раскрытия контекста нет.
+1. **A01 FIXED:** semanticBindings разделяет animation/expression/easing/transition. Wiggle, spring и customCurve проходят create/edit, scope, requirement validation и реальный локальный QA.
+2. **A02 TARGETED FIX:** clause guards отклоняют потерянные явные эффекты/тайминг/зависимости даже при full-text coverage; подозрительный план проходит selective semantic audit. Произвольная естественная речь не имеет формального доказательства полноты.
+3. **A03 FIXED FOR RELEVANT SCENES:** полный компактный Object Index сохраняет IDs/names/types всех потомков выбранных сцен; детали выборочные, QR/куар aliases разрешаются только однозначно. Tool-based paging всё ещё отсутствует.
 4. **High / LIKELY ISSUE:** moveToCenter вычисляет scene-space displacement, обычный renderer применяет его внутри parent-space wrapper. Для rotated/scaled parents это разные координаты.
 5. Точное AE Easy Ease parity не достигнуто: сохранённая/пересчитанная ошибка ~0.652 px против допуска 0.15. Формула с предоставленной velocity проходит (~0.105 px).
 6. SUCCESS означает выполненный **сформированный** контракт и допускает QA WARNING; это не доказательство полноты человеческого запроса, художественного качества или наблюдаемости каждого эффекта.
 
-Critical confirmed defect с доказанным разрушением данных в этом аудите не установлен. Не следует путать отсутствие такого доказательства с гарантией безопасности при любом crash. Код приложения при аудите не исправлялся.
+Critical confirmed defect с доказанным разрушением данных в этом аудите не установлен. Не следует путать отсутствие такого доказательства с гарантией безопасности при любом crash. Код приложения при исходном аудите не исправлялся; P0 update исправляет только A01–A03.
 
 ## 2. Architecture Diagram
 
@@ -179,7 +179,7 @@ Actual normal UI path (`apps/scene-validator/src/web/motion.js:388`, `apps/scene
 4. Nonmanual execution creates `HarnessRun.start`: UUID, config, timeout, memory sampling, received trace. Full privacy uses project-local AI directory; metadata/off use scratch. **IMPLEMENTED.**
 5. `validateMentions`; recent context comes from applied, non-undone Undo history. `agentContext` collects scoped source nodes, current motion, registry summaries, scene index, techniques/capabilities/skills, up to three experience cases, version refs and byte budget. **IMPLEMENTED with context-loss limitations.**
 6. `SemanticProvider.interpret` wraps `AIClient.structured` via the selected adapter. Whole human message is in compact user payload. Model returns **IntentPlan**, not initial operations. **IMPLEMENTED.**
-7. Production passes `auditAlways:false`. `validateIntentPlan` checks schemas, verbatim excerpt coverage, IDs/name consistency, resolves targets, verifies inheritance references/cycles. Invalid contract retries on feedback until budgets/repeat error stop. Separate semantic audit exists, but is **UNUSED IN NORMAL FIRST-PASS FLOW**. **Coverage semantics PARTIAL.**
+7. Production passes `auditAlways:false`. `validateIntentPlan` checks schemas, verbatim excerpt coverage, IDs/name consistency, resolves targets, verifies inheritance references/cycles. Invalid contract retries on feedback until budgets/repeat error stop. Clause guards now validate explicit techniques, scene starts, inheritance and ordering. Suspicious coverage invokes the existing semantic audit selectively; a valid normal plan uses no audit call. **General natural-language completeness remains PARTIAL.**
 8. `expandInheritance` unions techniques and copies null parameters from parent except absolute x/y and from/to scene IDs. `compileTasks` groups scene timing requirements into one task, creates object tasks, preflights masks/geometry, and builds requirement/task dependencies. **IMPLEMENTED.**
 9. `runIntentTasks` runs pending tasks topologically. `compileRequirement` creates deterministic operations using FPS, source geometry/defaults, current animations, timingDependencies. Not every IntentTechnique is supported here. **PARTIAL.**
 10. `applyOperations` creates a cloned candidate, resolves dependencies, validates schema/targets/intervals/channels/expressions/transitions. `assertIntentScope` prevents unrelated changes; `requirementChecks` compares requested techniques/timing/relative edits. **IMPLEMENTED, with gaps §18.**
@@ -202,7 +202,7 @@ Authoritative schemas: `apps/scene-validator/src/motion/intent/schema.ts:3,23,10
 ```ts
 interface IntentProvider {
   interpret(context: unknown, request: string, feedback?: unknown): Promise<IntentPlan>;
-  audit(context: unknown, request: string, plan: IntentPlan): Promise<IntentPlan>;
+  audit(context: unknown, request: string, plan: IntentPlan): Promise<IntentPlan>; // suspicious plans receive context.coverageFeedback
 }
 // IntentPlan and IntentRequirement are z.infer<typeof ...Schema>.
 // Required top-level plan fields:
@@ -210,7 +210,7 @@ interface IntentProvider {
   coverage: {sourceText, requirementIds, classification, explanation}[], assumptions: string[] }
 ```
 
-Requirement fields: requirementId, kind (`sceneTiming|objectAnimation|editAnimation|unsupported`), sourceText, nullable sceneId, target (`sourceNodeId|logicalObjectId|name`), techniques[], parameters, timing, inheritFromRequirementId, inheritanceExplanation, constraints[], unresolvedReason. Parameters include scene refs, center/x/y/scale, duration/distance/direction, amplitude/frequency/decay/easing and relative factors. Timing has startSeconds, relation (`sceneStart|sceneEnd|afterRequirement|withRequirement|beforeRequirement|unchanged`), anchorRequirementId, delaySeconds.
+Requirement fields: requirementId, kind (`sceneTiming|objectAnimation|editAnimation|unsupported`), sourceText, nullable sceneId, target (`sourceNodeId|logicalObjectId|name`), techniques[], parameters, timing, inheritFromRequirementId, inheritanceExplanation, constraints[], unresolvedReason. Parameters include scene refs, center/x/y/scale, duration/distance/direction, amplitude/frequency/decay/easing, optional nullable property/seed and relative factors. Timing has startSeconds, relation (`sceneStart|sceneEnd|afterRequirement|withRequirement|beforeRequirement|unchanged`), anchorRequirementId, delaySeconds.
 
 The model is instructed to parse misspellings, pronouns, context boundaries, “аналогично”, “после”, “но быстрее”, source substrings and artistic defaults (`apps/scene-validator/src/motion/intent/planner.ts:10`). These are **LLM interpretation instructions**, not proof that every phrasing is supported. Regex remains in lexical context/knowledge retrieval and legacy task parsing. Primary semantic interpretation is not exclusively regex.
 
@@ -229,11 +229,11 @@ Example structure — illustrative legal shape, not a newly executed provider an
 
 This excerpt omits required parameters/constraints/unresolvedReason for brevity and cannot be pasted unchanged into the strict API. IDs here are illustrative, not Figma data.
 
-For QR + Logo: the provider should return rQR and inherited rLogo. `expandInheritance` copies techniques/duration/easing character, not QR absolute position. Each target keeps its Figma base geometry. For Ribbon2: provider emits afterRequirement anchored to Ribbon1; compiler computes frames and persists setTimingDependency. Duration changes can propagate via resolveTimingDependencies. Exact-name source IDs remain validated even after LLM selection.
+For QR + Logo: the provider should return rQR and inherited rLogo. `expandInheritance` copies techniques/duration/easing character, not QR absolute position. Each target keeps its Figma base geometry. For Ribbon2: provider emits afterRequirement anchored to Ribbon1; compiler computes frames and persists setTimingDependency. Duration changes can propagate via resolveTimingDependencies. Source IDs remain validated even after LLM selection; recognized aliases resolve only within unique scene candidates.
 
-Ambiguity: candidate count must equal one; otherwise unresolvedReason=AMBIGUOUS_TARGET/TARGET_UNRESOLVED and task BLOCKED. Name+ID mismatch is rejected. This cannot prove that a **valid but semantically wrong** object was chosen. No full rule engine binds every sentence’s intended scene independently of model output. Nor is there a tool allowing the model to recover omitted source details from the context builder.
+Ambiguity: candidate count must equal one; otherwise unresolvedReason=AMBIGUOUS_TARGET/TARGET_UNRESOLVED and task BLOCKED. Name+ID mismatch is rejected. This cannot prove that a **valid but semantically wrong** object was chosen. No full rule engine binds every sentence’s intended scene independently of model output. The compact complete relevant-scene Object Index now preserves all target identities, but there is no tool for retrieving omitted full geometry on demand.
 
-Coverage: every non-whitespace source character must be covered by a verbatim coverage excerpt, linked instructions must reference requirements. **A single full-message excerpt can pass even when its linked requirement omits Fade.** Production independent audit is disabled for latency, so completeness depends on the one model answer plus structural checks. See reproducible audit probe §18.
+Coverage: verbatim character coverage remains required. `intent/coverage.ts` also records original clause offsets, scene/target linkage, explicit techniques and inheritance source. Missing Fade/inertia/scene timing, wrong clause linkage, unresolved local inheritance and absent sequential dependencies yield `SemanticCoverageError` plus structured feedback. `semanticPlan` invokes existing provider.audit only for suspicious plans, revalidates before execution and records semantic-coverage events through HarnessRun. Guards are bounded lexical sanity checks around the LLM planner, not a complete semantic parser or a proof of every artistic instruction. Identity ambiguity remains tracked unsupported; independent valid tasks may proceed.
 
 Conversation: primary flow uses last eight applied Undo entries and context last three recent entries, not the entire chat. “Сделай её мягче” can use selected target/current animations, but unselected ambiguous history is not a guarantee of correct pronoun resolution.
 
@@ -347,7 +347,7 @@ Single implemented library: `src/motion-library/`; `harness/` root contains eval
 
 agentContext prunes capabilities/expressions to retrieved/current IDs plus common capabilities, includes at most two named relevant presets, versions skills via content digests. Recommendations do not mathematically constrain user intent. Technical constraints are enforced separately by schemas/evaluators.
 
-A technique **can** exist in Engine and be advertised but fail in semantic execution. Capability metadata describes engine executability, not complete compiler/reconciliation coverage. There is no coverage matrix gate enforcing all layers agree. No unused-skill proof should be inferred solely from presence of .md files; audit verified read paths, not retrieval quality on every language case.
+A technique **can** exist in Engine and be advertised but fail in semantic execution. Capability metadata describes engine executability, not complete compiler/reconciliation coverage. The new `semanticBindings` map plus `p0-correctness.test.ts` gates all 17 declared Intent techniques through compiler/scope/requirement checks and numerical evaluation. Engine-only capabilities are explicitly separate from semantic technique mappings. No unused-skill proof should be inferred solely from presence of .md files; audit verified read paths, not retrieval quality on every language case.
 
 ## 11. Renderer, SVG, Text and Compositing
 
@@ -421,10 +421,10 @@ Crash recovery: servePlatform marks RUNNING runs with different ownerPid INTERRU
 | Component | Status | Actual production integration / boundary |
 |---|---|---|
 | Orchestrator | IMPLEMENTED | service.executeMotion/proposeMotion + runIntentTasks; not a second orchestrator class |
-| Context builder | IMPLEMENTED, PARTIAL semantics | agentContext in normal execution; lexical omissions and context budget errors possible |
+| Context builder | IMPLEMENTED, PARTIAL semantics | agentContext in normal execution; complete compact selected-scene Object Index; relevant-scene selection remains lexical, context budget errors possible |
 | Provider abstraction | IMPLEMENTED | ProviderAdapter/factory registration used by AIClient/HarnessRun |
 | Knowledge retrieval | IMPLEMENTED, PARTIAL sophistication | lexical skills/techniques + defaults/current effects; no embeddings/dynamic model inspection tools |
-| Capability registry | IMPLEMENTED, PARTIAL alignment | generated schemas/evaluators; semantic compiler/check coverage not guaranteed |
+| Capability registry | IMPLEMENTED, PARTIAL alignment | generated schemas/evaluators plus semanticTechniques bindings; 17-technique semantic coverage regression |
 | Tool execution | IMPLEMENTED typed Operations; interactive tool calls NOT IMPLEMENTED | LLM returns JSON; add/update etc validated by applyOperations; unsupported provider toolCalls reject |
 | Persistent execution state | PARTIAL | motion/tasks/run/report files persist; in-memory job/abort maps not resumed |
 | Tracing | IMPLEMENTED | received/context/intent/task/provider/tool-execution/QA/finished events; not every conceptual stage has separate event |
@@ -530,43 +530,29 @@ Retention config defaults: 200 Harness runs, 90 days, 100 MiB. retainRuns remove
 
 ## 18. Architectural Inconsistencies, Bugs and Risks
 
-No fixes were applied. Findings distinguish confirmed local probes, direct source evidence, and hypotheses. Pure probes used existing synthetic fixtures under temporary directories; no provider/render/source-project writes. Outputs are recorded below for reproducibility.
+Historical full-audit findings (before P0 update): no fixes were applied during that audit. Findings distinguish confirmed local probes, direct source evidence, and hypotheses. Pure probes used existing synthetic fixtures under temporary directories; no provider/render/source-project writes. Outputs are recorded below for reproducibility.
 
-### A01 — High — CONFIRMED BUG: advertised techniques cannot complete semantic create
+### A01 — FIXED: semantic representation parity
 
-**Symptom:** “Добавь wiggle/пружину/custom curve” may burn repairs or finish FAILED despite real evaluator support.
+Original cause: compiler omitted wiggle/spring/customCurve, checks expected ordinary animation effects. Existing evaluators were present but unreachable through primary semantic create.
 
-**Root cause:** intentTechnique includes these IDs; Library/Capability advertise them; compileRequirement create only handles slides/fade/maskReveal/trimPath/scale/moveTo/inertia, else throws. validateRequirement accepts ordinary animation effect matching technique (except inertia/transitions); wiggle is an expression, spring/customCurve are easing concepts, not animation effects. Edit spring/customCurve has a broad special case; create does not.
+Repair: `motion-library/techniques/registry.ts` exports semanticBindings; capability entries expose semanticTechniques. Wiggle creates/edits a typed expression; spring creates/updates structured spring easing on a base track; customCurve uses cubicBezier/piecewise easing. Existing procedural spring expressions remain accepted on compatible edit. Parameter-only edits preserve prior easing and unrelated tracks. New property/seed fields are optional nullable; amplitude has a broad intent range and actual expressions enforce technique-specific bounds. No new engine/evaluator/library.
 
-**Evidence:** `apps/scene-validator/src/motion/intent/schema.ts:3-22`; `apps/scene-validator/src/motion/intent/compiler.ts:339-460,595-626`; `apps/scene-validator/src/motion-library/expressions/registry.ts`; `apps/scene-validator/src/motion-library/techniques/registry.ts:98-138`; `apps/scene-validator/src/motion-library/registry/capabilities.ts:11`. Audit probe for all three produced `Deterministic compiler does not support this technique` and requiredTechnique FAILED; adding a wiggle expression did not satisfy its check. Дополнительный probe использовал полностью валидный setExpression через applyOperations: сохранённый candidate.type=wiggle, но validateRequirement всё равно вернул FAILED.
+Verification: all 17 Intent techniques compiled, technically/scope/requirement validated, numerically evaluated; the three repaired paths passed actual Chromium QA. Default semantic spring is easing, not the distinct low-level procedural spring expression. Named preset execution remains the existing Operations path; not every preset has a dedicated Intent technique.
 
-**Impact:** same engine feature works via direct Operations/preset but cannot reliably be requested through primary semantic agent; unnecessary LLM calls cannot fix an impossible representation check.
+### A02 — TARGETED FIX: explicit intent coverage and selective audit
 
-**Recommendation:** capability→compiler→requirement-check coverage matrix; map techniques to actual effect/expression/easing representation and add semantic create evals. Do not create a second engine or disable validation.
+Original cause: a full-message excerpt could conceal missing Fade while satisfying character coverage. Repair in `motion/intent/coverage.ts`: original clause ranges + named target/scene linkage, explicit effects, scene starts, sequential anchors, inherited instructions and relative modifiers. Unambiguous local inheritance enriches the validated clone before compilation; source geometry is never copied. “Также” does not mean “так же”.
 
-### A02 — High — CONFIRMED VALIDATION GAP: coverage is textual, not semantic
+Suspicion triggers existing provider.audit with compact coverageFeedback, bounded by existing call budget; successful normal requests retain one interpret call. Bad audited contracts cannot execute. Persisted semantic-coverage trace includes clauses/issues/status. Existing final reconciliation still checks compiled requirements, not every possible meaning of human language.
 
-**Symptom:** incomplete model plan can be accepted, executed and called SUCCESS relative to its own reduced requirements.
+Verification: full-text-but-incomplete Fade/inertia plans rejected; missing timing/sequence/modifiers and wrong-object linkage rejected; local Logo inheritance and cross-scene boundaries tested. Arbitrary synonyms, broad negation and artistic ambiguity remain LLM-dependent; no claim of universal semantic completeness.
 
-**Root cause:** full source excerpt linked to one requirement covers all characters; validator does not prove all technical components in that excerpt exist. Production auditAlways:false means no independent semantic comparison before first-pass execution.
+### A03 — FIXED: complete relevant-scene Object Index
 
-**Evidence:** `apps/scene-validator/src/motion/intent/planner.ts:44-94,178-214`; `apps/scene-validator/src/motion/service.ts:239-257`; `apps/scene-validator/src/motion/intent/execution.ts:561-607`. Pure probe: request “куар снизу с фейдом”, one slideUp requirement, full-string coverage → validateIntentPlan PASSED; techniques remained `[slideUp]`.
+Original cause: one exact match removed other targets from detailed context, with no recoverable index. `harness/context.ts` now includes every descendant of relevant scenes in objectIndex: name, sceneId, sourceNodeId, logicalObjectId, objectType, aliases. Geometry remains selective. Explicit scene/mentions take priority; otherwise shared names respect current scene context. `motion/object-aliases.ts` resolves QR/куар and logo/лого without changing exact-name logical identity or guessing duplicates.
 
-**Impact:** original missing-Fade failure class remains possible even though final reconciliation is implemented.
-
-**Recommendation:** stronger clause/requirement provenance and deterministic technique/timing sanity checks where unambiguous, selective semantic audit on suspicious coverage/inheritance, regression eval where provider emits deceptively full-text-but-incomplete plan. Do not advertise final reconciliation as a universal intent completeness oracle.
-
-### A03 — High — CONFIRMED CONTEXT LOSS: lexical matches hide semantically referenced objects
-
-**Symptom:** aliases/pronouns/group references cannot resolve because model receives only other exact matched nodes.
-
-**Root cause:** named scenes/targetIds set lexically; if any target found, detailed=true and other objects/logical objects are removed. SceneIndex carries names/IDs only. No subsequent inspection tool/retrieval fallback.
-
-**Evidence:** `apps/scene-validator/src/harness/context.ts:28-104,188-213`; `apps/scene-validator/src/harness/providers/codex.ts:48-54`; `apps/scene-validator/src/harness/runtime.ts:183`. Probe: source Scene2 objects `[image 1926988171, main text, куар, лого]`; request “сцена 2 image 1926988171 и QR появляются снизу” → sent object list `[image 1926988171]`. The source куар object is absent from context.
-
-**Impact:** model correctly refuses to invent targets, but legitimate alias QR cannot bind; compound human requests suffer.
-
-**Recommendation:** retain compact name/type/ID index for every object in selected scenes, disclose detailed geometry selectively, add bounded retrieval on unresolved requirements, tests with exact-name+alias mixtures.
+Verification: Image exact match plus QR alias retains all selected-scene IDs; multiple explicit scenes supported; duplicate aliases produce AMBIGUOUS_TARGET. The original byte budget remains enforced (no silent truncation). Huge selected-scene indexes can still exceed budget; paging is not implemented.
 
 ### A04 — High — LIKELY ISSUE: scene-space movement applied in parent space
 
@@ -663,6 +649,13 @@ Saved real successful run is evidence that this route **has executed**, not that
 
 ## 20. Performance, Cost and Caching
 
+### P0 A01–A03 verification update — 2026-10-13
+
+TypeScript check/build and browser runtime build PASSED. Full local suite: **141/141 PASS**, 0 fail/skip, ~10.28 seconds for this measured test run (not provider latency). New `p0-correctness.test.ts` covers all 17 Intent techniques, create/edit representation parity, genuine Chromium QA, primary executeMotion with a registered mock ProviderAdapter, deceptive full-text coverage, scene timing, inherited/faster instructions, sequencing, relative edits, complete Object Index and ambiguous aliases. Existing AE/engine/QA/timeline/import/export/Undo compatibility regressions also ran. No real AI provider invocation or paid E2E was performed in this update.
+
+Successful primary workflow infrastructure test asserts one provider call, zero unnecessary audit/repair, persisted state and actual local QA. Suspicious coverage test asserts one selective audit; correct coverage asserts none. Byte budget unchanged; no full-video render introduced. No live-provider latency/token benchmark is claimed. Original findings/test probes below are historical evidence from the full audit, superseded by these P0 results for A01–A03.
+
+
 Defaults (`apps/scene-validator/src/harness/config.ts:5-27`): maxLLMCalls3, maxRepairAttempts2, maxContextBytes60000, maxOutputTokens16000, maxRenderedQAFrames300, maxDurationMs240000, providerTimeoutMs180000, maxEstimatedCost null, qaCacheEntries30. MaxRepairAttempts schema is 0..2, so increasing beyond two is currently rejected even if conceptual requirements once suggested three repairs. Standalone older MAX_AGENT_ATTEMPTS=3 is a separate compatibility policy.
 
 Normal successful semantic create: one LLM call for intent; TypeScript computes operations/FPS/dependencies/easing/expressions, validates and renders QA. Contract or motion repair consumes additional bounded calls. Ordinary QA renders sampled PNGs/counterfactual/isolated images, not full MP4. Video generation runs only explicit export. No default Vision call.
@@ -719,11 +712,11 @@ NODE="/Users/redcollar/.cache/codex-runtimes/codex-primary-runtime/dependencies/
   apps/scene-validator/tests/harness.test.ts
 ```
 
-Coverage gaps worth prioritizing: semantic create for expression/easing techniques, deceptively complete coverage, synonyms mixed with exact names, rotated/scaled ordinary moveToCenter, before dependency+inertia duration, crash-injection/lock recovery, large histories/Inspector caps, visibility expectation under WARN, provider switching beyond Codex, fonts on another machine, comprehensive Figma properties. Existing renderer self-counterfactual tests do not establish pixel-perfect Figma equivalence.
+Coverage gaps worth prioritizing after A01–A03 regressions: arbitrary language completeness and very large scene indexes, rotated/scaled ordinary moveToCenter, before dependency+inertia duration, crash-injection/lock recovery, large histories/Inspector caps, visibility expectation under WARN, provider switching beyond Codex, fonts on another machine, comprehensive Figma properties. Existing renderer self-counterfactual tests do not establish pixel-perfect Figma equivalence.
 
 Priorities (future tasks; no implementation in this audit):
 
-1. **P0 correctness:** A01 representation/coverage parity; A02 semantic coverage guard; A03 compact complete object index and selective retrieval; confirm/fix A04 coordinate contract with regression.
+1. **P0 remaining:** A01–A03 repaired and regression tested in this partial update; confirm/fix A04 coordinate contract independently.
 2. **P1 reliability:** dependency/inertia corner case; visibility success policy; crash recovery and transaction/report consistency; test without sandbox launch restriction.
 3. **P1 reproducibility:** локальная Git-история уже создана по запросу пользователя; далее сохранять проверенные checkpoints; treat native/derived budgets and code/knowledge versions honestly; add missing compiler-path agent evals.
 4. **P2 performance/observability:** persistent artifact retention/compaction/paging, source inventory and trace I/O optimization, true first-preview timings and process-wide memory accounting.
@@ -743,3 +736,5 @@ External AI can review **this complete Markdown file alone**. It explains data m
 |---|---|---|---|
 | 2026-10-13 | Initial source-based architecture audit and persistent documentation policy; no application refactor/bug fix | Created docs/architecture-handoff.md and minimal root AGENTS.md; documented existing IntentPlan/IntentTask/Operations/ProviderAdapter/MotionDocument/Run/QA contracts | All sections; TypeScript PASS, selected15/15 PASS; broader46 PASS/5 environment failures; no new paid AI calls or successful resource-intensive renders; known gaps explicitly recorded |
 | 2026-10-13 | Local Git baseline and checkpoint policy; application code unchanged | .gitignore, AGENTS.md, architecture-handoff.md | Partial documentation update; reviewed eligible files and synthetic credential fixture, verified ignore rules; commit/status/log checked after creation; no network |
+
+| 2026-10-13 | P0 A01–A03 correctness repair | semanticBindings/capability mappings; Intent property/seed; coverage reports/selective audit; complete Object Index/aliases; compiler/scope/requirement checks | TypeScript/build and full regression results recorded in §20; real local renderer, infrastructure mock provider; no live provider E2E in this update |
