@@ -239,7 +239,13 @@ test("morphological retrieval selects actual Scene3, not numeric root Frame2; co
     );
     const o = c.objectIndex.find((o) => o.sourceNodeId === "ribbon2")!;
     assert.deepEqual(o.existingAnimations, [
-      { animationId: "trim2", effect: "trimPath" },
+      {
+        animationId: "trim2",
+        effect: "trimPath",
+        channels: ["trim"],
+        startFrame: 28,
+        endFrame: 32,
+      },
     ]);
     assert.ok(c.motion.animations.some((a) => a.animationId === "trim2"));
   } finally {

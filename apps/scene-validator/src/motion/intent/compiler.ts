@@ -14,6 +14,7 @@ import type {
 import type { MotionState, Plan, Animation } from "../schema.js";
 import { channels, applyOperations } from "../operations.js";
 import { objectsIn } from "../context.js";
+import { resolveBaseMotion } from "../base-motion.js";
 export interface IntentTask {
   taskId: string;
   requirementIds: string[];
@@ -483,16 +484,16 @@ export function compileRequirement(
         } else requested.push("property");
       }
       let source: Animation | undefined;
+      const existingBase =
+        hasInertia &&
+        !requested.some((t) => t.startsWith("slide") || t === "moveTo")
+          ? resolveBaseMotion(state, r.sceneId!, r.target.sourceNodeId!)
+          : undefined;
       if (
         hasInertia &&
         !requested.some((t) => t.startsWith("slide") || t === "moveTo")
       )
-        source = state.animations.find(
-          (a) =>
-            own(a) &&
-            a.enabled &&
-            channels(a).some((c) => c === "x" || c === "y"),
-        );
+        source = existingBase?.tracks[0]?.animation;
       for (const effect of requested) {
         const old = state.animations.find((a) => own(a) && a.effect === effect);
         const animationId =
@@ -713,56 +714,74 @@ export function compileRequirement(
         });
       }
       if (hasInertia) {
-        if (!source) throw new Error("POSITION_DEPENDENCY_MISSING");
-        const end = source.startFrame + source.durationFrames,
-          settle = Math.min(
-            Math.round(1.2 * fps),
-            block.startFrame + block.durationFrames - end - 1,
-            state.settings.durationFrames - end - 1,
-          );
-        if (settle < 4)
-          throw new Error("Insufficient settling interval after Position");
-        const inertiaProperties =
-          source.effect === "moveTo"
-            ? (["x", "y"] as const).filter((property) =>
-                property === "x"
-                  ? source.parameters.toX !== source.parameters.fromX
-                  : source.parameters.toY !== source.parameters.fromY,
-              )
-            : ([channels(source).includes("y") ? "y" : "x"] as const);
-        if (!inertiaProperties.length)
-          throw new Error("POSITION_HAS_NO_VELOCITY");
-        for (const property of inertiaProperties) {
-          const existing = state.expressions?.find(
-            (e) =>
-              own(e) &&
-              e.type === "inertialOvershoot" &&
-              e.property === property,
-          );
-          operations.push({
-            type: "setExpression",
-            expression: {
-              expressionId:
-                existing?.expressionId ??
-                "intent_inertia_" +
-                  stable([r.sceneId, r.target.sourceNodeId, property]),
-              sceneId: r.sceneId!,
-              targetId: r.target.sourceNodeId!,
-              property,
-              type: "inertialOvershoot",
-              sourceAnimationId: source.animationId,
-              startFrame: end,
-              durationFrames: settle,
-              enabled: true,
-              parameters: {
-                mode: "ae",
-                amplitude: r.parameters.amplitude ?? 0.25,
-                frequency: r.parameters.frequency ?? 2.5,
-                decay: r.parameters.decay ?? 3,
-                velocityLookbackFrames: Math.min(source.durationFrames, 30),
+        if (existingBase && existingBase.status !== "RESOLVED")
+          throw new Error(existingBase.status);
+        if (!source) throw new Error("BASE_POSITION_ANIMATION_MISSING");
+        for (const base of existingBase?.tracks ?? [
+          {
+            animation: source,
+            properties: channels(source).filter(
+              (c): c is "x" | "y" => c === "x" || c === "y",
+            ),
+            endFrame: source.startFrame + source.durationFrames,
+          },
+        ]) {
+          const inertiaSource = base.animation;
+          const end = base.endFrame,
+            settle = Math.min(
+              Math.round(1.2 * fps),
+              block.startFrame + block.durationFrames - end - 1,
+              state.settings.durationFrames - end - 1,
+            );
+          if (settle < 4)
+            throw new Error("Insufficient settling interval after Position");
+          const inertiaProperties =
+            inertiaSource.effect === "moveTo"
+              ? base.properties.filter((property) =>
+                  property === "x"
+                    ? inertiaSource.parameters.toX !==
+                      inertiaSource.parameters.fromX
+                    : inertiaSource.parameters.toY !==
+                      inertiaSource.parameters.fromY,
+                )
+              : base.properties;
+          if (!inertiaProperties.length)
+            throw new Error("POSITION_HAS_NO_VELOCITY");
+          for (const property of inertiaProperties) {
+            const existing = state.expressions?.find(
+              (e) =>
+                own(e) &&
+                e.type === "inertialOvershoot" &&
+                e.property === property,
+            );
+            operations.push({
+              type: "setExpression",
+              expression: {
+                expressionId:
+                  existing?.expressionId ??
+                  "intent_inertia_" +
+                    stable([r.sceneId, r.target.sourceNodeId, property]),
+                sceneId: r.sceneId!,
+                targetId: r.target.sourceNodeId!,
+                property,
+                type: "inertialOvershoot",
+                sourceAnimationId: inertiaSource.animationId,
+                startFrame: end,
+                durationFrames: settle,
+                enabled: true,
+                parameters: {
+                  mode: "ae",
+                  amplitude: r.parameters.amplitude ?? 0.25,
+                  frequency: r.parameters.frequency ?? 2.5,
+                  decay: r.parameters.decay ?? 3,
+                  velocityLookbackFrames: Math.min(
+                    inertiaSource.durationFrames,
+                    30,
+                  ),
+                },
               },
-            },
-          });
+            });
+          }
         }
       }
     }

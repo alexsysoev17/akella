@@ -1,4 +1,5 @@
 import { resolveObjectReference } from "../motion/object-resolution.js";
+import { channels } from "../motion/operations.js";
 import { logicalId } from "../motion/registry.js";
 import { objectAliases, objectMentioned } from "../motion/object-aliases.js";
 import { codeVersions } from "./versions.js";
@@ -237,7 +238,13 @@ export async function agentContext(
                 a.sceneId === o.sceneId &&
                 a.targetId === o.targetId,
             )
-            .map((a) => ({ animationId: a.animationId, effect: a.effect })),
+            .map((a) => ({
+              animationId: a.animationId,
+              effect: a.effect,
+              channels: channels(a),
+              startFrame: a.startFrame,
+              endFrame: a.startFrame + a.durationFrames,
+            })),
           existingExpressions: (state.expressions ?? [])
             .filter(
               (e) =>

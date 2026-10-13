@@ -4,14 +4,14 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-13T19:17:17.926952+00:00 — partial provider settings regression repair |
+| Last Updated | 2026-10-13T19:42:15.367935+00:00 — partial existing-position resolution repair |
 | Last Full Audit | 2026-10-13 — структурный аудит исходников перечисленных подсистем; не полный production E2E и не формальная верификация каждой ветви |
-| Git Commit | Pre-change checkpoint `63b4377`; reviewed provider-settings changes committed after checks under `Fix provider settings persistence and validation`. |
+| Git Commit | Pre-change checkpoint `fb4ceb0`; reviewed position-resolution changes committed after checks under `Fix existing position motion resolution for inertia attachment`. |
 | Git Branch | `main`; локальный репозиторий создан после первоначального аудита |
 | Working Tree Status | Reviewed P0 source/tests/docs changes; ignored user projects/assets remain outside history. Final status checked after local commit. |
-| Documentation Version | 1.0.5 |
-| Scope of Last Update | Shared provider-ID contract, registered-ID validation, durable settings, safe migration, UI/API preflight and Inspector provenance. No new full audit. |
-| Code snapshot SHA-256 | `4e61b536d8053a6bfd4ac0f8d4dd53b48599905feb065f3a1ff233ba4a00e027` (post provider-settings repair build) |
+| Documentation Version | 1.0.6 |
+| Scope of Last Update | Finite base-position channel resolution, post-plan attachment recovery, per-channel inertia sources, compact context and regression tests. No new full audit. |
+| Code snapshot SHA-256 | `37ebd478ed080feee68ba25d349bcc366a28013f03a97e968d51005f3312c6f5` (post existing-position repair build) |
 
 Git 2.54.0 (Apple Git-157): локальная история на main, без remote/network/push. В P0 update изменены context, semantic compiler/checks и coverage; математический Engine/Renderer не изменены. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
 
@@ -236,6 +236,16 @@ For QR + Logo: the provider should return rQR and inherited rLogo. `expandInheri
 Ambiguity: candidate count must equal one; otherwise unresolvedReason=AMBIGUOUS_TARGET/TARGET_UNRESOLVED and task BLOCKED. Name+ID mismatch is rejected. This cannot prove that a **valid but semantically wrong** object was chosen. No full rule engine binds every sentence’s intended scene independently of model output. The compact complete relevant-scene Object Index now preserves all target identities, but there is no tool for retrieving omitted full geometry on demand.
 
 Coverage: verbatim character coverage remains required. `intent/coverage.ts` also records original clause offsets, scene/target linkage, explicit techniques and inheritance source. Missing Fade/inertia/scene timing, wrong clause linkage, unresolved local inheritance and absent sequential dependencies yield `SemanticCoverageError` plus structured feedback. `semanticPlan` invokes existing provider.audit only for suspicious plans, revalidates before execution and records semantic-coverage events through HarnessRun. Guards are bounded lexical sanity checks around the LLM planner, not a complete semantic parser or a proof of every artistic instruction. Identity ambiguity remains tracked unsupported; independent valid tasks may proceed.
+
+### Existing base-position attachment repair — 2026-10-13
+
+Confirmed test8 incident at Motion revision `5bf8bea0-c170-451b-8041-428951375608`: all four Scene2 objects already had enabled position tracks (start30/end51, distance80, easeOutCubic), no expressions. Image source15:5225 and QR15:5212 use slideUp; text10:3707 and logo25:1637 use slideDown. Saved failed intent `a3a5ba4e-6a72-4a27-bb36-f7f00f05d64e` marked four unsupported requirements because reduced model context did not resolve IDs/base tracks. Post-plan recovery then searched effects matching inertialOvershoot instead of its base motion and required a non-null numeric edit parameter. These are confirmed resolution bugs, not missing saved animations.
+
+`motion/base-motion.ts:resolveBaseMotion(state,sceneId,targetId)` uses existing channels/evaluateAnimation/subframe sampling. It resolves latest finite base movement per X/Y channel, rejects ambiguous equal endpoints, excludes disabled/oscillation tracks, preserves actual source IDs/easing/keyframes/dependencies and exposes interval/endFrame, base value sampler, computed incoming velocity and inspected-track reasons. Keyframes use their actual last key. Separate X/Y sources remain separate. Resolver failures distinguish BASE_POSITION_ANIMATION_MISSING from ANIMATION_RESOLUTION_FAILED; target failures stay separate. Requested inertia counts existing finite position tracks when narrowing duplicate object references.
+
+Planner recovery recognizes attachment requirements with actual base motion even when model returned unsupported and no numerical parameters were requested. Existing relative expression edits retain the edit path; recovery does not turn a missing relative edit into a fabricated effect. Compiler uses the same resolver instead of first-array-match, creates/upserts procedural expressions per selected channel linked to sourceAnimationId, preserving base animations and timing. Existing evaluator/operations retiming remain unchanged. Compact Object Index now includes channels/start/end beside animation ID/effect, not full keyframes. Inspector targetResolution contains base tracks, end frames, measured incoming velocity/dependencies and checked/rejected tracks; task QA/stateChanges supply actual success/failure and persistence. Version fingerprints include base-motion.
+
+IMPORTANT verified limitation: the exact saved test8 replay on an isolated copy resolves all four requirements and generates four valid attachments, but real local numerical/render QA FAILS visible inertia. With the unchanged modern evaluator, instantaneous speed at endpoint minus0.1frame is only ±0.0077748px/s; amplitude0.25 yields maximum offset0.001462px. Several rendered probes show no changed pixels. No false success, fabricated velocity, replacement easing or original-project mutation was used. The replay is historical model-output replay, not a fresh live-provider E2E. Source/easing preservation plus this near-zero incoming velocity cannot guarantee visible oscillation; improving artistic defaults/base velocity is separate work, not silently performed here.
 
 ### Natural-language target and existing-animation resolution — 2026-10-13
 
@@ -796,3 +806,5 @@ External AI can review **this complete Markdown file alone**. It explains data m
 | 2026-10-13 | Natural-language object references and existing-edit recovery | object-aliases/object-resolution, context/versions, semantic planner/service, compiler/requirement checks, autonomy compatibility, Inspector, synthetic regression tests | Partial update; 155/155 local tests PASS; actual Chromium QA and decoded MP4 comparison; one mock semantic call, zero new live calls; real run replay and authorized direction-only real-project execution with QA/Undo |
 
 | 2026-10-13 | P0 provider settings persistence/validation repair | shared provider-contract, provider-settings, registry/runtime, service/API, browser selection, Inspector, build and versions | Partial update; TypeScript/build PASS; 160/160 local regression tests PASS (14.02s), real Chromium UI/API tests, mock semantic create/follow-up with local QA; zero live-provider calls; test8 settings restored from verified previous request |
+
+| 2026-10-13 | Existing position motion resolution / inertia attachment | base-motion, canonical target resolution, planner/compiler, context/versions, regression tests | Partial update; TypeScript/build PASS; 165/165 local tests PASS (14.31s), mock production execution with selective real QA, actual inertia Preview/decoded MP4 comparison; saved test8 replay resolves4/4 but actual QA fails near-zero incoming velocity; original project unchanged; zero live calls |

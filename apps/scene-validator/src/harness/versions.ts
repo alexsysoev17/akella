@@ -21,6 +21,7 @@ const components = [
   "motion/intent/coverage",
   "motion/object-aliases",
   "motion/object-resolution",
+  "motion/base-motion",
   "motion-library/techniques/registry",
   "motion/intent/planner",
   "motion/intent/schema",

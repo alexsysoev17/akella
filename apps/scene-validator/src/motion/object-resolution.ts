@@ -2,6 +2,7 @@ import type { LoadedProject } from "../types.js";
 import type { MotionState } from "./schema.js";
 import { objectsIn } from "./context.js";
 import { buildRegistry } from "./registry.js";
+import { channels } from "./operations.js";
 import {
   objectNameMatch,
   objectMentionRanges,
@@ -95,7 +96,10 @@ export function resolveObjectReference(
                 a.sceneId === o.sceneId &&
                 a.targetId === o.targetId &&
                 (!input.techniques?.length ||
-                  input.techniques.includes(a.effect)),
+                  input.techniques.includes(a.effect) ||
+                  (input.techniques.includes("inertialOvershoot") &&
+                    !["oscillation", "dampedOscillation"].includes(a.effect) &&
+                    channels(a).some((c) => c === "x" || c === "y"))),
             )
             .map((a) => a.animationId),
           existingExpressionIds: (state.expressions ?? [])

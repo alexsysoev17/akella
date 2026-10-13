@@ -6,6 +6,7 @@ import {
   resolveExistingAnimation,
 } from "../object-resolution.js";
 import { equivalentObjectName } from "../object-aliases.js";
+import { resolveBaseMotion } from "../base-motion.js";
 import {
   intentPlanSchema,
   type IntentPlan,
@@ -192,6 +193,67 @@ export function validateIntentPlan(
     const lookup = target
       ? resolveExistingAnimation(state, target, r.techniques)
       : undefined;
+    const baseMotion =
+      target &&
+      r.techniques.length === 1 &&
+      r.techniques[0] === "inertialOvershoot"
+        ? resolveBaseMotion(state, target.sceneId, target.sourceNodeId)
+        : undefined;
+    const attachInertia = Boolean(
+      baseMotion &&
+        r.kind !== "editAnimation" &&
+        !lookup?.expressions.length &&
+        r.parameters.amplitudeFactor == null &&
+        r.parameters.frequencyFactor == null,
+    );
+    if (attachInertia && target && baseMotion?.status === "RESOLVED") {
+      r.kind = "objectAnimation";
+      r.sceneId = target.sceneId;
+      r.target = {
+        sourceNodeId: target.sourceNodeId,
+        logicalObjectId: target.logicalObjectId,
+        name: target.canonicalName,
+      };
+      r.unresolvedReason = null;
+      plan.coverage
+        .filter(
+          (row) =>
+            row.requirementIds.includes(r.requirementId) &&
+            row.classification === "unsupported",
+        )
+        .forEach((row) => {
+          row.classification = "executable";
+          row.explanation =
+            "Existing position base resolved from authoritative Motion State";
+        });
+      resolutionContext?.onResolution?.({
+        requirementId: r.requirementId,
+        ...result,
+        baseMotion: {
+          ...baseMotion,
+          tracks: baseMotion.tracks.map(({ valueAtTime: _, ...t }) => t),
+        },
+        event: "BASE_POSITION_RESOLVED",
+      });
+      continue;
+    }
+    if (attachInertia && target && baseMotion?.status !== "RESOLVED") {
+      r.kind = "unsupported";
+      r.unresolvedReason = baseMotion!.status;
+      r.sceneId = target.sceneId;
+      r.target = {
+        sourceNodeId: target.sourceNodeId,
+        logicalObjectId: target.logicalObjectId,
+        name: target.canonicalName,
+      };
+      resolutionContext?.onResolution?.({
+        requirementId: r.requirementId,
+        ...result,
+        baseMotion,
+        event: "BASE_POSITION_MISSING",
+      });
+      continue;
+    }
     const missingTargetUnsupported =
       r.kind === "unsupported" &&
       !r.target.sourceNodeId &&
