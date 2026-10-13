@@ -12,20 +12,14 @@ import { promisify } from "node:util";
 import { readFile, writeFile, access } from "node:fs/promises";
 import path from "node:path";
 import { planSchema, parsePlan, type Plan } from "./schema.js";
-export const providerSettingsSchema = z
-  .object({
-    provider: z
-      .string()
-      .regex(/^[a-z][a-z0-9-]{0,63}$/)
-      .default("codex-sdk"),
-    model: z
-      .string()
-      .max(100)
-      .regex(/^[a-zA-Z0-9._-]*$/)
-      .default(""),
-  })
-  .strict();
-export type ProviderSettings = z.infer<typeof providerSettingsSchema>;
+import {
+  parseProviderSettings,
+  type ProviderSettings,
+} from "./provider-settings.js";
+export {
+  providerSettingsSchema,
+  type ProviderSettings,
+} from "./provider-settings.js";
 export interface AIProvider {
   generateMotionPlan(context: unknown, userRequest: string): Promise<Plan>;
   editMotionPlan(context: unknown, userRequest: string): Promise<Plan>;
@@ -120,7 +114,9 @@ export class AIClient implements AIProvider {
       providerTimeoutMs: number;
       maxOutputTokens: number;
     },
-  ) {}
+  ) {
+    this.settings = parseProviderSettings(settings, "AIClient");
+  }
   generateMotionPlan(context: unknown, userRequest: string) {
     return this.run(context, userRequest, "create");
   }

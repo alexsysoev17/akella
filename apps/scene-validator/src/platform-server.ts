@@ -98,6 +98,7 @@ export async function servePlatform(projectsRoot: string, port = 4173) {
           "/motion.css",
           "/easing-runtime.js",
           "/mentions.js",
+          "/provider-contract.js",
         ].includes(url.pathname)
       ) {
         const name =

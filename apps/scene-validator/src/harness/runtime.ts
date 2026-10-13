@@ -1,3 +1,5 @@
+import { PROVIDER_ID_PATTERN } from "../provider-contract.js";
+import { providerIds } from "./providers/index.js";
 import { retainRuns } from "./retention.js";
 import type { MetricRun } from "./metrics.js";
 import { redact } from "./security.js";
@@ -90,7 +92,7 @@ export class HarnessRun {
     project: LoadedProject,
     runId: string,
     request: string,
-    provider: string,
+    provider: string | null,
     model: string,
     signal?: AbortSignal,
     override?: Partial<HarnessConfig>,
@@ -140,6 +142,11 @@ export class HarnessRun {
   }
   async invoke(adapter: ProviderAdapter, request: ProviderRequest) {
     this.checkpoint();
+    if (
+      !PROVIDER_ID_PATTERN.test(adapter.id) ||
+      (adapter.mode === "live" && !providerIds().includes(adapter.id))
+    )
+      throw new BudgetError("PROVIDER_NOT_REGISTERED");
     if (this.calls.length >= this.config.maxLLMCalls)
       throw new BudgetError("LLM_CALL_BUDGET");
     if (

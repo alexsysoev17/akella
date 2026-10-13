@@ -39,6 +39,26 @@ await build({
   target: "es2022",
   minify: true,
 });
+await build({
+  entryPoints: [
+    fileURLToPath(
+      new URL(
+        "../apps/scene-validator/src/provider-contract.ts",
+        import.meta.url,
+      ),
+    ),
+  ],
+  outfile: fileURLToPath(
+    new URL(
+      "../apps/scene-validator/src/web/provider-contract.js",
+      import.meta.url,
+    ),
+  ),
+  bundle: true,
+  format: "esm",
+  platform: "browser",
+  target: "es2022",
+});
 await cp(
   new URL("../apps/scene-validator/src/web", import.meta.url),
   new URL("../apps/scene-validator/dist/src/web", import.meta.url),

@@ -1,4 +1,8 @@
 import {
+  saveProviderSettings,
+  ProviderSettingsError,
+} from "./provider-settings.js";
+import {
   inspectorRuns,
   inspectorRun,
   debugReport,
@@ -24,6 +28,7 @@ import { readMotion, changeMotion } from "./store.js";
 import { objectsIn } from "./context.js";
 import {
   executeMotion,
+  prepareMotionRequest,
   completeExecution,
   projectMotion,
   applyProposal,
@@ -310,6 +315,15 @@ export async function motionApi(
     const input: unknown = JSON.parse(
       (await body(request, 1024 * 1024)).toString(),
     );
+    if (action === "provider-settings") {
+      try {
+        json(await saveProviderSettings(project, input, "api-settings"));
+      } catch (error) {
+        if (!(error instanceof ProviderSettingsError)) throw error;
+        json({ error: error.message, errorCode: error.code }, 400);
+      }
+      return true;
+    }
     if (action === "cancel") {
       const { jobId } = z.object({ jobId: z.uuid() }).strict().parse(input);
       const job = jobs.get(jobId);
@@ -372,6 +386,14 @@ export async function motionApi(
       return true;
     }
     if (action === "execute" || action === "plan" || action === "render") {
+      if (action !== "render")
+        try {
+          await prepareMotionRequest(project, input);
+        } catch (error) {
+          if (!(error instanceof ProviderSettingsError)) throw error;
+          json({ error: error.message, errorCode: error.code }, 400);
+          return true;
+        }
       const key =
         project.config.projectId +
         ":" +
@@ -417,7 +439,7 @@ export async function motionApi(
           jobs.set(id, {
             projectId: project.config.projectId,
             status: "failed",
-            error: String(e),
+            error: e instanceof ProviderSettingsError ? e.message : String(e),
           }),
         )
         .finally(() => {

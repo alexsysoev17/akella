@@ -1,3 +1,9 @@
+import {
+  loadProviderSettings,
+  saveProviderSettings,
+  parseProviderSettings,
+  ProviderSettingsError,
+} from "./provider-settings.js";
 import { providerIds } from "../harness/providers/index.js";
 import { redact, redactSecrets } from "../harness/security.js";
 import { HarnessRun } from "../harness/runtime.js";
@@ -54,7 +60,14 @@ export const requestSchema = z
   .strict();
 export async function projectMotion(project: LoadedProject) {
   const document = await readMotion(project);
-  const config = await readOptional(project.root, "motion/ai/provider.json");
+  let provider: Awaited<ReturnType<typeof loadProviderSettings>> | undefined;
+  let providerSettingsError: ProviderSettingsError | undefined;
+  try {
+    provider = await loadProviderSettings(project);
+  } catch (error) {
+    if (!(error instanceof ProviderSettingsError)) throw error;
+    providerSettingsError = error;
+  }
   const registry = await ensureRegistry(project);
   return {
     document,
@@ -89,10 +102,54 @@ export async function projectMotion(project: LoadedProject) {
       height: s.height,
     })),
     availableProviders: providerIds(),
-    provider: config
-      ? providerSettingsSchema.parse(JSON.parse(config))
-      : providerSettingsSchema.parse({}),
+    provider: provider?.settings ?? null,
+    providerSettingsSource: provider?.source ?? "persisted-invalid",
+    providerSettingsError: providerSettingsError
+      ? {
+          message: providerSettingsError.message,
+          ...providerSettingsError.diagnostic,
+        }
+      : undefined,
   };
+}
+export async function prepareMotionRequest(
+  project: LoadedProject,
+  input: unknown,
+  onSource?: (source: string) => void,
+) {
+  const raw =
+    input && typeof input === "object"
+      ? (input as Record<string, unknown>)
+      : {};
+  try {
+    const loaded =
+      raw.settings === undefined
+        ? await loadProviderSettings(project)
+        : undefined;
+    const settings =
+      loaded?.settings ?? parseProviderSettings(raw.settings, "api");
+    onSource?.(loaded?.source ?? "api");
+    return requestSchema.parse({ ...raw, settings });
+  } catch (error) {
+    if (error instanceof ProviderSettingsError) {
+      const run = await HarnessRun.start(
+        project,
+        randomUUID(),
+        typeof raw.request === "string"
+          ? raw.request.slice(0, 20000)
+          : "[provider settings validation]",
+        null,
+        "",
+      );
+      run.failures.push(error.code);
+      try {
+        await run.diagnostic("provider-settings-validation", error.diagnostic);
+      } finally {
+        await run.finish("FAILED");
+      }
+    }
+    throw error;
+  }
 }
 export async function proposeMotion(
   project: LoadedProject,
@@ -105,10 +162,18 @@ export async function proposeMotion(
     evalContext?: { evalId: string; datasetVersion: string };
   } = {},
 ) {
-  const request = requestSchema.parse(input),
+  let settingsSource = "api";
+  const request = await prepareMotionRequest(project, input, (source) => {
+      settingsSource = source;
+    }),
     doc = await readMotion(project);
   if (doc.revision !== request.expectedRevision)
     throw new Error("Анимация изменилась до запроса. Обновите страницу.");
+  const savedSettings = await saveProviderSettings(
+    project,
+    request.settings,
+    "execution",
+  );
   const id = randomUUID();
   const harness =
     execute && request.settings.provider !== "manual-response"
@@ -204,10 +269,16 @@ export async function proposeMotion(
     }
     await atomicJson(path.join(directory, "context.json"), enrichedContext);
     await safeDirectory(project.root, "motion/ai");
-    await atomicJson(
-      path.join(project.root, "motion/ai/provider.json"),
-      request.settings,
-    );
+    if (harness)
+      await harness.record("provider-settings", {
+        source: settingsSource,
+        providerInitializationStatus: "ADAPTER_READY",
+        provider: request.settings.provider,
+        persisted: savedSettings.persisted,
+        reason: savedSettings.persisted
+          ? "persistent live/manual selection"
+          : "transient adapter: not written to project settings",
+      });
     const basis = {
       id,
       request,

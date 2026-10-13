@@ -1,3 +1,4 @@
+import { PROVIDER_ID_PATTERN } from "../../provider-contract.js";
 export interface ProviderCapabilities {
   structuredOutput: boolean;
   nativeToolCalling: boolean;
@@ -53,16 +54,23 @@ export function registerProvider(
   id: string,
   factory: (directory: string) => ProviderAdapter,
 ) {
-  if (!/^[a-z][a-z0-9-]{0,63}$/.test(id))
-    throw new Error("Invalid provider ID");
+  if (!PROVIDER_ID_PATTERN.test(id)) throw new Error("Invalid provider ID");
+  const previous = factories.get(id);
   factories.set(id, factory);
-  return () => factories.delete(id);
+  return () => {
+    if (factories.get(id) !== factory) return;
+    if (previous) factories.set(id, previous);
+    else factories.delete(id);
+  };
 }
 export function registeredProvider(id: string, directory: string) {
   const factory = factories.get(id);
   if (!factory)
     throw new ProviderError("UNAVAILABLE", `Adapter ${id} is not registered`);
-  return factory(directory);
+  const adapter = factory(directory);
+  if (adapter.id !== id)
+    throw new ProviderError("INVALID_OUTPUT", "Registered adapter ID mismatch");
+  return adapter;
 }
 export function providerIds() {
   return [...factories.keys()];

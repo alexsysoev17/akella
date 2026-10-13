@@ -238,6 +238,15 @@ export async function inspectorRun(root: string, id: string, raw = false) {
           ].includes(e.stage),
         )
       : "NOT_AVAILABLE",
+    providerSettingsValidation: Array.isArray(trace)
+      ? trace
+          .filter(
+            (e) =>
+              e.stage === "provider-settings-validation" ||
+              e.stage === "provider-settings",
+          )
+          .map((e) => e.data)
+      : "NOT_AVAILABLE",
     targetResolution: Array.isArray(trace)
       ? trace
           .filter(

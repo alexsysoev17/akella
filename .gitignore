@@ -44,3 +44,6 @@ secrets.json
 .codex/
 .agents/
 .aws/
+
+# Shared provider contract browser bundle
+/apps/scene-validator/src/web/provider-contract.js
