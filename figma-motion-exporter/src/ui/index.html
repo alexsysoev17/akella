@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+      /* INLINE_CSS */
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>MOTION EXPORTER</h1>
+      <p>Figma → structured data + original assets</p>
+    </header>
+    <main>
+      <h2 id="selection">Selected Frames: 0</h2>
+      <p id="warning" role="status"></p>
+      <ol id="frames"></ol>
+      <section id="counts">Select frames in your Figma document.</section>
+      <button id="export" disabled>EXPORT STORYBOARD</button
+      ><progress id="progress" max="100" value="0"></progress>
+      <p id="status" role="status" aria-live="polite">Ready</p>
+      <a id="download" hidden download="motion-project.zip"
+        >Download ZIP again</a
+      >
+      <details id="issues" hidden>
+        <summary>Export report</summary>
+        <pre id="report"></pre>
+      </details>
+    </main>
+    <script>
+      /* INLINE_JS */
+    </script>
+  </body>
+</html>

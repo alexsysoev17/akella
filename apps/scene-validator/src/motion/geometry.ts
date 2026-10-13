@@ -1,0 +1,79 @@
+/** Affine matrices act on column vectors. Geometry origin is the Figma local (0,0). */
+export type Matrix = [[number, number, number], [number, number, number]];
+export const unit: Matrix = [
+  [1, 0, 0],
+  [0, 1, 0],
+];
+export function multiply(a: Matrix, b: Matrix): Matrix {
+  return [
+    [
+      a[0][0] * b[0][0] + a[0][1] * b[1][0],
+      a[0][0] * b[0][1] + a[0][1] * b[1][1],
+      a[0][0] * b[0][2] + a[0][1] * b[1][2] + a[0][2],
+    ],
+    [
+      a[1][0] * b[0][0] + a[1][1] * b[1][0],
+      a[1][0] * b[0][1] + a[1][1] * b[1][1],
+      a[1][0] * b[0][2] + a[1][1] * b[1][2] + a[1][2],
+    ],
+  ];
+}
+export function inverse(m: Matrix): Matrix {
+  const [[a, c, x], [b, d, y]] = m,
+    det = a * d - b * c;
+  if (Math.abs(det) < 1e-12) throw new Error("Вырожденная матрица состояния");
+  return [
+    [d / det, -c / det, (c * y - d * x) / det],
+    [-b / det, a / det, (b * x - a * y) / det],
+  ];
+}
+export function matrix(v: unknown): Matrix {
+  if (
+    !Array.isArray(v) ||
+    v.length !== 2 ||
+    v.some(
+      (r) =>
+        !Array.isArray(r) ||
+        r.length !== 3 ||
+        r.some((n) => typeof n !== "number" || !Number.isFinite(n)),
+    )
+  )
+    throw new Error("Отсутствует корректный sceneTransform");
+  return v as Matrix;
+}
+export const svgMatrix = (m: Matrix) =>
+  `matrix(${m[0][0]} ${m[1][0]} ${m[0][1]} ${m[1][1]} ${m[0][2]} ${m[1][2]})`;
+export function decompose(m: Matrix) {
+  const [[a, c, x], [b, d, y]] = m,
+    sx = Math.hypot(a, b);
+  if (sx < 1e-10) throw new Error("Нулевой масштаб состояния");
+  return {
+    x,
+    y,
+    scaleX: sx,
+    scaleY: (a * d - b * c) / sx,
+    rotation: Math.atan2(b, a),
+    shear: (a * c + b * d) / sx,
+  };
+}
+export function compose(v: ReturnType<typeof decompose>): Matrix {
+  const c = Math.cos(v.rotation),
+    s = Math.sin(v.rotation);
+  return [
+    [c * v.scaleX, c * v.shear - s * v.scaleY, v.x],
+    [s * v.scaleX, s * v.shear + c * v.scaleY, v.y],
+  ];
+}
+export function canvasMatrix(
+  scene: { width: number; height: number },
+  settings: { width: number; height: number },
+): Matrix {
+  const s = Math.min(
+    settings.width / scene.width,
+    settings.height / scene.height,
+  );
+  return [
+    [s, 0, (settings.width - scene.width * s) / 2],
+    [0, s, (settings.height - scene.height * s) / 2],
+  ];
+}

@@ -1,0 +1,119 @@
+import { z } from "zod";
+import { easingSchema } from "../../motion-library/easings/registry.js";
+export const intentTechnique = z.enum([
+  "slideUp",
+  "slideDown",
+  "slideLeft",
+  "slideRight",
+  "fadeIn",
+  "fadeOut",
+  "trimPath",
+  "maskReveal",
+  "inertialOvershoot",
+  "scaleIn",
+  "scaleOut",
+  "rotation",
+  "moveTo",
+  "wiggle",
+  "spring",
+  "customCurve",
+  "objectStateTransition",
+]);
+export const intentRequirementSchema = z
+  .object({
+    requirementId: z.string().min(1).max(100),
+    kind: z.enum([
+      "sceneTiming",
+      "objectAnimation",
+      "editAnimation",
+      "unsupported",
+    ]),
+    sourceText: z.string().min(1).max(20000),
+    sceneId: z.string().nullable(),
+    target: z
+      .object({
+        sourceNodeId: z.string().nullable(),
+        logicalObjectId: z.string().nullable(),
+        name: z.string().nullable(),
+      })
+      .strict(),
+    techniques: z.array(intentTechnique).max(8),
+    parameters: z
+      .object({
+        fromSceneId: z.string().nullable().default(null),
+        toSceneId: z.string().nullable().default(null),
+        moveToCenter: z.boolean().nullable().default(null),
+        x: z.number().finite().min(-10000).max(10000).nullable().default(null),
+        y: z.number().finite().min(-10000).max(10000).nullable().default(null),
+        scaleFrom: z.number().positive().max(100).nullable().default(null),
+        scaleTo: z.number().positive().max(100).nullable().default(null),
+        durationSeconds: z.number().positive().max(3600).nullable(),
+        distance: z.number().positive().max(10000).nullable(),
+        direction: z
+          .enum(["forward", "reverse", "leftToRight", "rightToLeft"])
+          .nullable(),
+        amplitude: z.number().min(0).max(2).nullable(),
+        frequencyFactor: z.number().positive().max(10).nullable().default(null),
+        frequency: z.number().min(0.01).max(30).nullable(),
+        decay: z.number().min(0).max(30).nullable(),
+        easing: easingSchema.nullable(),
+        durationFactor: z.number().positive().max(10).nullable(),
+        amplitudeFactor: z.number().min(0).max(10).nullable(),
+      })
+      .strict(),
+    timing: z
+      .object({
+        startSeconds: z.number().min(0).max(3600).nullable(),
+        relation: z.enum([
+          "sceneStart",
+          "sceneEnd",
+          "afterRequirement",
+          "withRequirement",
+          "beforeRequirement",
+          "unchanged",
+        ]),
+        anchorRequirementId: z.string().nullable(),
+        delaySeconds: z.number().min(-3600).max(3600),
+      })
+      .strict(),
+    inheritFromRequirementId: z.string().nullable(),
+    inheritanceExplanation: z.string().nullable(),
+    constraints: z.array(z.string().max(2000)).max(20),
+    unresolvedReason: z.string().nullable(),
+  })
+  .strict();
+export const intentPlanSchema = z
+  .object({
+    schemaVersion: z.literal("1.0.0"),
+    requirements: z.array(intentRequirementSchema).min(1).max(200),
+    coverage: z
+      .array(
+        z
+          .object({
+            sourceText: z.string().min(1),
+            requirementIds: z.array(z.string()),
+            classification: z.enum(["executable", "unsupported", "context"]),
+            explanation: z.string(),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(300),
+    assumptions: z.array(z.string().max(2000)).max(60),
+  })
+  .strict();
+export type IntentPlan = z.infer<typeof intentPlanSchema>;
+export type IntentRequirement = z.infer<typeof intentRequirementSchema>;
+export type IntentTechnique = z.infer<typeof intentTechnique>;
+export interface IntentProvider {
+  interpret(
+    context: unknown,
+    request: string,
+    feedback?: unknown,
+  ): Promise<IntentPlan>;
+  audit(
+    context: unknown,
+    request: string,
+    plan: IntentPlan,
+  ): Promise<IntentPlan>;
+}

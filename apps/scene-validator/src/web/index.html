@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Software That Creates</title>
+    <script>
+      try {
+        document.documentElement.dataset.theme =
+          localStorage.getItem("motion-theme") || "dark";
+      } catch {
+        document.documentElement.dataset.theme = "dark";
+      }
+    </script>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <a href="#">SOFTWARE THAT CREATES</a>
+      </header>
+      <p id="message" role="status"></p>
+      <div id="app"></div>
+    </main>
+    <dialog id="import">
+      <form id="import-form">
+        <h2 id="import-title">Новый проект</h2>
+        <label
+          >Название проекта<input id="name" required maxlength="200" /></label
+        ><label
+          >ZIP из Figma<input id="zip" type="file" accept=".zip" required
+        /></label>
+        <p id="import-status" role="status"></p>
+        <pre id="import-details"></pre>
+        <div class="actions">
+          <button type="button" id="cancel">Отмена</button
+          ><button id="prepare">Проверить ZIP</button
+          ><button type="button" id="commit" hidden>Создать проект</button>
+        </div>
+      </form>
+    </dialog>
+    <link rel="stylesheet" href="/motion.css" />
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>

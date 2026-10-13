@@ -1,0 +1,3 @@
+# Animation principles
+These are artistic recommendations, not constraints. The latest user direction overrides them.
+Use staging to make one main action readable. Anticipation can signal a larger move; do not add it automatically to every object. Follow-through continues an existing velocity rather than restarting a second entrance. Keep overshoot proportional to the base travel. Secondary motion should support the primary action. Timing and rhythm benefit from rests; continuous movement is not inherently more expressive. Use seeded motion for reproducible variation. Do not alter unrelated tracks to apply these suggestions.

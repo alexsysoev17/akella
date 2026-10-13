@@ -1,0 +1,650 @@
+import { buildRegistry, resolveState } from "../registry.js";
+import { createHash } from "node:crypto";
+import type { LoadedProject } from "../../types.js";
+import type {
+  IntentPlan,
+  IntentRequirement,
+  IntentTechnique,
+} from "./schema.js";
+import type { MotionState, Plan, Animation } from "../schema.js";
+import { channels, applyOperations } from "../operations.js";
+import { objectsIn } from "../context.js";
+export interface IntentTask {
+  taskId: string;
+  requirementIds: string[];
+  kind: "sceneTiming" | "objectAnimation" | "editAnimation" | "unsupported";
+  targetReference: { sceneId: string; targetId: string; name: string };
+  techniqueId: string;
+  techniques: IntentTechnique[];
+  status: "PENDING" | "RUNNING" | "PASSED" | "FAILED" | "BLOCKED";
+  dependencies: string[];
+  userIntent: string;
+  generatedOperations?: Plan["operations"];
+  validationResult?: unknown;
+  qaResult?: unknown;
+  repairHistory: unknown[];
+  error?: string;
+}
+const stable = (v: unknown) =>
+  createHash("sha256").update(JSON.stringify(v)).digest("hex").slice(0, 16);
+export function expandInheritance(plan: IntentPlan) {
+  const expanded = structuredClone(plan),
+    done = new Set<string>();
+  function expand(r: IntentRequirement) {
+    if (done.has(r.requirementId)) return;
+    if (r.inheritFromRequirementId) {
+      const parent = expanded.requirements.find(
+        (x) => x.requirementId === r.inheritFromRequirementId,
+      )!;
+      expand(parent);
+      r.techniques = [...new Set([...parent.techniques, ...r.techniques])];
+      for (const key of Object.keys(
+        r.parameters,
+      ) as (keyof typeof r.parameters)[])
+        if (
+          r.parameters[key] === null &&
+          !["x", "y", "fromSceneId", "toSceneId"].includes(key)
+        )
+          Object.assign(r.parameters, { [key]: parent.parameters[key] });
+    }
+    done.add(r.requirementId);
+  }
+  expanded.requirements.forEach(expand);
+  return expanded;
+}
+export function compileTasks(
+  project: LoadedProject,
+  input: IntentPlan,
+): IntentTask[] {
+  const plan = expandInheritance(input),
+    tasks: IntentTask[] = [];
+  const timing = plan.requirements.filter((r) => r.kind === "sceneTiming");
+  if (timing.length)
+    tasks.push({
+      taskId: "task_" + stable(timing.map((r) => r.requirementId)),
+      requirementIds: timing.map((r) => r.requirementId),
+      kind: "sceneTiming",
+      targetReference: { sceneId: "", targetId: "", name: "Начало сцен" },
+      techniqueId: "sceneTiming",
+      techniques: [],
+      status: timing.some((r) => r.unresolvedReason) ? "BLOCKED" : "PENDING",
+      dependencies: [],
+      userIntent: timing.map((r) => r.sourceText).join("\n"),
+      repairHistory: [],
+      error:
+        timing.find((r) => r.unresolvedReason)?.unresolvedReason ?? undefined,
+    });
+  for (const r of plan.requirements.filter((r) => r.kind !== "sceneTiming")) {
+    const target = project.inspection.document.scenes
+      .flatMap(objectsIn)
+      .find(
+        (o) => o.sceneId === r.sceneId && o.targetId === r.target.sourceNodeId,
+      );
+    const error =
+      r.unresolvedReason ??
+      (!target
+        ? "TARGET_UNRESOLVED"
+        : target.mask
+          ? "MASK_TARGET"
+          : r.techniques.includes("trimPath") && !target.trimSupported
+            ? "MISSING_PATH_GEOMETRY: " + target.trimReason
+            : undefined);
+    tasks.push({
+      taskId: "task_" + stable(r.requirementId),
+      requirementIds: [r.requirementId],
+      kind: r.kind,
+      targetReference: {
+        sceneId: r.sceneId ?? "",
+        targetId: r.target.sourceNodeId ?? "",
+        name: r.target.name ?? "Не определён объект",
+      },
+      techniqueId: r.techniques.join("+"),
+      techniques: r.techniques,
+      status: error || r.kind === "unsupported" ? "BLOCKED" : "PENDING",
+      dependencies: [],
+      userIntent: r.sourceText,
+      repairHistory: [],
+      error,
+    });
+  }
+  for (const t of tasks) {
+    if (t.kind === "sceneTiming") continue;
+    const r = plan.requirements.find(
+      (r) => r.requirementId === t.requirementIds[0],
+    )!;
+    t.dependencies = tasks
+      .filter(
+        (other) =>
+          (other.kind === "sceneTiming" &&
+            timing.some((x) => x.sceneId === r.sceneId)) ||
+          other.requirementIds.includes(r.timing.anchorRequirementId ?? ""),
+      )
+      .map((other) => other.taskId);
+  }
+  return tasks;
+}
+export function compileRequirement(
+  project: LoadedProject,
+  state: MotionState,
+  input: IntentPlan,
+  task: IntentTask,
+): Plan {
+  const plan = expandInheritance(input),
+    reqs = plan.requirements.filter((r) =>
+      task.requirementIds.includes(r.requirementId),
+    );
+  const operations: Plan["operations"] = [],
+    warnings: string[] = [];
+  if (task.kind === "sceneTiming")
+    operations.push({
+      type: "retimeScenes",
+      starts: reqs.map((r) => ({
+        sceneId: r.sceneId!,
+        startFrame: Math.round(r.timing.startSeconds! * state.settings.fps),
+      })),
+    });
+  else {
+    const r = reqs[0],
+      block = state.blocks.find((b) => b.sceneId === r.sceneId);
+    if (!block) throw new Error("Scene interval missing");
+    const own = (a: { sceneId: string; targetId: string }) =>
+      a.sceneId === r.sceneId && a.targetId === r.target.sourceNodeId;
+    const anchorReq = plan.requirements.find(
+      (x) => x.requirementId === r.timing.anchorRequirementId,
+    );
+    const anchor = anchorReq
+      ? state.animations.find(
+          (a) =>
+            a.sceneId === anchorReq.sceneId &&
+            a.targetId === anchorReq.target.sourceNodeId &&
+            a.enabled &&
+            a.effect !== "fadeIn" &&
+            a.effect !== "fadeOut",
+        )
+      : undefined;
+    if (r.timing.anchorRequirementId && !anchor)
+      throw new Error("Anchor requirement has no persisted base action");
+    const fps = state.settings.fps;
+    let start =
+      r.timing.startSeconds !== null
+        ? Math.round(r.timing.startSeconds * fps)
+        : r.timing.relation === "afterRequirement"
+          ? anchor!.startFrame + anchor!.durationFrames
+          : r.timing.relation === "withRequirement"
+            ? anchor!.startFrame
+            : block.startFrame;
+    start += Math.round(r.timing.delaySeconds * fps);
+    let duration = Math.max(
+      1,
+      Math.round(
+        (r.parameters.durationSeconds ?? 0.7) *
+          fps *
+          (r.parameters.durationFactor ?? 1),
+      ),
+    );
+
+    const hasInertia = r.techniques.includes("inertialOvershoot");
+    if (
+      r.techniques.includes("objectStateTransition") &&
+      r.timing.startSeconds === null
+    ) {
+      const nextBlock =
+        state.blocks.find((b) => b.sceneId === r.parameters.toSceneId) ??
+        state.blocks[state.blocks.indexOf(block) + 1];
+      if (!nextBlock) throw new Error("Transition requires next source state");
+      start = nextBlock.startFrame - duration;
+    }
+    if (r.timing.relation === "sceneEnd")
+      start = block.startFrame + block.durationFrames - duration;
+    if (r.timing.relation === "beforeRequirement")
+      start =
+        anchor!.startFrame - duration + Math.round(r.timing.delaySeconds * fps);
+    if (
+      start < block.startFrame ||
+      start >= block.startFrame + block.durationFrames
+    )
+      throw new Error("Requested action outside its scene");
+    const remaining = block.startFrame + block.durationFrames - start;
+    if (remaining < duration + (hasInertia ? 4 : 0)) {
+      if (r.parameters.durationSeconds !== null)
+        throw new Error("Explicit duration does not fit scene");
+      duration = Math.max(1, Math.floor(remaining * (hasInertia ? 0.35 : 0.8)));
+      warnings.push("Default entrance shortened to fit the scene");
+    }
+    if (r.techniques.includes("objectStateTransition")) {
+      const object = buildRegistry(
+        project.inspection.document,
+        project.inspection.fingerprint,
+      ).objects.find((o) => o.logicalObjectId === r.target.logicalObjectId);
+      if (!object) throw new Error("LOGICAL_OBJECT_UNRESOLVED");
+      const toSceneId =
+        r.parameters.toSceneId ??
+        state.blocks[state.blocks.indexOf(block) + 1]?.sceneId;
+      if (!toSceneId) throw new Error("TARGET_STATE_MISSING");
+      operations.push({
+        type: "animateObjectStateTransition",
+        transitionId:
+          "intent_transition_" +
+          stable([object.logicalObjectId, r.sceneId, toSceneId]),
+        logicalObjectId: object.logicalObjectId,
+        fromSceneId: r.parameters.fromSceneId ?? r.sceneId!,
+        toSceneId,
+        startFrame: start,
+        durationFrames: duration,
+        easing: r.parameters.easing ?? "easeInOutCubic",
+        proceduralEffects: [],
+        layerPolicy: { type: "switch", switchProgress: 1 },
+      });
+    } else if (task.kind === "editAnimation") {
+      const targets = state.animations.filter(
+        (a) =>
+          own(a) &&
+          a.enabled &&
+          (r.techniques.includes(a.effect as IntentTechnique) ||
+            r.techniques.includes("customCurve") ||
+            r.techniques.includes("spring")),
+      );
+      const expressions =
+        state.expressions?.filter(
+          (e) =>
+            own(e) &&
+            e.enabled &&
+            r.techniques.includes(e.type as IntentTechnique),
+        ) ?? [];
+      if (!targets.length && !expressions.length)
+        throw new Error("No matching existing effect to edit");
+      for (const a of targets) {
+        const next = structuredClone(a);
+        if (r.parameters.easing) next.easing = r.parameters.easing;
+        if (r.parameters.durationFactor !== null)
+          next.durationFrames = Math.max(
+            1,
+            Math.round(next.durationFrames * r.parameters.durationFactor),
+          );
+        if (r.parameters.durationSeconds !== null)
+          next.durationFrames = Math.max(
+            1,
+            Math.round(r.parameters.durationSeconds * fps),
+          );
+        if (
+          next.effect === "keyframes" &&
+          next.durationFrames !== a.durationFrames
+        )
+          next.parameters.points = next.parameters.points.map((p) => ({
+            ...p,
+            frame: Math.round(
+              (p.frame * next.durationFrames) / a.durationFrames,
+            ),
+          }));
+        operations.push({
+          type: "updateAnimation",
+          animationId: a.animationId,
+          animation: next,
+        });
+        for (const e of state.expressions ?? []) {
+          if (
+            "sourceAnimationId" in e &&
+            e.sourceAnimationId === a.animationId
+          ) {
+            const linked = structuredClone(e);
+            linked.startFrame =
+              linked.type === "inertialOvershoot" &&
+              linked.parameters.mode === "ae" &&
+              e.startFrame < a.startFrame + a.durationFrames
+                ? next.startFrame + e.startFrame - a.startFrame
+                : next.startFrame +
+                  next.durationFrames +
+                  e.startFrame -
+                  a.startFrame -
+                  a.durationFrames;
+            if (
+              linked.type === "inertialOvershoot" &&
+              r.techniques.includes("inertialOvershoot") &&
+              (next.easing === "aeEasyEase" ||
+                (typeof next.easing === "object" &&
+                  next.easing.type === "aeEasyEase"))
+            )
+              linked.parameters.mode = "ae";
+            operations.push({ type: "setExpression", expression: linked });
+          }
+        }
+      }
+      for (const e of expressions) {
+        const updated = [...operations]
+          .reverse()
+          .find(
+            (op) =>
+              op.type === "setExpression" &&
+              op.expression.expressionId === e.expressionId,
+          );
+        const next = structuredClone(
+          updated?.type === "setExpression" ? updated.expression : e,
+        );
+        if (r.parameters.amplitudeFactor !== null)
+          next.parameters.amplitude *= r.parameters.amplitudeFactor;
+        if (r.parameters.amplitude !== null)
+          next.parameters.amplitude = r.parameters.amplitude;
+        if (
+          "frequency" in next.parameters &&
+          r.parameters.frequencyFactor !== null
+        )
+          next.parameters.frequency *= r.parameters.frequencyFactor;
+        if ("frequency" in next.parameters && r.parameters.frequency !== null)
+          next.parameters.frequency = r.parameters.frequency;
+        if ("decay" in next.parameters && r.parameters.decay !== null)
+          next.parameters.decay = r.parameters.decay;
+        operations.push({ type: "setExpression", expression: next });
+      }
+    } else {
+      const requested = r.techniques.filter((t) => t !== "inertialOvershoot");
+      let source: Animation | undefined;
+      if (
+        hasInertia &&
+        !requested.some((t) => t.startsWith("slide") || t === "moveTo")
+      )
+        source = state.animations.find(
+          (a) =>
+            own(a) &&
+            a.enabled &&
+            channels(a).some((c) => c === "x" || c === "y"),
+        );
+      for (const effect of requested) {
+        const old = state.animations.find((a) => own(a) && a.effect === effect);
+        const animationId =
+          old?.animationId ??
+          "intent_" + stable([r.sceneId, r.target.sourceNodeId, effect]);
+        const common = {
+          animationId,
+          sceneId: r.sceneId!,
+          targetId: r.target.sourceNodeId!,
+          startFrame: start,
+          durationFrames: duration,
+          easing:
+            r.parameters.easing ??
+            (effect === "trimPath"
+              ? "linear"
+              : hasInertia
+                ? {
+                    type: "cubicBezier",
+                    parameters: { x1: 1 / 3, y1: 0, x2: 2 / 3, y2: 1 },
+                  }
+                : "easeOutCubic"),
+          enabled: true,
+        } as const;
+        let a: Animation;
+        if (effect.startsWith("slide"))
+          a = {
+            ...common,
+            effect: effect as "slideUp",
+            parameters: { distance: r.parameters.distance ?? 80, mode: "in" },
+          };
+        else if (effect === "fadeIn" || effect === "fadeOut")
+          a = {
+            ...common,
+            effect,
+            parameters: {
+              from: effect === "fadeIn" ? 0 : 1,
+              to: effect === "fadeIn" ? 1 : 0,
+            },
+          };
+        else if (effect === "maskReveal")
+          a = {
+            ...common,
+            effect,
+            parameters: {
+              from: 0,
+              to: 1,
+              direction: r.parameters.direction ?? "forward",
+            },
+          };
+        else if (effect === "trimPath")
+          a = {
+            ...common,
+            effect,
+            parameters: {
+              from: 0,
+              to: 1,
+              direction: r.parameters.direction ?? "forward",
+            },
+          };
+        else if (effect === "scaleIn" || effect === "scaleOut")
+          a = {
+            ...common,
+            effect,
+            parameters: {
+              from: r.parameters.scaleFrom ?? (effect === "scaleIn" ? 0.8 : 1),
+              to: r.parameters.scaleTo ?? (effect === "scaleIn" ? 1 : 0.8),
+            },
+          };
+        else if (effect === "moveTo") {
+          let x = r.parameters.x ?? 0,
+            y = r.parameters.y ?? 0;
+          if (r.parameters.moveToCenter) {
+            const logical = buildRegistry(
+              project.inspection.document,
+              project.inspection.fingerprint,
+            ).objects.find(
+              (o) => o.logicalObjectId === r.target.logicalObjectId,
+            );
+            if (!logical) throw new Error("Position target state missing");
+            const geometry = resolveState(
+              project.inspection.document,
+              logical,
+              r.sceneId!,
+            );
+            const m = geometry.transform,
+              scene = project.inspection.document.scenes.find(
+                (s) => s.sceneId === r.sceneId,
+              )!;
+            x =
+              scene.width / 2 -
+              ((m[0][0] * geometry.width) / 2 +
+                (m[0][1] * geometry.height) / 2 +
+                m[0][2]);
+            y =
+              scene.height / 2 -
+              ((m[1][0] * geometry.width) / 2 +
+                (m[1][1] * geometry.height) / 2 +
+                m[1][2]);
+          }
+          a = {
+            ...common,
+            effect,
+            parameters: { fromX: 0, fromY: 0, toX: x, toY: y },
+          };
+        } else
+          throw new Error(
+            "Deterministic compiler does not support this technique: " + effect,
+          );
+        const writes = channels(a);
+        for (const previous of state.animations.filter(
+          (previous) =>
+            own(previous) &&
+            (channels(previous).some((c) => writes.includes(c)) ||
+              (effect === "trimPath" &&
+                /reveal|ribbon|trim/i.test(previous.animationId) &&
+                channels(previous).some((c) => c.startsWith("scale")))),
+        ))
+          if (
+            !operations.some(
+              (op) =>
+                op.type === "removeAnimation" &&
+                op.animationId === previous.animationId,
+            )
+          ) {
+            for (const dep of state.timingDependencies ?? [])
+              if (
+                dep.animationId === previous.animationId &&
+                previous.animationId !== a.animationId
+              )
+                operations.push({
+                  type: "removeTimingDependency",
+                  dependencyId: dep.dependencyId,
+                });
+            operations.push({
+              type: "removeAnimation",
+              animationId: previous.animationId,
+            });
+          }
+        operations.push({ type: "addAnimation", animation: a });
+        if (writes.some((c) => c === "x" || c === "y")) source = a;
+        if (anchor && r.timing.relation.endsWith("Requirement"))
+          operations.push({
+            type: "setTimingDependency",
+            dependency: {
+              dependencyId:
+                "dependency_" + stable([a.animationId, anchor.animationId]),
+              animationId: a.animationId,
+              anchorAnimationId: anchor.animationId,
+              relation:
+                r.timing.relation === "afterRequirement"
+                  ? "after"
+                  : r.timing.relation === "beforeRequirement"
+                    ? "before"
+                    : "with",
+              offsetFrames: Math.round(r.timing.delaySeconds * fps),
+            },
+          });
+      }
+      if (hasInertia) {
+        if (!source) throw new Error("POSITION_DEPENDENCY_MISSING");
+        const end = source.startFrame + source.durationFrames,
+          settle = Math.min(
+            Math.round(1.2 * fps),
+            block.startFrame + block.durationFrames - end - 1,
+            state.settings.durationFrames - end - 1,
+          );
+        if (settle < 4)
+          throw new Error("Insufficient settling interval after Position");
+        const inertiaProperties =
+          source.effect === "moveTo"
+            ? (["x", "y"] as const).filter((property) =>
+                property === "x"
+                  ? source.parameters.toX !== source.parameters.fromX
+                  : source.parameters.toY !== source.parameters.fromY,
+              )
+            : ([channels(source).includes("y") ? "y" : "x"] as const);
+        if (!inertiaProperties.length)
+          throw new Error("POSITION_HAS_NO_VELOCITY");
+        for (const property of inertiaProperties) {
+          const existing = state.expressions?.find(
+            (e) =>
+              own(e) &&
+              e.type === "inertialOvershoot" &&
+              e.property === property,
+          );
+          operations.push({
+            type: "setExpression",
+            expression: {
+              expressionId:
+                existing?.expressionId ??
+                "intent_inertia_" +
+                  stable([r.sceneId, r.target.sourceNodeId, property]),
+              sceneId: r.sceneId!,
+              targetId: r.target.sourceNodeId!,
+              property,
+              type: "inertialOvershoot",
+              sourceAnimationId: source.animationId,
+              startFrame: end,
+              durationFrames: settle,
+              enabled: true,
+              parameters: {
+                mode: "ae",
+                amplitude: r.parameters.amplitude ?? 0.25,
+                frequency: r.parameters.frequency ?? 2.5,
+                decay: r.parameters.decay ?? 3,
+                velocityLookbackFrames: Math.min(source.durationFrames, 30),
+              },
+            },
+          });
+        }
+      }
+    }
+  }
+  return {
+    status: "ready",
+    summary: "Исполнено требование: " + task.userIntent,
+    assumptions: [],
+    warnings,
+    operations,
+  };
+}
+export function validateRequirement(state: MotionState, r: IntentRequirement) {
+  if (r.kind === "unsupported" || r.unresolvedReason)
+    return [
+      {
+        name: "targetResolved",
+        status: "FAILED",
+        reason: r.unresolvedReason ?? "unsupported",
+      },
+    ];
+  if (r.kind === "sceneTiming")
+    return [
+      {
+        name: "sceneTiming",
+        status: state.blocks.some(
+          (b) =>
+            b.sceneId === r.sceneId &&
+            b.startFrame ===
+              Math.round(r.timing.startSeconds! * state.settings.fps),
+        )
+          ? "PASSED"
+          : "FAILED",
+      },
+    ];
+  const checks = r.techniques.map((technique) => ({
+    name: "requiredTechnique",
+    technique,
+    status: (
+      technique === "objectStateTransition"
+        ? state.objectTransitions?.some(
+            (t) =>
+              t.logicalObjectId === r.target.logicalObjectId &&
+              t.fromSceneId === r.sceneId &&
+              (!r.parameters.toSceneId ||
+                t.toSceneId === r.parameters.toSceneId),
+          )
+        : technique === "inertialOvershoot"
+          ? state.expressions?.some(
+              (e) =>
+                e.enabled &&
+                e.type === technique &&
+                (r.kind === "editAnimation" || e.parameters.mode === "ae") &&
+                e.sceneId === r.sceneId &&
+                e.targetId === r.target.sourceNodeId,
+            )
+          : state.animations.some(
+              (a) =>
+                a.enabled &&
+                a.effect === technique &&
+                a.sceneId === r.sceneId &&
+                a.targetId === r.target.sourceNodeId,
+            ) ||
+            (r.kind === "editAnimation" &&
+              ["customCurve", "spring"].includes(technique))
+    )
+      ? "PASSED"
+      : "FAILED",
+  }));
+  if (
+    r.techniques.includes("inertialOvershoot") &&
+    (r.parameters.easing === "aeEasyEase" ||
+      (typeof r.parameters.easing === "object" &&
+        r.parameters.easing?.type === "aeEasyEase"))
+  )
+    checks.push({
+      name: "aeVelocityMode",
+      technique: "inertialOvershoot",
+      status: state.expressions?.some(
+        (e) =>
+          e.enabled &&
+          e.type === "inertialOvershoot" &&
+          e.sceneId === r.sceneId &&
+          e.targetId === r.target.sourceNodeId &&
+          e.parameters.mode === "ae",
+      )
+        ? "PASSED"
+        : "FAILED",
+    });
+  return checks;
+}

@@ -1,0 +1,46 @@
+# Dependencies and package-manager caches (all packages)
+node_modules/
+.pnpm-store/
+.npm/
+
+# Generated build outputs
+dist/
+build/
+coverage/
+*.tsbuildinfo
+/apps/scene-validator/src/web/motion-runtime.js
+/apps/scene-validator/src/web/easing-runtime.js
+
+# User projects, original Figma exports and diagnostic/client artifacts
+/projects/
+/motion-project/
+/motion-project.zip
+/artifacts/
+/data/
+
+# Temporary files, logs and OS/editor files
+.DS_Store
+*.log
+*.tmp
+*.swp
+*.swo
+*~
+/upload-*/
+/.upload-*/
+/.motion-import-*/
+/.import-stage-*/
+
+# Local secrets and credentials; safe templates remain eligible
+.env
+.env.*
+!.env.example
+!.env.template
+credentials.json
+secrets.json
+*.pem
+*.key
+*.p12
+*.pfx
+.codex/
+.agents/
+.aws/

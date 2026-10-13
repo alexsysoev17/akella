@@ -1,0 +1,50 @@
+import { readFile } from "node:fs/promises";
+import { digest } from "./context.js";
+const components = [
+  "motion/engine",
+  "motion/sampling",
+  "motion/expressions",
+  "motion-library/expressions/functions",
+  "motion-library/expressions/registry",
+  "motion-library/easings/registry",
+  "motion-library/easings/cubic-bezier",
+  "motion/path-reveal",
+  "motion/text-reveal",
+  "renderer",
+  "motion/presentation",
+  "motion/qa/geometry",
+  "motion/operations",
+  "motion/transitions",
+  "motion/qa/numeric",
+  "motion/qa/render",
+  "motion/intent/compiler",
+  "motion/intent/planner",
+  "motion/intent/schema",
+  "motion/provider",
+  "motion/intent/execution",
+  "motion-library/registry/path-capability",
+  "harness/context",
+  "harness/runtime",
+  "harness/qa",
+  "harness/config",
+];
+export async function codeVersions() {
+  return await Promise.all(
+    components.map(async (id) => {
+      let content: string;
+      try {
+        content = await readFile(
+          new URL("../" + id + ".ts", import.meta.url),
+          "utf8",
+        );
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+        content = await readFile(
+          new URL("../" + id + ".js", import.meta.url),
+          "utf8",
+        );
+      }
+      return { id: "code:" + id, version: digest(content) };
+    }),
+  );
+}

@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "types": ["node"],
+    "skipLibCheck": true,
+    "rootDir": "apps/scene-validator",
+    "outDir": "apps/scene-validator/dist",
+    "declaration": true
+  },
+  "include": ["apps/scene-validator/src/**/*.ts"],
+  "exclude": ["apps/scene-validator/tests"]
+}

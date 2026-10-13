@@ -1,0 +1,96 @@
+{
+  "schemaVersion": "1.0.0",
+  "version": "2026-10-12.1",
+  "cases": [
+    {
+      "evalId": "EVAL_001_TRUE_TRIM",
+      "prompt": "Прорисуй Vector Line как Trim Paths слева направо.",
+      "fixture": "motion",
+      "seed": "none",
+      "target": "line",
+      "scene": "s0",
+      "expectedCapabilities": ["trimPath"],
+      "checks": ["trueTrim", "qa"]
+    },
+    {
+      "evalId": "EVAL_002_PROCEDURAL_OVERSHOOT",
+      "prompt": "Добавь QR затухающие колебания после существующего движения.",
+      "fixture": "motion",
+      "seed": "slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": ["inertialOvershoot"],
+      "checks": ["procedural", "qa"]
+    },
+    {
+      "evalId": "EVAL_003_AMPLITUDE_HALF",
+      "prompt": "Сделай колебания QR вдвое слабее.",
+      "fixture": "motion",
+      "seed": "inertia",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": ["inertialOvershoot"],
+      "checks": ["amplitudeHalf", "baseUnchanged", "qa"]
+    },
+    {
+      "evalId": "EVAL_004_LOGICAL_TRANSITION",
+      "prompt": "QR увеличивается между первой и второй сценами. Анимируй переход между его состояниями.",
+      "fixture": "motion",
+      "seed": "none",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": ["objectStateTransition"],
+      "checks": ["logicalTransition", "qa"]
+    },
+    {
+      "evalId": "EVAL_005_CUSTOM_EASING",
+      "prompt": "Сделай движение QR плавным в начале и конце, но резко ускоряющимся посередине. Используй авторскую кривую easing.",
+      "fixture": "motion",
+      "seed": "slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": ["customCurve"],
+      "checks": ["customEasing", "qa"]
+    },
+    {
+      "evalId": "EVAL_006_TARGET_SCOPE",
+      "prompt": "Измени только колебания QR: частоту увеличь в полтора раза. Остальные анимации не меняй.",
+      "fixture": "motion",
+      "seed": "inertia",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": ["inertialOvershoot"],
+      "checks": ["frequencyFactor", "baseUnchanged", "qa"]
+    },
+    {
+      "evalId": "EVAL_MULTI_SCENE_COMPOSITE_REQUEST",
+      "prompt": "сцена 2 начинается на 1 секунде: image 1926988171, Абонементы на любимую еду и напитки, куар появляются снизу через фейд, причём с колебаниями / инерцией, а лого появляется снизу аналогично. сцена 3 начинается на 3 секунде: лента 1 появляется через trim paths слева направо, и когда заканчивается её анимация, аналогично анимируется лента 2. Также снизу через фейд появляется с выгодой до 80% и шейп под 80%.",
+      "fixture": "composite",
+      "seed": "none",
+      "target": "qr",
+      "scene": "s1",
+      "expectedCapabilities": [
+        "slideUp",
+        "fadeIn",
+        "inertialOvershoot",
+        "trimPath"
+      ],
+      "checks": ["composite10", "qa"]
+    },
+    {
+      "evalId": "EVAL_008_QR_MOVE_SCALE_AND_LINE",
+      "prompt": "QR увеличивается и перемещается в центр с затухающими колебаниями. Vector Line постепенно прорисовывается как Trim Paths.",
+      "fixture": "motion",
+      "seed": "none",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "scaleIn",
+        "moveTo",
+        "inertialOvershoot",
+        "trimPath"
+      ],
+      "checks": ["moveScale", "procedural", "trueTrim", "qa"]
+    }
+  ]
+}

@@ -1,0 +1,207 @@
+# Motion Platform — Import, Validation & AI Motion Director
+
+AI Motion Agent самостоятельно выбирает объект и недостающие параметры, не задаёт уточняющих вопросов и исправляет невалидные ответы максимум за три попытки. Он работает без согласования: Enter автоматически применяет корректный запрос и запускает preview. Undo/Redo сохраняются. Phase 3 добавляет рабочую цепочку **запрос → Codex → автоматически применённые операции → autoplay preview → правка → Undo → MP4**. Код импорта и реконструкции сохранён; анимация использует тот же renderer. Подробности, реальные результаты и ограничения: [AI Motion Director](docs/ai-motion-director.md).
+
+Единое локальное приложение `apps/scene-validator` обслуживает все папки `projects/`. ZIP из Figma загружается через браузер: платформа проверяет экспорт, создаёт проект и восстанавливает сцены из **scene.json + assets**. Превью Figma — отдельные эталоны, не источник реконструкции.
+
+Одинаковые имена слоёв теперь связывают состояния между сценами: **точное имя → logical object → переход по исходной геометрии**. Инструкция, ограничения композиции и результаты приёмки: [Object States](docs/object-states.md).
+
+## Запуск на этом Mac
+
+```sh
+cd "/Users/redcollar/Desktop/Работа/platform"
+sh scripts/platform.sh dev
+```
+
+Открыть **http://127.0.0.1:4173/**. Сервер доступен только на 127.0.0.1. Остановка — Ctrl+C. Если порт занят прежним экземпляром, остановить его в его терминале. `--port 4174` меняет порт; `--projects-dir /path/projects` выбирает другой каталог. Прежний `dev --project ...` принимается для совместимости, но теперь открывает общий каталог; проект выбирается в интерфейсе.
+
+## Работа в браузере
+
+1. **+ НОВЫЙ ПРОЕКТ** → название → ZIP Figma → **ПРОВЕРИТЬ ZIP** → **СОЗДАТЬ ПРОЕКТ**. Самостоятельно распаковывать архив не нужно. Поддерживаются scene.json в корне ZIP и внутри дополнительной папки.
+2. Проект сразу открывает **Motion / Анимация**, без вкладок. Слева находятся все сцены и объекты; выбор сцены перемещает preview к её началу. Изображение строится из scene.json + assets.
+3. Введите движение и нажмите Enter. Агент автоматически сохраняет корректные операции и запускает preview. Для контроля результата есть Undo/Redo, playhead и история. Ручных форм эффектов, блоков и переходов нет.
+4. **Экспорт MP4** создаёт отдельный видеофайл.
+5. **ОБНОВИТЬ ИЗ FIGMA** принимает новый ZIP и сохраняет прежний импорт в истории. Пользовательские notes, motion и renders сохраняются. Ссылка **MOTION PLATFORM** возвращает к списку проектов.
+
+Проверка/сравнение сцен и редактор заметок удалены из пользовательского интерфейса. Ранее созданные файлы и история сохранены. Отдельные диагностические CLI-команды остаются совместимыми.
+
+Ошибки экспорта показываются предупреждениями: целостность файлов не доказывает визуальную точность. При отсутствии preview реконструкция возможна, но сравнение явно недоступно. Ссылки на отсутствующие файлы запрещены.
+
+## Установка и CLI
+
+Требуется Node.js 20.19+ с npm:
+
+```sh
+npm ci
+node node_modules/playwright/cli.js install chromium
+npm run check
+npm run dev
+npm run projects
+npm run import -- --name "Red Collar Promo" --source "/path/export.zip"
+npm run validate -- --project ./projects/red-collar-promo
+npm run validate -- --project PROJECT_UUID
+npm run create-project -- --name "Red Collar Promo" --source "/path/new-export.zip" --update
+```
+
+`create-project` и `import` используют один импортёр с веб-интерфейсом. Папка экспорта также поддерживается CLI. `validate --structural-only` проверяет только структуру. Без npm на этом Mac доступны эквиваленты `sh scripts/platform.sh projects`, `import ...`, `validate ...`. После `npm run build`: `node apps/scene-validator/dist/src/cli.js dev`. Сборка копирует локальные HTML/CSS/JS; CDN не используется. Импорт, реконструкция и MP4 выполняются локально; AI-планирование отправляет компактный контекст в Codex через существующую авторизацию ChatGPT.
+
+## Обновление Figma Exporter
+
+Сборка плагина находится в figma-motion-exporter/dist; уникальный ID manifest сохранён. В Figma Desktop закройте старое окно плагина и запустите его снова через Plugins → Development → Motion Exporter. Если плагин ещё не подключён: Plugins → Development → Import plugin from manifest… → `figma-motion-exporter/manifest.json`.
+
+Выберите нужные FRAME nodes на текущей странице. Плагин показывает **Selected Frames: N**, полный список и ручную перестановку. Нажмите **EXPORT STORYBOARD**. Результат — ZIP с N сценами и статистикой nodes/images/vectors. project.json и notes создаёт платформа.
+
+Для последующих изменений исходников плагина:
+
+```sh
+cd figma-motion-exporter
+npm ci
+npm run check
+```
+
+Проверки нескольких Frames выполнены на fixtures и собранном коде плагина. Запуск именно внутри Figma Desktop в этом этапе автоматически не выполнялся.
+
+## Difference maps и статусы
+
+Сравниваются независимые PNG одинакового размера, RGBA приводится к белому фону. Метрики: число/процент пикселей с максимальной разницей RGB больше 8/255 и MAE по RGB в диапазоне 0–255. Карта показывает интенсивность различий пурпурным на чёрном; совпадение — чёрный. `identical` означает отсутствие различий выше порога, `differences` — наличие различий. Это не perceptual score и не автоматическая оценка качества дизайна. `passed` для структуры/обработки не означает совпадения с Figma.
+
+Размер сцены ограничен 16384px по стороне, сравнение — 32 мегапикселями. Нет фиксированного лимита на число сцен. Обработка последовательная; большие проекты требуют времени и памяти.
+
+## Как собирается изображение
+
+1. project.json определяет относительный путь к scene.json.
+2. Читаются сцены, дерево узлов, paints, текст, размеры, sceneTransform и asset references.
+3. Создаётся SVG-композиция с вложенными группами. Матрица ребёнка вычисляется как inverse(parent.sceneTransform) × child.sceneTransform; это также корректно обрабатывает Group nodes, у которых exported relativeTransform может отличаться от ожидаемых локальных координат.
+4. FRAME backgrounds, RECTANGLE/ELLIPSE/LINE, доступные vectorPaths/fillGeometry/strokeGeometry, gradients, image paints и sibling masks собираются из структурированных свойств. Visible/opacity, clipping, порядок слоёв, основные blend modes и drop shadows применяются в композиции.
+5. TEXT остаётся браузерным текстом в foreignObject: UTF-16 styled segments, шрифт/вес/размер, letter spacing, line height, выравнивание, параграфы. Используются локально установленные шрифты; они не скачиваются и не копируются. При отсутствии шрифта выводится предупреждение, результат использует fallback.
+6. IMAGE читается по assetId из оригинального файла. FILL/FIT и normalized CROP применяются к геометрии объекта. Невидимые fills пропускаются.
+7. VECTOR со mixed paints либо форма без доступной геометрии использует свой **SVG asset**, с явным указанием fallback. Это ресурс отдельного узла, а не PNG всего Frame. Unsupported nodes могут использовать отдельный PNG fallback, если экспортёр его предоставил.
+8. Chromium отрисовывает эту композицию в новый PNG, SCALE 1. Renderer не читает source/previews; asset, подменённый путём previews/, запрещён.
+9. После завершения renderer исходное Figma preview копируется отдельно в validation/references для сравнения в интерфейсе.
+
+Один self-contained HTML композиции сохраняется рядом с PNG. Images/SVG resources встроены как data URI для автономной загрузки renderer; исходные PNG bytes не перекодируются до окончательной отрисовки композиции. Это требует памяти пропорционально данным сцены. Файлы шрифтов в HTML не встраиваются.
+
+## Структура проектов
+
+```text
+platform/
+├── apps/scene-validator/            # общий код для всех роликов
+├── projects/
+│   └── figma-test/
+│       ├── project.json
+│       ├── source/                 # неизменяемые при validate/dev данные
+│       │   ├── scene.json
+│       │   ├── export-report.json
+│       │   ├── assets/
+│       │   └── previews/
+│       ├── notes/brief.md, scenes.md
+│       ├── validation/
+│       │   ├── reconstructed/      # PNG и HTML, собранные из данных
+│       │   ├── references/         # отдельно помеченные эталоны Figma
+│       │   ├── differences/        # попиксельные difference maps
+│       │   ├── report.json
+│       │   └── report.html
+│       ├── motion/                 # motion.json, provider.json, ai/<request-id>/
+│       ├── renders/                # MP4 и метаданные рендера
+│       └── history/imports/
+├── figma-motion-exporter/           # отдельная сборка Figma plugin
+├── motion-project/                 # оригинал сохранён
+└── motion-project.zip              # оригинал сохранён
+```
+
+Количество сцен определяется scenes[], без ограничений на 3/15/16. Имя выходного PNG — UTF-8 hex encoding sceneId, без коллизий и зависимости от имени слоя. UUID projectId стабилен при reimport; исходные sceneId/figmaNodeId сохраняются. Одинаковые sceneId разных проектов допустимы.
+
+Текущий `projects/figma-test` содержит 1 сцену, 5 assets, 10 nodes. Все 10 source-файлов побайтно совпали с оригинальным motion-project по SHA-256. В исходном отчёте есть SVG_EXPORT_FAILED для mask node 10:3720; renderer восстанавливает эту эллиптическую маску из геометрии. QR со mixed paints использует SVG fallback. Шрифты X5 Sans доступны локально на текущем Mac.
+
+## project.json и переносимость
+
+- schemaVersion: 1.0.0; projectId, name, createdAt, updatedAt.
+- source.scene: `source/scene.json`; source.exportReport: `source/export-report.json`.
+- validation.directory: `validation` (зафиксирован, чтобы исключить перезапись source/notes).
+- settings.validationMode: `structural` — настройки структурной проверки; реконструкцию CLI запускает отдельным этапом, кроме --structural-only.
+- imports[]: importId, importedAt, SHA-256 sourceFingerprint, files.
+
+Source пути — относительно project.json; asset/preview пути — относительно самого scene.json. Никакой зависимости от оригинальной экспортной папки после импорта нет. Обычные системные шрифты/Chromium являются runtime dependencies, а не внешним доступом к Figma.
+
+## Импорт, история и повторные проверки
+
+`create-project` принимает экспортную папку с scene.json, родительскую папку с motion-project/ или ZIP с одним корнем экспорта. `--projects-dir` задаёт другую коллекцию проектов. Название Red Collar Promo создаёт red-collar-promo.
+
+Для повторного импорта:
+
+```sh
+npm run create-project -- --name "Red Collar Promo" --source "/path/to/new-export.zip" --update
+```
+
+Без --update существующий проект не перезаписывается. С --update сохраняются projectId/settings, notes/, motion/, renders/ и history. Предыдущие source/, project.json и validation/ помещаются в history/imports/<importId>/. Новый импорт проверяется в staging, inventory копии сверяется с исходником до публикации. Источник экспорта не удаляется.
+
+При каждом validate старый validation/ целиком заменяется готовым staging-каталогом; устаревшие PNG/HTML/references исчезают. source/ не записывается. Импорт/валидация сериализованы .project-lock. Обычные ошибки переключения source откатываются; несколько rename при reimport не дают гарантию общей транзакции при отключении питания. При аварии может остаться lock/staging — сначала убедитесь, что процесс остановлен, и проверьте историю перед ручной очисткой.
+
+## Проверки и ограничения
+
+`npm run check`: strict TypeScript, **83 теста**, build. Тесты проверяют множество проектов, 16 сцен, reimport/history/notes, ZIP/JSON/files/reference integrity, path traversal/symlinks, stale outputs и настоящий localhost server. Тест renderer проверяет **реальные PNG pixels**: изменение preview не влияет на результат, изменение JSON геометрии/цвета влияет. Browser test проверяет загрузку PNG и переключение restoration/reference/overlay.
+
+Структурный PASS не означает pixel-perfect результат. Отчёт отдельно указывает reconstruction status, предупреждения и fallback usage. Difference maps и RGB-метрики доступны вместе с наложением; оценку приемлемости различий выполняет пользователь.
+
+Текущие ограничения renderer явно отмечаются предупреждениями:
+
+- TILE approximated as FILL; image filters и paint rotation не реализованы.
+- CROP требует визуальной проверки normalized transform; пока не обещается поддержка всех crop случаев.
+- Text fills поддерживаются точно для SOLID; прочие text paints approximated. Figma и Chromium могут различаться по shaping/line breaks/antialiasing.
+- Corner smoothing, partial ellipse arcs, shadow spread, inner shadow/blur и ряд сложных эффектов не реализованы.
+- Для stroke без strokeGeometry non-center alignment approximated as CENTER. Сложные/rotated SVG fallbacks могут иметь отличающиеся export bounds.
+- Сложные mixed vector paints требуют SVG fallback; это не гарантирует Trim Paths.
+- PNG renderer ограничен 16384px по стороне. ZIP import — 512 MiB и 50 000 entries; это ограничения ресурсов, не числа сцен.
+- Отдельная ошибка reconstruction сохраняется в отчёт; source остаётся неизменным. Fonts/browser runtime required. Отказ одной сцены сохраняется отдельно, остальные сцены продолжают обрабатываться.
+
+Сервер обслуживает каталог/API, разрешённые previews, notes и результаты validation проектов. Произвольные source/system paths не выдаются. Motion API дополнительно обслуживает операции, планы Codex, preview и MP4. Нет визуального редактора таймлайна, аудио и семантического сопоставления объектов между сценами.
+
+## Проверки workflow
+
+Автоматический browser/API тест использует искусственные экспорты с 1, 3 и 15 сценами, PNG и SVG. Проверены каталог, карточки всех сцен, загрузка настоящего ZIP через file input, сохранение notes, обновление 15→3 сцен с историей, сохранение motion-файла, реконструкция и сравнение всех 15 сцен, повторная проверка без stale files, неизменность source по SHA-256, некорректный ZIP и запрет чужого Origin. Это fixtures, а не экспорт реального документа Figma.
+
+Phase 3 добавляет 16 автоматических проверок: 1/3/15 сцен, операции/конфликты, keyframes/stagger, история и source integrity, отказ провайдера, browser UI, сохранение dashed strokes, настоящий MP4 с проверкой числа кадров и пикселей относительно preview. Реальные запросы Codex выполнялись отдельно на Figma Test; unit tests не выдают fixtures за настоящую AI-интеграцию.
+
+## Advanced Motion
+
+Единый easing registry, custom Bezier/piecewise, параметрические кривые, additive expressions, 8 presets и локальные motion skills. Подробности, единицы параметров, тесты и ограничения: [Advanced Motion](docs/advanced-motion.md).
+
+## Упоминания объектов
+
+Клик по объекту в preview → красная подсказка в промпте → Space → продолжить инструкцию. Несколько упоминаний передаются AI точными ссылками на существующие Logical Objects. [Устройство и проверки](docs/smart-object-mentions.md).
+
+Таймлайн перемещается по клику и удержанию левой кнопки, с Pointer Capture. Hover не меняет кадр. Деления: 2px, зазор 8px, высоты 6/10/14/20/26px с общим нижним краем.
+
+## Motion Intelligence и QA
+
+Техники проверяются перед применением, затем кандидат проходит численную и Chromium pixel QA. Для явных Trim Paths и инерции агент создаёт отдельные задачи по объектам, исправляет каждую до трёх попыток и сохраняет успешно проверенные задачи независимо. Контрольные кадры и отчёты доступны в настройках → Диагностика Motion Agent. [Архитектура, приёмка и ограничения](docs/motion-intelligence.md).
+
+Подробности исправления привязки техник, независимых транзакций, QA и фактической приёмки: [Исполнение Motion Tasks](docs/task-execution.md).
+
+## Semantic Intent и полнота исполнения
+
+Автоматический Motion Agent теперь сначала строит LLM-контракт всего запроса и проверяет структуру и полноту контракта детерминированно; отдельный LLM audit не вызывается в стандартном успешном пути. Сцены, наследование «аналогично», несколько техник одного объекта и временные зависимости сохраняются до генерации операций. Начала сцен переводятся в кадры реальным FPS; успешные задачи сохраняются независимо. Итог сверяется по требованиям и выводится как SUCCESS / PARTIAL_SUCCESS / FAILED.
+
+Trim Paths QA сохраняет реальный Chromium render, проверяет centerline/dash/progress/направление и сравнивает reveal с полным объектом на том же кадре. Монотонность общего числа экранных пикселей больше не используется.
+
+`npm test` включает EVAL_MULTI_SCENE_COMPOSITE_REQUEST. Дополнительный внешний тест: `npm run eval:semantic` (настоящий Codex, искусственные fixtures, нужна авторизация). Формат контракта независим от провайдера; готовый адаптер сейчас только Codex SDK/CLI. [Архитектура, причины сбоя и ограничения](docs/task-execution.md).
+
+## Agent Harness
+
+Рабочий provider-independent Harness интегрирован в существующий Motion Agent: один основной LLM call, ограниченный repair, selective QA, persistent traces/experience и отдельные Evals. [Архитектура, конфигурация, хранение, команды и ограничения](docs/harness.md). Запуск платформы: `sh scripts/platform.sh dev`, затем http://127.0.0.1:4173/.
+
+## Rendering Integrity
+
+Исправлены cached mask bounds скрытых сцен, чрезмерная толщина reveal и конфликты font aliases. Добавлен explicit Text Mask Reveal, isolated-object diagnostics и pixel regression. [Причины, результаты реальных сцен/MP4 и ограничения](docs/rendering-integrity.md).
+
+## AE Expression Compatibility
+
+Добавлен AE velocity mode и temporal `aeEasyEase`, с сохранением legacy проектов. [Численное сравнение, известное расхождение TEST B и проверки](docs/ae-expression-parity.md). Воспроизводимый отчёт: `npm run compare:ae`.
+
+## Core Inertia
+
+Новые inertialOvershoot автоматически используют общий instantaneous-velocity evaluator; старые snapshots сохраняют прежний алгоритм. AE Mode не является пользовательским выбором. [Интеграция и реальные Codex проверки](docs/core-inertia-integration.md).
+
+## Agent Inspector
+
+Кнопка **Inspector** рядом с prompt открывает историю запусков, Intent Contract, реальные операции/diff, repair attempts и сохранённые QA-кадры. Есть копирование Markdown-отчёта и скачивание Debug ZIP. Панель не вызывает AI и не запускает QA повторно. Подробности API, хранения, privacy, лимитов и проверок: [Agent Inspector](docs/agent-inspector.md).

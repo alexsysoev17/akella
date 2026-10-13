@@ -1,0 +1,14 @@
+{
+  "maxLLMCalls": 3,
+  "maxRepairAttempts": 2,
+  "maxContextBytes": 60000,
+  "maxOutputTokens": 16000,
+  "maxRenderedQAFrames": 300,
+  "maxDurationMs": 240000,
+  "providerTimeoutMs": 180000,
+  "maxEstimatedCost": null,
+  "privacy": "full",
+  "qaCacheEntries": 30,
+  "extraGuidance": [],
+  "retrievalBoosts": []
+}

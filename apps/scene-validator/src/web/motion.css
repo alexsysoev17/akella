@@ -1,0 +1,710 @@
+.director {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 36px;
+  min-height: calc(100vh - 94px);
+  padding-top: 24px;
+}
+.scene-sidebar {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-height: calc(100vh - 118px);
+  position: sticky;
+  top: 24px;
+}
+.project-switch {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  color: #29292e;
+  min-height: 44px;
+  padding: 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+.project-switch > span:nth-child(2) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.project-symbol {
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  width: 28px;
+  height: 28px;
+  background: #e8e8ee;
+  color: #73737d;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+.project-chevron {
+  margin-left: auto;
+  color: #8d8d95;
+}
+.sidebar-label {
+  display: flex;
+  justify-content: space-between;
+  padding: 28px 12px 12px;
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  font-weight: 600;
+  color: #9999a2;
+}
+.sidebar-label span {
+  letter-spacing: 0;
+  font-weight: 400;
+}
+.scene-tree {
+  overflow: auto;
+  min-height: 60px;
+  flex: 1;
+  scrollbar-width: thin;
+}
+.scene-row {
+  position: relative;
+  margin: 3px 0;
+}
+.scene-row > button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  height: 43px;
+  background: transparent;
+  color: #53535c;
+  border-radius: 9px;
+  padding: 0 66px 0 9px;
+  text-align: left;
+  white-space: nowrap;
+}
+.scene-row > button:hover {
+  background: #ececf1;
+}
+.scene-row.active > button {
+  background: #e9edf4;
+  color: #25252c;
+}
+.disclosure {
+  font-size: 20px;
+  font-weight: 300;
+  line-height: 1;
+  transform: rotate(0);
+  transition: transform 0.15s;
+  color: #9c9ca5;
+}
+.scene-row button[aria-expanded="true"] .disclosure {
+  transform: rotate(90deg);
+}
+.scene-title {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.scene-name {
+  font-size: 10px;
+  color: #9b9ba3;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+.scene-thumb {
+  position: absolute;
+  right: 9px;
+  top: 7px;
+  width: 49px;
+  height: 29px;
+  border-radius: 4px;
+  pointer-events: none;
+  background: #e7e7ed;
+  box-shadow: 0 0 0 1px #00000007;
+}
+.scene-objects {
+  padding: 5px 0 10px;
+}
+.object {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  height: 30px;
+  padding: 0 10px 0 calc(26px + var(--depth, 0) * 9px);
+  background: transparent;
+  color: #73737d;
+  text-align: left;
+  font-size: 11px;
+  border-radius: 6px;
+}
+.object > span:last-child {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.object:hover {
+  background: #ededf2;
+}
+.object.selected {
+  background: #e2ecfa;
+  color: #2466b4;
+}
+.object-icon {
+  width: 14px;
+  flex-shrink: 0;
+  font-size: 11px;
+  text-align: center;
+  color: #a0a0aa;
+}
+.settings-launch {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  text-align: left;
+  color: #777780;
+  background: transparent;
+  font-size: 12px;
+  margin-top: 20px;
+  padding: 12px;
+}
+.settings-launch span {
+  font-size: 16px;
+}
+.settings-launch:hover {
+  background: #eeeef2;
+}
+.motion-workspace {
+  min-width: 0;
+  padding-bottom: 24px;
+}
+.viewer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  margin-bottom: 16px;
+}
+.viewer-label {
+  font-size: 12px;
+  color: #8e8e98;
+}
+.toolbar-actions {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+.quiet {
+  background: transparent;
+  color: #777781;
+  padding: 8px 11px;
+  font-size: 13px;
+}
+.quiet:hover {
+  background: #eaeaf0;
+  color: #373741;
+}
+.secondary {
+  background: #ebebf0;
+  color: #535360;
+  font-size: 12px;
+  padding: 9px 13px;
+}
+.secondary:hover {
+  background: #e0e0e8;
+}
+.toolbar-actions .quiet {
+  font-size: 20px;
+  padding: 5px 9px;
+}
+.toolbar-actions .secondary {
+  margin-left: 10px;
+}
+.video-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eeeef2;
+  border: 1px solid #e7e7ee;
+  border-radius: 14px;
+  overflow: hidden;
+  min-height: 180px;
+  height: min(53vh, 620px);
+  padding: 24px;
+}
+.video-stage iframe {
+  display: block;
+  max-width: 100%;
+  width: auto;
+  max-height: 100%;
+  height: 100%;
+  background: #000;
+  box-shadow: 0 4px 22px #00000010;
+}
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 18px 0 20px;
+}
+.transport #m-play {
+  white-space: nowrap;
+  font-size: 11px;
+  padding: 6px 0;
+  min-width: 113px;
+  text-align: left;
+}
+.transport input {
+  width: auto;
+  flex: 1;
+  padding: 0;
+  margin: 0;
+  height: 3px;
+  accent-color: #7e92ae;
+  border: 0;
+  cursor: pointer;
+}
+.transport #m-time {
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: #9898a0;
+  white-space: nowrap;
+}
+.prompt-composer {
+  background: #fff;
+  border: 1px solid #e5e5eb;
+  border-radius: 14px;
+  box-shadow: 0 3px 12px #00000002;
+  overflow: hidden;
+}
+.prompt-composer:focus-within {
+  border-color: #b4cbed;
+  box-shadow: 0 0 0 3px #0071e308;
+}
+#m-ai {
+  width: 100%;
+  min-height: 86px;
+  max-height: 220px;
+  padding: 20px 22px 10px;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  font:
+    14px/1.6 -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  resize: vertical;
+  outline: none;
+}
+#m-ai::placeholder {
+  color: #acacb4;
+}
+.composer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 14px 22px;
+  gap: 16px;
+}
+.composer-hint {
+  font-size: 10px;
+  color: #b0b0b8;
+}
+.composer-footer button {
+  font-size: 12px;
+  padding: 10px 18px;
+  min-width: 112px;
+}
+.composer-footer button span {
+  margin-left: 16px;
+}
+.execution-status {
+  padding: 8px 4px 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.execution-status p:empty,
+.execution-status div:empty {
+  display: none;
+}
+#m-proposal {
+  color: #8a8a94;
+  white-space: pre-wrap;
+  max-height: 140px;
+  overflow: auto;
+}
+#m-error {
+  color: #b8443c;
+  white-space: pre-wrap;
+}
+#m-job {
+  color: #777780;
+}
+.motion-settings .settings-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.motion-settings h2 {
+  margin: 0;
+  font-size: 21px;
+  letter-spacing: -0.5px;
+  font-weight: 600;
+}
+.motion-settings h3 {
+  margin: 27px 0 10px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  color: #9a9aa3;
+  font-weight: 500;
+}
+.motion-settings .settings {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 16px;
+}
+.motion-settings label {
+  font-size: 12px;
+}
+.motion-settings .check-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.check-label input {
+  width: auto;
+  margin: 0;
+  accent-color: #0071e3;
+}
+.motion-settings p {
+  font-size: 12px;
+}
+.motion-settings #m-history {
+  padding-left: 20px;
+  font-size: 12px;
+  line-height: 1.5;
+  max-height: 220px;
+  overflow: auto;
+  color: #6d6d76;
+}
+.motion-settings #m-history li {
+  margin-bottom: 12px;
+}
+.motion-settings #m-history small {
+  display: block;
+  font-size: 10px;
+}
+.motion-settings textarea {
+  font-size: 12px;
+}
+.motion-settings #m-videos {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.muted {
+  color: #9898a2;
+  font-size: 11px;
+}
+@media (min-width: 1500px) {
+  .director {
+    grid-template-columns: 260px minmax(0, 1fr);
+    gap: 48px;
+  }
+  .video-stage {
+    height: 58vh;
+  }
+}
+@media (max-width: 1000px) {
+  .director {
+    grid-template-columns: 205px minmax(0, 1fr);
+    gap: 20px;
+  }
+  .scene-name {
+    display: none;
+  }
+  .video-stage {
+    padding: 16px;
+    height: 46vh;
+  }
+  .composer-hint {
+    display: none;
+  }
+  .transport {
+    gap: 12px;
+  }
+}
+@media (max-width: 650px) {
+  .director {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    padding-top: 12px;
+  }
+  .scene-sidebar {
+    position: static;
+    max-height: 260px;
+  }
+  .sidebar-label {
+    padding-top: 12px;
+  }
+  .settings-launch {
+    margin-top: 5px;
+  }
+  .project-switch {
+    min-height: 34px;
+  }
+  .viewer-toolbar {
+    margin-bottom: 10px;
+  }
+  .video-stage {
+    height: 32vh;
+    min-height: 160px;
+    padding: 10px;
+  }
+  .transport {
+    padding: 14px 0;
+  }
+  .transport #m-time {
+    font-size: 10px;
+  }
+  #m-ai {
+    min-height: 95px;
+  }
+  .scene-tree {
+    max-height: 160px;
+  }
+  .scene-name {
+    display: block;
+  }
+  .scene-row > button {
+    height: 39px;
+  }
+  .scene-thumb {
+    top: 5px;
+  }
+}
+
+.director {
+  letter-spacing: -0.05em;
+}
+.project-switch {
+  color: var(--text);
+  font-weight: 500;
+  letter-spacing: inherit;
+}
+.project-symbol {
+  background: var(--soft);
+  color: var(--muted);
+}
+.sidebar-label {
+  font-weight: 500;
+  letter-spacing: inherit;
+  color: var(--muted);
+}
+.scene-row > button,
+.object,
+.quiet,
+.settings-launch {
+  color: var(--muted);
+  background: transparent;
+}
+.scene-row > button:hover,
+.object:hover,
+.quiet:hover,
+.settings-launch:hover {
+  background: var(--soft);
+  color: var(--text);
+}
+.scene-row.active > button {
+  background: var(--soft);
+  color: var(--text);
+}
+.object.selected {
+  background: var(--selection);
+  color: var(--accent);
+}
+.secondary {
+  background: var(--soft);
+  color: var(--text);
+}
+.secondary:hover {
+  background: var(--border);
+}
+.scene-thumb {
+  background: var(--soft);
+}
+.project-chevron,
+.scene-name,
+.disclosure,
+.object-icon {
+  color: var(--muted);
+}
+.viewer-toolbar {
+  justify-content: flex-end;
+}
+.video-stage {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+.video-stage iframe {
+  box-shadow: none;
+}
+.transport #m-play {
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 124px;
+  height: 40px;
+}
+.transport #m-time {
+  color: var(--muted);
+}
+.prompt-composer {
+  background: var(--surface);
+  border-color: var(--border);
+  box-shadow: none;
+}
+.prompt-composer:focus-within {
+  border-color: #ff2b2f66;
+  box-shadow: none;
+}
+#m-ai {
+  font-family: Inter, sans-serif;
+  letter-spacing: -0.05em;
+  font-weight: 400;
+  line-height: 1.2;
+  color: var(--text);
+}
+#m-ai::placeholder {
+  color: var(--muted);
+}
+.composer-footer {
+  justify-content: flex-end;
+}
+.execution-status {
+  line-height: 1.2;
+}
+#m-proposal,
+#m-job,
+.muted,
+.motion-settings label,
+.motion-settings h3,
+.motion-settings #m-history {
+  color: var(--muted);
+}
+.motion-settings h3 {
+  letter-spacing: -0.05em;
+  font-weight: 500;
+}
+.check-label input {
+  accent-color: var(--accent);
+}
+#m-timeline {
+  height: 56px;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 4px 0 8px;
+  cursor: ew-resize;
+  touch-action: none;
+  outline-offset: 5px;
+}
+.timeline-bar {
+  display: block;
+  flex: 0 0 2px;
+  border-radius: 1px;
+  background: #666;
+  height: 6px;
+  pointer-events: none;
+  transition:
+    height 70ms linear,
+    background 70ms linear;
+}
+.timeline-bar.peak {
+  background: var(--text);
+}
+#m-timeline:focus-visible {
+  outline: 2px solid #ff2b2f66;
+  border-radius: 4px;
+}
+@media (max-width: 650px) {
+  .transport {
+    gap: 9px;
+  }
+  .transport #m-play {
+    min-width: 100px;
+  }
+  .transport #m-time {
+    max-width: 58px;
+    text-align: right;
+  }
+  .timeline-bar {
+    flex-basis: 2px;
+  }
+
+  .video-stage {
+    padding: 0;
+  }
+}
+.scene-title {
+  font-weight: 500;
+}
+
+.curve-inspector {
+  margin: 20px 0;
+}
+.curve-inspector svg {
+  width: 100%;
+  max-width: 360px;
+  color: var(--text, #f2f2f2);
+}
+.curve-line {
+  fill: none;
+  stroke: #ff2b2f;
+  stroke-width: 2;
+}
+.curve-guide {
+  fill: none;
+  stroke: currentColor;
+  opacity: 0.18;
+}
+.curve-inspector circle {
+  fill: currentColor;
+}
+.curve-inspector p {
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.prompt-composer {
+  position: relative;
+}
+.prompt-ghost {
+  position: absolute;
+  inset: 0 0 auto;
+  pointer-events: none;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  overflow: hidden;
+  color: transparent;
+  font: inherit;
+  letter-spacing: inherit;
+}
+.prompt-ghost .ghost-name {
+  color: rgba(220, 40, 40, 0.45);
+}
+.prompt-ghost {
+  color: var(--text, #f2f2f2);
+}
+#m-ai.has-ghost {
+  color: transparent;
+  caret-color: #ff2b2f;
+}
+#m-ai.has-ghost::placeholder {
+  color: transparent;
+}
