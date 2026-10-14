@@ -502,3 +502,126 @@ export async function debugBundle(root: string, id: string) {
   );
   return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
 }
+
+/** Optional local diagnostic export: no media, no assets, no full history snapshots. */
+export async function projectDiagnosticBundle(root: string, id: string) {
+  const { loadProject } = await import("../project.js");
+  const { readMotion } = await import("../motion/store.js");
+  const { recentSuccessfulActions } = await import(
+    "../motion/contextual-resolution.js"
+  );
+  const { objectsIn } = await import("../motion/context.js");
+  const { codeVersions } = await import("./versions.js");
+  const project = await loadProject(root),
+    doc = await readMotion(project),
+    data = await inspectorRun(root, id),
+    zip = new JSZip();
+  const resolution = data.targetResolution as Data[];
+  const ids = new Set<string>();
+  for (const row of Array.isArray(resolution) ? resolution : [])
+    for (const member of Array.isArray(row.members) ? row.members : [])
+      ids.add(member.expressionId);
+  const relevant =
+    doc.state.expressions?.filter(
+      (e) =>
+        ids.has(e.expressionId) ||
+        (!ids.size && e.type === "inertialOvershoot"),
+    ) ?? [];
+  const sourceIds = new Set(
+    relevant.flatMap((e) =>
+      "sourceAnimationId" in e ? [e.sourceAnimationId] : [],
+    ),
+  );
+  const full = (data.run as Data).privacy === "full";
+  const context = (
+    full
+      ? await saved(root, `motion/ai/${z.uuid().parse(id)}/context.json`)
+      : {}
+  ) as Data;
+  const recordedReference = Array.isArray(data.trace)
+    ? data.trace.find(
+        (e: Data) =>
+          e.stage === "semantic-diagnostic" &&
+          (e.data as Data)?.phase === "reference-context",
+      )?.data?.report
+    : undefined;
+  const entries = {
+    manifest: {
+      projectId: project.config.projectId,
+      revision: doc.revision,
+      sourceFingerprint: doc.sourceFingerprint,
+      documentVersion: doc.documentVersion,
+      motionSchemaVersion: doc.state.schemaVersion,
+      sourceSchemaVersion: project.inspection.document.schemaVersion,
+      diagnosticVersion: "1.0.0",
+      sceneCount: project.inspection.document.scenes.length,
+      objectCount: project.inspection.document.scenes.flatMap(objectsIn).length,
+      animationCount: doc.state.animations.length,
+      expressionCount: doc.state.expressions?.length ?? 0,
+    },
+    "relevant-state": full
+      ? {
+          settings: doc.state.settings,
+          blocks: doc.state.blocks.filter((b) =>
+            relevant.some((e) => e.sceneId === b.sceneId),
+          ),
+          animations: doc.state.animations.filter((a) =>
+            sourceIds.has(a.animationId),
+          ),
+          expressions: relevant,
+        }
+      : "NOT_AVAILABLE_PRIVACY",
+    "recent-committed-actions": full
+      ? recentSuccessfulActions(doc).slice(0, 20)
+      : "NOT_AVAILABLE_PRIVACY",
+    "reference-context": recordedReference ?? {
+      providerConversation: full
+        ? context?.contextualEditHint === true &&
+          Array.isArray(context.recentConversation)
+          ? context.recentConversation.slice(-2)
+          : (context?.recentConversation ?? "NOT_AVAILABLE")
+        : "NOT_AVAILABLE_PRIVACY",
+      recentSuccessfulActions:
+        context?.recentSuccessfulActions ?? "NOT_AVAILABLE",
+      selectedObjectIds: context?.selectedObjectIds ?? [],
+      projectRevision: context?.projectRevision ?? "NOT_AVAILABLE",
+      payloadTier:
+        context?.contextualEditHint === true
+          ? "contextual-expression-edit"
+          : "standard",
+    },
+    "run-trace": {
+      run: data.run,
+      intent: data.understanding,
+      resolution: data.targetResolution,
+      trace: data.trace,
+      qa: (data.qa as Data[]).map((q) => ({
+        attempt: q.attempt,
+        report: q.report,
+      })),
+      reconciliation: (data.run as Data)?.outcome,
+    },
+    "state-diff": data.stateChanges,
+    versions: await codeVersions(),
+  };
+  for (const [name, value] of Object.entries(entries)) {
+    const safe = JSON.stringify(redact(value), null, 2).replace(
+      /\/(?:Users|private|tmp)\/[^\s"']+/g,
+      "[REDACTED_LOCAL_PATH]",
+    );
+    zip.file(
+      name + ".json",
+      Buffer.byteLength(safe) <= 2 * 1024 * 1024
+        ? safe
+        : JSON.stringify({
+            status: "NOT_AVAILABLE",
+            reason: "DIAGNOSTIC_SIZE_LIMIT",
+          }),
+    );
+  }
+  zip.file(
+    "README.md",
+    "Project Diagnostic Bundle v1\nCurrent state is authoritative. Recent actions derive only from effective committed history. No binary media, assets, full SVG or authentication material are included. Missing historical provenance is marked NOT_AVAILABLE.\n",
+  );
+  return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+}

@@ -291,7 +291,13 @@ export function inspectSemanticCoverage(
     if (
       techs.length &&
       !targetIds.length &&
-      rs.filter((r) => !r.unresolvedReason).length > 1
+      rs.filter((r) => !r.unresolvedReason).length > 1 &&
+      !(
+        rs.every(
+          (r) =>
+            r.selectionRequirementId && r.selector && r.expressionIds?.length,
+        ) && new Set(rs.map((r) => r.selectionRequirementId)).size === 1
+      )
     )
       issue(
         "AMBIGUOUS_CLAUSE_LINKAGE",

@@ -107,3 +107,11 @@ export const inertiaIntensityDefaults = {
   normal: { amplitude: 0.25, frequency: 2.5, decay: 3 },
   strong: { amplitude: 0.4, frequency: 2.5, decay: 3 },
 } as const;
+export const relativeIntensityFactors = {
+  slightlyWeaker: 0.8,
+  weaker: 0.5,
+  muchWeaker: 0.25,
+  slightlyStronger: 1.2,
+  stronger: 1.6,
+  muchStronger: 2,
+} as const;

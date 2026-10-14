@@ -38,6 +38,41 @@ export const intentRequirementSchema = z
       })
       .strict(),
     techniques: z.array(intentTechnique).max(8),
+    selector: z
+      .object({
+        type: z.enum([
+          "explicitObject",
+          "currentSelection",
+          "recentSuccessfulTargets",
+          "byExistingEffect",
+          "byAnimatedProperty",
+          "byScene",
+          "filteredSet",
+        ]),
+        base: z
+          .enum(["project", "recentSuccessfulTargets", "currentSelection"])
+          .optional(),
+        effect: z
+          .enum([
+            "inertialOvershoot",
+            "wiggle",
+            "dampedOscillation",
+            "spring",
+            "bounce",
+            "loop",
+          ])
+          .optional(),
+        sceneId: z.string().nullable().optional(),
+        property: z
+          .enum(["x", "y", "scaleX", "scaleY", "opacity", "rotation"])
+          .optional(),
+        targetIds: z.array(z.string()).max(200).optional(),
+      })
+      .strict()
+      .optional(),
+    selectionRequirementId: z.string().optional(),
+    expressionIds: z.array(z.string()).max(5000).optional(),
+    expressionAction: z.enum(["update", "remove"]).optional(),
     parameters: z
       .object({
         property: z
@@ -68,6 +103,16 @@ export const intentRequirementSchema = z
         easing: easingSchema.nullable(),
         durationFactor: z.number().positive().max(10).nullable(),
         amplitudeFactor: z.number().min(0).max(10).nullable(),
+        relativeIntensity: z
+          .enum([
+            "slightlyWeaker",
+            "weaker",
+            "muchWeaker",
+            "slightlyStronger",
+            "stronger",
+            "muchStronger",
+          ])
+          .optional(),
       })
       .strict(),
     timing: z

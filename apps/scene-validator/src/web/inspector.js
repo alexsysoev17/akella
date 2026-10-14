@@ -12,7 +12,7 @@ export function attachInspector(container, url) {
   panel.className = "agent-inspector";
   panel.hidden = true;
   panel.setAttribute("aria-label", "Agent Inspector");
-  panel.innerHTML = `<div class="inspector-resize" role="separator" aria-label="Ширина Inspector" tabindex="0"></div><header><strong>Agent Inspector</strong><button data-close aria-label="Закрыть">×</button></header><select aria-label="История запусков"></select><div class="inspector-tabs" role="tablist">${["Обзор", "Понимание", "Действия", "QA", "Данные"].map((t, i) => `<button role="tab" data-tab="${i}">${t}</button>`).join("")}</div><div class="inspector-body"></div><footer><button data-copy>Скопировать отчёт</button><button data-zip>Скачать ZIP</button><span role="status"></span></footer>`;
+  panel.innerHTML = `<div class="inspector-resize" role="separator" aria-label="Ширина Inspector" tabindex="0"></div><header><strong>Agent Inspector</strong><button data-close aria-label="Закрыть">×</button></header><select aria-label="История запусков"></select><div class="inspector-tabs" role="tablist">${["Обзор", "Понимание", "Действия", "QA", "Данные"].map((t, i) => `<button role="tab" data-tab="${i}">${t}</button>`).join("")}</div><div class="inspector-body"></div><footer><button data-copy>Скопировать отчёт</button><button data-zip>Скачать ZIP</button><button data-project-zip>Диагностика проекта</button><span role="status"></span></footer>`;
   container.append(panel);
   const select = panel.querySelector("select"),
     body = panel.querySelector(".inspector-body"),
@@ -97,7 +97,7 @@ export function attachInspector(container, url) {
       body.innerHTML =
         "<h3>Требования и привязки объектов</h3>" +
         block(
-          "Разрешение объектов и существующие анимации",
+          "Разрешение объектов, селекторов и контекстных ссылок",
           data.targetResolution,
         ) +
         (Array.isArray(requirements)
@@ -257,6 +257,9 @@ export function attachInspector(container, url) {
       a.download = "agent-" + selectedId + ".zip";
       a.click();
     }
+  };
+  panel.querySelector("[data-project-zip]").onclick = () => {
+    if(selectedId){const a=document.createElement("a");a.href=url+"/inspector/"+selectedId+"/project-bundle";a.download="project-diagnostic-"+selectedId+".zip";a.click();}
   };
   const grip = panel.querySelector(".inspector-resize");
   grip.onpointerdown = (e) => {

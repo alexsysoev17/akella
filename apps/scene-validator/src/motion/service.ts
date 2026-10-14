@@ -1,3 +1,4 @@
+import { selectorContext } from "../harness/selector-context.js";
 import {
   loadProviderSettings,
   saveProviderSettings,
@@ -8,6 +9,7 @@ import { providerIds } from "../harness/providers/index.js";
 import { redact, redactSecrets } from "../harness/security.js";
 import { HarnessRun } from "../harness/runtime.js";
 import { agentContext } from "../harness/context.js";
+import { recentSuccessfulActions } from "./contextual-resolution.js";
 import { RunQA } from "../harness/qa.js";
 import type { HarnessConfig } from "../harness/config.js";
 import { semanticPlan, SemanticCodexProvider } from "./intent/planner.js";
@@ -52,6 +54,7 @@ export const requestSchema = z
     request: z.string().min(1).max(20000),
     mentions: z.array(mentionSchema).max(100).default([]),
     selectedObjectId: z.string().max(180).optional(),
+    selectedObjectIds: z.array(z.string().max(180)).max(200).optional(),
     selectedSceneId: z.string().max(180).optional(),
     activeSceneId: z.string().max(180).optional(),
     settings: providerSettingsSchema,
@@ -213,8 +216,24 @@ export async function proposeMotion(
     );
     let resolution: ReturnType<typeof resolveTarget> | undefined;
     let enrichedContext: Record<string, unknown>;
+    const contextualEditHint =
+      (/колеб|инерц|амплитуд/iu.test(request.request) ||
+        (recentSuccessfulActions(doc).length > 0 &&
+          request.request.length < 120)) &&
+      /слаб|силь|уменьш|убер/iu.test(request.request) &&
+      !/добав|появ|движ|позици|создай|изинг|easing|фейд|fade|trim|масштаб|ключ/iu.test(
+        request.request,
+      );
     const selectedContext = harness
-      ? await agentContext(project, doc.state, request, recent, harness.config)
+      ? contextualEditHint
+        ? await selectorContext(project, doc, request, recent, harness.config)
+        : await agentContext(
+            project,
+            doc.state,
+            request,
+            recent,
+            harness.config,
+          )
       : undefined;
     if (selectedContext) enrichedContext = selectedContext.value;
     else {
@@ -246,6 +265,14 @@ export async function proposeMotion(
           .map((h) => ({ request: h.request, operations: h.operations })),
       };
     }
+    enrichedContext.recentSuccessfulActions ??= recentSuccessfulActions(
+      doc,
+    ).slice(0, 5);
+    enrichedContext.projectRevision = doc.revision;
+    enrichedContext.selectedObjectIds =
+      request.selectedObjectIds ??
+      (request.selectedObjectId ? [request.selectedObjectId] : []);
+    enrichedContext.contextualEditHint = contextualEditHint;
     if (harness && selectedContext) {
       harness.references = [
         ...selectedContext.references,
@@ -324,7 +351,8 @@ export async function proposeMotion(
               (stage.startsWith("coverage") ||
                 stage.startsWith("semantic-retry") ||
                 stage.startsWith("failure") ||
-                stage === "target-resolution")
+                stage === "target-resolution" ||
+                stage === "reference-context")
             )
               await harness.diagnostic(
                 stage.startsWith("coverage")
@@ -342,6 +370,9 @@ export async function proposeMotion(
           },
           {
             auditAlways: false,
+            recentActions: recentSuccessfulActions(doc),
+            projectRevision: doc.revision,
+            selectedObjectIds: request.selectedObjectIds,
             maxAttempts: harness?.config.maxLLMCalls ?? 3,
             motionState: doc.state,
             activeSceneId: request.activeSceneId,

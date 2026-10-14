@@ -7,6 +7,7 @@ import {
   inspectorRun,
   debugReport,
   debugBundle,
+  projectDiagnosticBundle,
 } from "../harness/inspector.js";
 import { candidates } from "../harness/improvements.js";
 import { harnessMetrics } from "../harness/metrics.js";
@@ -75,11 +76,15 @@ export async function motionApi(
     if (action === "inspector") {
       const id = segments[5];
       if (!id) json(await inspectorRuns(project.root));
-      else if (segments[6] === "bundle") {
-        const bytes = await debugBundle(project.root, id);
+      else if (segments[6] === "bundle" || segments[6] === "project-bundle") {
+        const bytes = await (
+          segments[6] === "project-bundle"
+            ? projectDiagnosticBundle
+            : debugBundle
+        )(project.root, id);
         response.writeHead(200, {
           "Content-Type": "application/zip",
-          "Content-Disposition": `attachment; filename="agent-${z.uuid().parse(id)}.zip"`,
+          "Content-Disposition": `attachment; filename="${segments[6] === "project-bundle" ? "project-diagnostic" : "agent"}-${z.uuid().parse(id)}.zip"`,
           "Cache-Control": "no-store",
         });
         response.end(bytes);

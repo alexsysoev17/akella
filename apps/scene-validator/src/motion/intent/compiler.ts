@@ -336,6 +336,7 @@ export function compileRequirement(
             own(e) &&
             e.enabled &&
             r.techniques.includes(e.type as IntentTechnique) &&
+            (!r.expressionIds || r.expressionIds.includes(e.expressionId)) &&
             (!r.parameters.property || e.property === r.parameters.property),
         ) ?? [];
       if (!targets.length && !expressions.length && !hasInertia)
@@ -422,6 +423,13 @@ export function compileRequirement(
         }
       }
       for (const e of expressions) {
+        if (r.expressionAction === "remove") {
+          operations.push({
+            type: "removeExpression",
+            expressionId: e.expressionId,
+          });
+          continue;
+        }
         const updated = [...operations]
           .reverse()
           .find(
@@ -469,7 +477,12 @@ export function compileRequirement(
           next.parameters.decay = r.parameters.decay;
         operations.push({ type: "setExpression", expression: next });
       }
-      if (hasInertia) {
+      if (
+        hasInertia &&
+        r.expressionAction !== "remove" &&
+        !r.expressionIds &&
+        (targets.length > 0 || !expressions.length)
+      ) {
         const candidate = applyOperations(state, operations, project);
         operations.push(...compileInertiaAttachments(candidate, r, true));
       }

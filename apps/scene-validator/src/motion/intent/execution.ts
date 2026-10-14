@@ -90,6 +90,7 @@ export function assertIntentScope(
   );
   const exprAllowed = (e: NonNullable<MotionState["expressions"]>[number]) =>
     own(e) &&
+    (!r.expressionIds || r.expressionIds.includes(e.expressionId)) &&
     (r.techniques.includes(e.type as (typeof r.techniques)[number]) ||
       ("sourceAnimationId" in e && allowedIds.has(e.sourceAnimationId)));
   baseline.expressions = [
@@ -140,6 +141,34 @@ export function requirementChecks(
   plan: IntentPlan,
   previous?: MotionState,
 ) {
+  if (r.expressionAction === "remove") {
+    const ids =
+      r.expressionIds ??
+      previous?.expressions
+        ?.filter(
+          (e) =>
+            e.sceneId === r.sceneId &&
+            e.targetId === r.target.sourceNodeId &&
+            r.techniques.includes(
+              e.type as IntentRequirement["techniques"][number],
+            ),
+        )
+        .map((e) => e.expressionId) ??
+      [];
+    return [
+      {
+        name: "existingExpressionRemoved",
+        requirementId: r.requirementId,
+        status:
+          ids.length &&
+          ids.every(
+            (id) => !state.expressions?.some((e) => e.expressionId === id),
+          )
+            ? "PASSED"
+            : "FAILED",
+      },
+    ];
+  }
   const checks = validateRequirement(state, r).map((c) => ({
     ...c,
     requirementId: r.requirementId,
@@ -188,6 +217,7 @@ export function requirementChecks(
       if (
         old.sceneId !== r.sceneId ||
         old.targetId !== r.target.sourceNodeId ||
+        (r.expressionIds && !r.expressionIds.includes(old.expressionId)) ||
         !r.techniques.includes(old.type as (typeof r.techniques)[number])
       )
         continue;
@@ -535,6 +565,7 @@ export async function runIntentTasks(
           );
         if (generated.status !== "ready" || !generated.operations.length)
           throw new Error("Requirement produced no executable operations");
+        task.generatedOperations = generated.operations;
         let next: MotionState;
         try {
           next = applyOperations(current, generated.operations, project);
@@ -663,7 +694,12 @@ export async function runIntentTasks(
                 ? "See local geometry report"
                 : c.metrics,
           }));
-        const failureReason = String(error),
+        const failureReason =
+            (error instanceof Error &&
+            "code" in error &&
+            error.code === "STALE_PROJECT_REVISION"
+              ? "STALE_PROJECT_REVISION: "
+              : "") + String(error),
           signature = JSON.stringify({
             failureReason,
             failedChecks,
@@ -750,6 +786,17 @@ export async function runIntentTasks(
   });
   const completed = requirements.filter((r) => r.status === "PASSED").length;
   const reconciliation = {
+    userIntentCount: new Set(
+      plan.requirements.map((r) => r.selectionRequirementId ?? r.requirementId),
+    ).size,
+    selectedObjectCount: new Set(
+      plan.requirements
+        .filter((r) => r.target.sourceNodeId)
+        .map((r) => r.sceneId + "/" + r.target.sourceNodeId),
+    ).size,
+    selectedExpressionCount: new Set(
+      plan.requirements.flatMap((r) => r.expressionIds ?? []),
+    ).size,
     requested: requirements.length,
     completed,
     qaPassed: requirements.filter(
@@ -759,6 +806,12 @@ export async function runIntentTasks(
     ).length,
     taskCount: tasks.length,
     operationCount: plans.reduce((n, p) => n + p.operations.length, 0),
+    compiledOperationCount: tasks.reduce(
+      (n, t) => n + (t.generatedOperations?.length ?? 0),
+      0,
+    ),
+    appliedOperationCount: plans.reduce((n, p) => n + p.operations.length, 0),
+    successfulRequirementCount: completed,
     status:
       completed === requirements.length
         ? "SUCCESS"
@@ -774,7 +827,9 @@ export async function runIntentTasks(
     next: current,
     plan: {
       status: completed ? "ready" : "unsupported",
-      summary: `Выполнено ${completed} из ${requirements.length} требований.`,
+      summary: plan.requirements.some((r) => r.selectionRequirementId)
+        ? `Изменено ${completed} из ${requirements.length} объектных задач. Пользовательских требований: ${reconciliation.userIntentCount}.`
+        : `Выполнено ${completed} из ${requirements.length} требований.`,
       assumptions: plan.assumptions,
       warnings: requirements
         .filter((r) => r.status !== "PASSED")

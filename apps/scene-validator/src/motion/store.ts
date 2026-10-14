@@ -109,8 +109,11 @@ export async function changeMotion(
     )
       throw new Error("Исходный дизайн изменился во время выполнения задачи");
     if (input.expectedRevision !== doc.revision)
-      throw new Error(
-        "Анимация уже изменилась. Обновите страницу и повторите правку.",
+      throw Object.assign(
+        new Error(
+          "Анимация уже изменилась. Обновите страницу и повторите правку.",
+        ),
+        { code: "STALE_PROJECT_REVISION" },
       );
     const before = structuredClone(doc.state);
     if (input.action) {
