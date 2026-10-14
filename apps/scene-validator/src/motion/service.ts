@@ -200,15 +200,22 @@ export async function proposeMotion(
     return dir;
   };
   try {
-    const recent = doc.history
-      .slice(0, doc.cursor)
-      .slice(-8)
-      .map((h) => ({
-        request: h.request,
-        selectedObjectId: undefined as string | undefined,
-        selectedSceneId: undefined as string | undefined,
-        assumptions: h.assumptions,
-      }));
+    const recent = [
+      ...new Map(
+        doc.history.slice(0, doc.cursor).map((h) => {
+          const run = h.request.match(/^\[([a-f0-9-]{36})\//)?.[1];
+          return [
+            run ?? h.editId,
+            {
+              request: h.request.replace(/^\[[^\]]+\]\s*/, ""),
+              assumptions: h.assumptions,
+              selectedObjectId: undefined as string | undefined,
+              selectedSceneId: undefined as string | undefined,
+            },
+          ];
+        }),
+      ).values(),
+    ].slice(-4);
     request.mentions = validateMentions(
       project,
       request.request,

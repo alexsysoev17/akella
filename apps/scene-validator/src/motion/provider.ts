@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { redactSecrets } from "../harness/security.js";
 import {
   createProvider,
@@ -49,6 +50,49 @@ export function compatibleSchema(value: unknown): unknown {
     result.additionalProperties = false;
   }
   return result;
+}
+/** Undo only the optional-to-null adaptation performed by compatibleSchema.
+ * Required nullable values remain null; invalid enums remain invalid. */
+export function normalizeProviderOutput(
+  value: unknown,
+  schema: unknown,
+  root = schema,
+): unknown {
+  if (!schema || typeof schema !== "object") return value;
+  const shape = schema as Record<string, unknown>;
+  if (typeof shape.$ref === "string" && shape.$ref.startsWith("#/")) {
+    let resolved: unknown = root;
+    for (const part of shape.$ref.slice(2).split("/"))
+      resolved = (resolved as Record<string, unknown>)?.[
+        part.replace(/~1/g, "/").replace(/~0/g, "~")
+      ];
+    return normalizeProviderOutput(value, resolved, root);
+  }
+  if (Array.isArray(value) && shape.items)
+    return value.map((v) => normalizeProviderOutput(v, shape.items, root));
+  if (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    shape.properties
+  ) {
+    const properties = shape.properties as Record<string, unknown>;
+    const required = new Set(
+      Array.isArray(shape.required) ? shape.required : [],
+    );
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(
+          ([key, v]) =>
+            !(v === null && key in properties && !required.has(key)),
+        )
+        .map(([key, v]) => [
+          key,
+          normalizeProviderOutput(v, properties[key], root),
+        ]),
+    );
+  }
+  return value;
 }
 export const outputSchema = compatibleSchema(
   z.toJSONSchema(planSchema, { io: "output", reused: "ref" }),
@@ -113,6 +157,7 @@ export class AIClient implements AIProvider {
       signal: AbortSignal;
       providerTimeoutMs: number;
       maxOutputTokens: number;
+      privacy?: "full" | "metadata" | "off";
     },
   ) {
     this.settings = parseProviderSettings(settings, "AIClient");
@@ -144,9 +189,11 @@ export class AIClient implements AIProvider {
     if (compact.length > 300000)
       throw new Error("Контекст превышает 300 КБ; данные не обрезаны");
     const prompt = instructions + "\nCONTEXT JSON:\n" + compact;
-    const responseSchema = compatibleSchema(
-      z.toJSONSchema(schema, { io: "output", reused: "ref" }),
-    );
+    const runtimeSchema = z.toJSONSchema(schema, {
+      io: "output",
+      reused: "ref",
+    });
+    const responseSchema = compatibleSchema(runtimeSchema);
     await writeFile(
       path.join(this.directory, "request.txt"),
       redactSecrets(prompt),
@@ -178,8 +225,62 @@ export class AIClient implements AIProvider {
     const response = this.runtime
       ? await this.runtime.invoke(adapter, input)
       : await adapter.generate(input);
+    const normalized = normalizeProviderOutput(response.output, runtimeSchema);
+    const parsed = schema.safeParse(normalized);
+    const fullDiagnostics = (this.runtime?.privacy ?? "full") === "full";
+    const issues = parsed.success
+      ? []
+      : parsed.error.issues.map((issue) => {
+          let actual: unknown = response.output;
+          for (const key of issue.path)
+            actual =
+              actual && typeof actual === "object"
+                ? (actual as Record<PropertyKey, unknown>)[key]
+                : undefined;
+          return {
+            ...issue,
+            actualValue:
+              actual === undefined
+                ? { kind: "missing" }
+                : {
+                    kind: actual === null ? "null" : "value",
+                    value: fullDiagnostics ? actual : "NOT_AVAILABLE_PRIVACY",
+                  },
+          };
+        });
+    const digest = (v: unknown) =>
+      createHash("sha256").update(JSON.stringify(v)).digest("hex");
+    await writeFile(
+      path.join(this.directory, "contract-validation.json"),
+      redactSecrets(
+        JSON.stringify(
+          {
+            version: "optional-null-v1",
+            callIndex: response.callIndex ?? null,
+            projectRevision:
+              (context as { projectRevision?: string })?.projectRevision ??
+              null,
+            runtimeSchema,
+            responseSchema,
+            runtimeSchemaHash: digest(runtimeSchema),
+            providerSchemaHash: digest(responseSchema),
+            rawOutput: fullDiagnostics
+              ? response.output
+              : "NOT_AVAILABLE_PRIVACY",
+            normalizedOutput: fullDiagnostics
+              ? normalized
+              : "NOT_AVAILABLE_PRIVACY",
+            validation: parsed.success
+              ? { status: "PASSED" }
+              : { status: "FAILED", issues },
+          },
+          null,
+          2,
+        ),
+      ),
+    );
     try {
-      return schema.parse(response.output);
+      return schema.parse(normalized);
     } catch (e) {
       throw new Error(`INVALID_OUTPUT: ${String(e)}`);
     }

@@ -338,6 +338,9 @@ export async function mountMotion(
         );
       const job = await api("jobs/" + jobId);
       if (job.status === "failed") {
+        executionMessage =
+          "Запрос не выполнен. Изменения этого запроса не подтверждены.";
+        $("m-proposal").textContent = executionMessage;
         data = await api("");
         refresh(true);
         throw new Error(job.error);
@@ -401,6 +404,9 @@ export async function mountMotion(
       return;
     }
     busy = true;
+    executionMessage = "";
+    pendingPlayback = false;
+    $("m-proposal").textContent = "";
     $("m-generate").disabled = true;
     $("m-job").textContent = "Понимаем запрос…";
     try {

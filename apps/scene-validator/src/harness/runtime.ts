@@ -262,7 +262,7 @@ export class HarnessRun {
       )
         throw new BudgetError("COST_BUDGET");
       this.checkpoint();
-      return result;
+      return { ...result, callIndex: this.calls.indexOf(call) + 1 };
     } catch (e) {
       call.status = String(e);
       throw e;
@@ -289,6 +289,7 @@ export class HarnessRun {
       signal: this.signal,
       providerTimeoutMs: this.config.providerTimeoutMs,
       maxOutputTokens: this.config.maxOutputTokens,
+      privacy: this.config.privacy,
     };
   }
   beforeRender() {

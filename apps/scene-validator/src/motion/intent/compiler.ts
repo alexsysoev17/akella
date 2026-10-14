@@ -276,6 +276,31 @@ export function compileRequirement(
       ),
     );
 
+    // An additional entrance Fade follows the actual base movement, not inertia.
+    if (
+      r.kind === "objectAnimation" &&
+      r.techniques.length === 1 &&
+      r.techniques[0] === "fadeIn"
+    ) {
+      const entrances = state.animations.filter(
+        (a) =>
+          a.enabled &&
+          a.sceneId === r.sceneId &&
+          a.targetId === r.target.sourceNodeId &&
+          ((a.effect.startsWith("slide") &&
+            "mode" in a.parameters &&
+            a.parameters.mode === "in") ||
+            a.effect === "moveTo"),
+      );
+      if (entrances.length > 1) throw new Error("AMBIGUOUS_ENTRANCE_TIMING");
+      if (entrances[0]) {
+        if (r.timing.startSeconds === null)
+          start =
+            entrances[0].startFrame + Math.round(r.timing.delaySeconds * fps);
+        if (r.parameters.durationSeconds === null)
+          duration = entrances[0].durationFrames;
+      }
+    }
     const hasInertia = r.techniques.includes("inertialOvershoot");
     if (
       r.techniques.includes("objectStateTransition") &&
@@ -521,6 +546,18 @@ export function compileRequirement(
       }
       for (const effect of requested) {
         const old = state.animations.find((a) => own(a) && a.effect === effect);
+        if (
+          effect === "fadeIn" &&
+          state.animations.some(
+            (a) =>
+              own(a) &&
+              a.animationId !== old?.animationId &&
+              channels(a).includes("opacity") &&
+              a.startFrame < start + duration &&
+              a.startFrame + a.durationFrames > start,
+          )
+        )
+          throw new Error("OPACITY_ENTRANCE_CONFLICT");
         const animationId =
           old?.animationId ??
           "intent_" + stable([r.sceneId, r.target.sourceNodeId, effect]);
@@ -647,6 +684,7 @@ export function compileRequirement(
         for (const previous of state.animations.filter(
           (previous) =>
             own(previous) &&
+            (effect !== "fadeIn" || previous.animationId === a.animationId) &&
             (channels(previous).some((c) => writes.includes(c)) ||
               (effect === "trimPath" &&
                 /reveal|ribbon|trim/i.test(previous.animationId) &&

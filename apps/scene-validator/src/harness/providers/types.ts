@@ -22,6 +22,8 @@ export interface ProviderRequest {
   tools?: { name: string; description: string; parameters: unknown }[];
 }
 export interface ProviderResponse {
+  /** Assigned by Harness, never by the model. */
+  callIndex?: number;
   output: unknown;
   usage: ProviderUsage | null;
   estimatedCost: number | null;

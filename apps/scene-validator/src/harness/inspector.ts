@@ -545,7 +545,50 @@ export async function projectDiagnosticBundle(root: string, id: string) {
           (e.data as Data)?.phase === "reference-context",
       )?.data?.report
     : undefined;
+  const attemptRoot = within(root, `motion/ai/${z.uuid().parse(id)}`);
+  await noSymlinkPath(root, attemptRoot);
+  const attempts = [];
+  for (const name of (await readdir(attemptRoot))
+    .filter((n) => /^semantic-(interpret|audit)(-\d+)?$/.test(n))
+    .sort()
+    .slice(0, 6)) {
+    const inputPath = within(root, `motion/ai/${id}/${name}/request.txt`);
+    await noSymlinkPath(root, inputPath);
+    let inputPayload: unknown = "NOT_AVAILABLE_PRIVACY";
+    if (full) {
+      try {
+        inputPayload =
+          (await stat(inputPath)).size <= LIMIT
+            ? await readFile(inputPath, "utf8")
+            : {
+                status: "TRUNCATED",
+                reason: "FILE_SIZE_LIMIT",
+                localArtifact: `motion/ai/${id}/${name}/request.txt`,
+              };
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+        inputPayload = "NOT_AVAILABLE";
+      }
+    }
+    attempts.push({
+      callIndex:
+        "See contract.callIndex or provider-started trace; historical order NOT_AVAILABLE",
+      callDirectory: name,
+      inputPayload,
+      contract: full
+        ? await saved(root, `motion/ai/${id}/${name}/contract-validation.json`)
+        : "NOT_AVAILABLE_PRIVACY",
+      providerSchema: await saved(
+        root,
+        `motion/ai/${id}/${name}/output-schema.json`,
+      ),
+      rawOutput: full
+        ? await saved(root, `motion/ai/${id}/${name}/raw-response.json`)
+        : "NOT_AVAILABLE_PRIVACY",
+    });
+  }
   const entries = {
+    "planning-attempts": { runId: id, currentRevision: doc.revision, attempts },
     manifest: {
       projectId: project.config.projectId,
       revision: doc.revision,
@@ -616,6 +659,8 @@ export async function projectDiagnosticBundle(root: string, id: string) {
         : JSON.stringify({
             status: "NOT_AVAILABLE",
             reason: "DIAGNOSTIC_SIZE_LIMIT",
+            truncated: true,
+            localArtifact: `motion/ai/${id}/`,
           }),
     );
   }
