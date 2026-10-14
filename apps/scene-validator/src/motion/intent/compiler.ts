@@ -1,3 +1,4 @@
+import { offscreenDistance } from "./entrance.js";
 import {
   semanticBindings,
   isCustomEasing,
@@ -216,6 +217,25 @@ export function requirementEasing(r: IntentRequirement): Easing | undefined {
   }
   return r.parameters.easing ?? undefined;
 }
+export function requirementAnchor(
+  state: MotionState,
+  requirement: IntentRequirement | undefined,
+): Animation | undefined {
+  const referenced = requirement
+    ? requirementAnimations(state, requirement)
+    : [];
+  const movement = referenced.filter(
+    (a) => a.effect !== "fadeIn" && a.effect !== "fadeOut",
+  );
+  const anchors = movement.length ? movement : referenced;
+  if (
+    new Set(
+      anchors.map((a) => JSON.stringify([a.startFrame, a.durationFrames])),
+    ).size > 1
+  )
+    throw new Error("AMBIGUOUS_ANCHOR_TIMING");
+  return anchors.sort((a, b) => a.animationId.localeCompare(b.animationId))[0];
+}
 export function compileRequirement(
   project: LoadedProject,
   state: MotionState,
@@ -245,16 +265,7 @@ export function compileRequirement(
     const anchorReq = plan.requirements.find(
       (x) => x.requirementId === r.timing.anchorRequirementId,
     );
-    const anchor = anchorReq
-      ? state.animations.find(
-          (a) =>
-            a.sceneId === anchorReq.sceneId &&
-            a.targetId === anchorReq.target.sourceNodeId &&
-            a.enabled &&
-            a.effect !== "fadeIn" &&
-            a.effect !== "fadeOut",
-        )
-      : undefined;
+    const anchor = requirementAnchor(state, anchorReq);
     if (r.timing.anchorRequirementId && !anchor)
       throw new Error("Anchor requirement has no persisted base action");
     const fps = state.settings.fps;
@@ -600,7 +611,22 @@ export function compileRequirement(
           a = {
             ...common,
             effect: effect as "slideUp",
-            parameters: { distance: r.parameters.distance ?? 80, mode: "in" },
+            parameters: {
+              distance:
+                r.parameters.distance ??
+                (r.parameters.entrance === "offscreen" ||
+                /из[- ]за\s+кадра|offscreen|за\s+пределами\s+кадра/iu.test(
+                  r.sourceText,
+                )
+                  ? offscreenDistance(
+                      project,
+                      r.sceneId!,
+                      r.target.sourceNodeId!,
+                      effect,
+                    )
+                  : 80),
+              mode: "in",
+            },
           };
         else if (effect === "fadeIn" || effect === "fadeOut")
           a = {

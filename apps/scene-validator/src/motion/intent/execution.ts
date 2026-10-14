@@ -6,6 +6,7 @@ import type { MotionState, Plan } from "../schema.js";
 import type { IntentPlan, IntentRequirement } from "./schema.js";
 import {
   requirementAnimations,
+  requirementAnchor,
   compileTasks,
   compileRequirement,
   validateRequirement,
@@ -354,15 +355,7 @@ export function requirementChecks(
     const anchorReq = plan.requirements.find(
       (x) => x.requirementId === r.timing.anchorRequirementId,
     );
-    const anchor = anchorReq
-      ? state.animations.find(
-          (a) =>
-            a.enabled &&
-            a.sceneId === anchorReq.sceneId &&
-            a.targetId === anchorReq.target.sourceNodeId &&
-            !a.effect.startsWith("fade"),
-        )
-      : undefined;
+    const anchor = requirementAnchor(state, anchorReq);
     const delay = Math.round(r.timing.delaySeconds * state.settings.fps);
     const expected =
       r.timing.startSeconds !== null
@@ -785,9 +778,32 @@ export async function runIntentTasks(
     };
   });
   const completed = requirements.filter((r) => r.status === "PASSED").length;
+  const semanticActionIds = [
+    ...new Set(
+      plan.requirements.map(
+        (r) =>
+          r.semanticActionId ?? r.selectionRequirementId ?? r.requirementId,
+      ),
+    ),
+  ];
+  const completedActions = semanticActionIds.filter((id) =>
+    requirements
+      .filter(
+        (r) =>
+          (r.semanticActionId ??
+            r.selectionRequirementId ??
+            r.requirementId) === id,
+      )
+      .every((r) => r.status === "PASSED"),
+  ).length;
   const reconciliation = {
+    semanticActionCount: semanticActionIds.length,
+    completedSemanticActionCount: completedActions,
     userIntentCount: new Set(
-      plan.requirements.map((r) => r.selectionRequirementId ?? r.requirementId),
+      plan.requirements.map(
+        (r) =>
+          r.semanticActionId ?? r.selectionRequirementId ?? r.requirementId,
+      ),
     ).size,
     selectedObjectCount: new Set(
       plan.requirements
@@ -827,9 +843,11 @@ export async function runIntentTasks(
     next: current,
     plan: {
       status: completed ? "ready" : "unsupported",
-      summary: plan.requirements.some((r) => r.selectionRequirementId)
-        ? `Изменено ${completed} из ${requirements.length} объектных задач. Пользовательских требований: ${reconciliation.userIntentCount}.`
-        : `Выполнено ${completed} из ${requirements.length} требований.`,
+      summary: plan.requirements.some((r) => r.semanticActionId)
+        ? `Выполнено ${completedActions} из ${semanticActionIds.length} действий; ${completed} из ${requirements.length} требований.`
+        : plan.requirements.some((r) => r.selectionRequirementId)
+          ? `Изменено ${completed} из ${requirements.length} объектных задач. Пользовательских требований: ${reconciliation.userIntentCount}.`
+          : `Выполнено ${completed} из ${requirements.length} требований.`,
       assumptions: plan.assumptions,
       warnings: requirements
         .filter((r) => r.status !== "PASSED")
@@ -840,5 +858,74 @@ export async function runIntentTasks(
         .slice(0, 50),
       operations: plans.flatMap((p) => p.operations),
     } as Plan,
+  };
+}
+
+/** Full deterministic candidate preflight; no persistence, renderer or provider call. */
+export function preflightIntentPlan(
+  project: LoadedProject,
+  state: MotionState,
+  input: IntentPlan,
+) {
+  const plan = expandInheritance(input),
+    tasks = compileTasks(project, plan),
+    done = new Set<string>();
+  let candidate = structuredClone(state);
+  const reports: unknown[] = [];
+  while (done.size < tasks.length) {
+    const task = tasks.find(
+      (t) => !done.has(t.taskId) && t.dependencies.every((id) => done.has(id)),
+    );
+    if (!task)
+      throw Object.assign(
+        new Error("INTENT_PREFLIGHT_FAILED: dependency cycle"),
+        { report: { status: "FAILED", reports } },
+      );
+    try {
+      if (task.status === "BLOCKED")
+        throw new Error(task.error ?? "UNSUPPORTED_REQUIREMENT");
+      const compiled = compileRequirement(project, candidate, plan, task),
+        next = applyOperations(candidate, compiled.operations, project);
+      assertIntentScope(project, candidate, next, plan, task);
+      const checks = plan.requirements
+        .filter((r) => task.requirementIds.includes(r.requirementId))
+        .flatMap((r) => requirementChecks(next, r, plan, candidate));
+      if (checks.some((c) => c.status === "FAILED"))
+        throw Object.assign(new Error("REQUIREMENT_OPERATIONS_INCOMPLETE"), {
+          checks,
+        });
+      reports.push({
+        taskId: task.taskId,
+        requirementIds: task.requirementIds,
+        operations: compiled.operations,
+        checks,
+        status: "PASSED",
+      });
+      candidate = next;
+      done.add(task.taskId);
+    } catch (error) {
+      throw Object.assign(
+        new Error(
+          `INTENT_PREFLIGHT_FAILED: ${task.targetReference.name}: ${String(error)}`,
+        ),
+        {
+          report: {
+            status: "FAILED",
+            taskId: task.taskId,
+            reports,
+            failure: String(error),
+            checks: (error as { checks?: unknown }).checks,
+          },
+        },
+      );
+    }
+  }
+  return {
+    status: "PASSED",
+    tasks: reports,
+    operationCount: reports.reduce<number>(
+      (n, r) => n + (r as { operations: unknown[] }).operations.length,
+      0,
+    ),
   };
 }

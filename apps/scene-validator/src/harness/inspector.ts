@@ -224,6 +224,40 @@ export async function inspectorRun(root: string, id: string, raw = false) {
   const received = Array.isArray(trace)
     ? trace.find((e) => e.stage === "received")?.data
     : undefined;
+  const contract = (
+    tasks as { contract?: { requirements?: Data[]; sourceClauses?: unknown } }
+  )?.contract;
+  const semanticTaskGraph = contract?.requirements
+    ? {
+        sourceClauses: contract.sourceClauses ?? "LEGACY_VERBATIM_PROVENANCE",
+        actions: [
+          ...new Set(
+            contract.requirements.map(
+              (r) => r.semanticActionId ?? r.requirementId,
+            ),
+          ),
+        ].map((actionId) => ({
+          actionId,
+          requirements: contract
+            .requirements!.filter(
+              (r) => (r.semanticActionId ?? r.requirementId) === actionId,
+            )
+            .map((r) => ({
+              requirementId: r.requirementId,
+              sourceClauseId: r.sourceClauseId ?? null,
+              sourceText: r.sourceText,
+              target: r.target,
+              sceneId: r.sceneId,
+              techniques: r.techniques,
+              timing: r.timing,
+              inheritFromRequirementId: r.inheritFromRequirementId,
+            })),
+        })),
+      }
+    : "NOT_AVAILABLE";
+  const preflight = full
+    ? await saved(root, `motion/ai/${id}/compilation-preflight.json`)
+    : "NOT_AVAILABLE_PRIVACY";
   const view = clean({
     run: raw ? run : { ...run, result: undefined },
     trace,
@@ -258,6 +292,8 @@ export async function inspectorRun(root: string, id: string, raw = false) {
       : "NOT_AVAILABLE",
     request,
     understanding: tasks,
+    semanticTaskGraph,
+    compilationPreflight: preflight,
     stateChanges: changes,
     stateChangeAvailability:
       typeof doc === "object" && Array.isArray(doc.history)
@@ -636,6 +672,8 @@ export async function projectDiagnosticBundle(root: string, id: string) {
     "run-trace": {
       run: data.run,
       intent: data.understanding,
+      semanticTaskGraph: data.semanticTaskGraph,
+      compilationPreflight: data.compilationPreflight,
       resolution: data.targetResolution,
       trace: data.trace,
       qa: (data.qa as Data[]).map((q) => ({

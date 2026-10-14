@@ -9,7 +9,8 @@ import type { MotionState } from "../motion/schema.js";
 import { buildContext, objectsIn } from "../motion/context.js";
 import { motionKnowledge } from "../motion-library/knowledge.js";
 import { capabilityCatalog } from "../motion-library/registry/capabilities.js";
-import { semanticInstructions } from "../motion/intent/planner.js";
+import { graphInstructions } from "../motion/intent/graph.js";
+import { selectorEditInstructions } from "../motion/intent/selector-schema.js";
 import { experienceSearch } from "./experience.js";
 import type { HarnessConfig } from "./config.js";
 export const digest = (v: unknown) =>
@@ -41,9 +42,10 @@ export async function agentContext(
   // Scene declarations and structured selection are authoritative. Ambiguous cross-scene
   // names use the active scene; the complete compact index still exposes every local object.
   const explicitScenes = catalog.filter((scene) =>
-    new RegExp(`(?:сцен[аыуе]?|scene)\\s*${scene.index + 1}(?!\\d)`, "i").test(
-      input.request,
-    ),
+    new RegExp(
+      `(?:(?:сцен[аыуе]?|scene)\\s*${scene.index + 1}(?!\\d)|(?<!\\d)${scene.index + 1}\\s*(?:сцен[аыуе]?|scene))`,
+      "i",
+    ).test(input.request),
   );
   explicitScenes.forEach((scene) => named.add(scene.sceneId));
   if (input.selectedObjectId)
@@ -204,7 +206,13 @@ export async function agentContext(
       version: digest(t),
     })),
     { id: "capabilities", version: digest(capabilityCatalog()) },
-    { id: "instructions", version: digest(semanticInstructions) },
+    {
+      id: "instructions",
+      version: digest({
+        graph: graphInstructions,
+        selector: selectorEditInstructions,
+      }),
+    },
     { id: "harness-config", version: digest(config) },
   ];
   const experience = await experienceSearch(

@@ -2,7 +2,15 @@
   "extends": "./tsconfig.json",
   "include": [
     "apps/scene-validator/src/**/*.ts",
-    "apps/scene-validator/tests/**/*.ts"
+    "apps/scene-validator/tests/**/*.ts",
+    "scripts/benchmark.ts",
+    "scripts/replay-agent-run.ts",
+    "scripts/harness-fixtures.ts",
+    "scripts/benchmark-report.ts"
   ],
-  "exclude": []
+  "exclude": [],
+  "compilerOptions": {
+    "rootDir": ".",
+    "allowImportingTsExtensions": true
+  }
 }

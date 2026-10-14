@@ -24,7 +24,13 @@
     "render:object": "node --import tsx scripts/render-object.ts",
     "verify:rendering": "node --import tsx scripts/verify-rendering.ts",
     "compare:ae": "node --import tsx scripts/compare-ae-reference.ts",
-    "eval:core-inertia": "node --import tsx scripts/eval-core-inertia.ts"
+    "eval:core-inertia": "node --import tsx scripts/eval-core-inertia.ts",
+    "benchmark:quick": "node --import tsx scripts/benchmark.ts --cases NEW_09_COMPOUND,NEW_10_GROUP,EDIT_03_ADD_FADE,CONTEXT_01,EDGE_03_MISSING_FADE",
+    "benchmark": "node --import tsx scripts/benchmark.ts",
+    "benchmark:live": "node --import tsx scripts/benchmark.ts --live",
+    "benchmark:replay": "node --import tsx scripts/replay-agent-run.ts",
+    "benchmark:video": "node --import tsx scripts/benchmark.ts --video --cases WORKFLOW_04_EIGHT_OBJECTS,WORKFLOW_05_PATH_SEQUENCE",
+    "benchmark:report": "node --import tsx scripts/benchmark-report.ts"
   },
   "dependencies": {
     "@openai/codex-sdk": "0.162.1",

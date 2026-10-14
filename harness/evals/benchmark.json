@@ -1,0 +1,2635 @@
+{
+  "schemaVersion": "1.0.0",
+  "version": "2026-10-14.semantic-graph.1",
+  "cases": [
+    {
+      "evalId": "NEW_01",
+      "prompt": "QR появляется снизу.",
+      "fixture": "motion",
+      "seed": "none",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "slideUp"
+      ],
+      "checks": [
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "slideUp"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "QR появляется снизу."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "QR"
+            ],
+            "techniques": [
+              "slideUp"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "NEW_02",
+      "prompt": "Phone появляется справа.",
+      "fixture": "motion",
+      "seed": "none",
+      "target": "phone",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "slideLeft"
+      ],
+      "checks": [
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "phone",
+          "scene": "s0",
+          "techniques": [
+            "slideLeft"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Phone появляется справа."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "Phone"
+            ],
+            "techniques": [
+              "slideLeft"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "NEW_03",
+      "prompt": "Text появляется сверху.",
+      "fixture": "motion",
+      "seed": "none",
+      "target": "text",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "slideDown"
+      ],
+      "checks": [
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "text",
+          "scene": "s0",
+          "techniques": [
+            "slideDown"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Text появляется сверху."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "Text"
+            ],
+            "techniques": [
+              "slideDown"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "NEW_04",
+      "prompt": "QR появляется через Fade.",
+      "fixture": "motion",
+      "seed": "none",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "fadeIn"
+      ],
+      "checks": [
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "fadeIn"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "QR появляется через Fade."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "QR"
+            ],
+            "techniques": [
+              "fadeIn"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "NEW_05",
+      "prompt": "Phone увеличивается при появлении.",
+      "fixture": "motion",
+      "seed": "none",
+      "target": "phone",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "scaleIn"
+      ],
+      "checks": [
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "phone",
+          "scene": "s0",
+          "techniques": [
+            "scaleIn"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Phone увеличивается при появлении."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "Phone"
+            ],
+            "techniques": [
+              "scaleIn"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "NEW_06",
+      "prompt": "Поверни QR на 15 градусов.",
+      "fixture": "motion",
+      "seed": "none",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "rotation"
+      ],
+      "checks": [
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "rotation"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Поверни QR на 15 градусов."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "QR"
+            ],
+            "techniques": [
+              "rotation"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "NEW_07",
+      "prompt": "Прорисуй Vector Line как Trim Paths.",
+      "fixture": "motion",
+      "seed": "none",
+      "target": "line",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "trimPath"
+      ],
+      "checks": [
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "line",
+          "scene": "s0",
+          "techniques": [
+            "trimPath"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Прорисуй Vector Line как Trim Paths."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "Vector Line"
+            ],
+            "techniques": [
+              "trimPath"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "NEW_08",
+      "prompt": "Text исчезает через fade out.",
+      "fixture": "motion",
+      "seed": "none",
+      "target": "text",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "fadeOut"
+      ],
+      "checks": [
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "text",
+          "scene": "s0",
+          "techniques": [
+            "fadeOut"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Text исчезает через fade out."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "Text"
+            ],
+            "techniques": [
+              "fadeOut"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "NEW_09_COMPOUND",
+      "prompt": "QR снизу с фейдом и затухающими колебаниями.",
+      "fixture": "motion",
+      "seed": "none",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "fadeIn",
+        "inertialOvershoot",
+        "slideUp"
+      ],
+      "checks": [
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "slideUp",
+            "fadeIn",
+            "inertialOvershoot"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "QR снизу с фейдом и затухающими колебаниями."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "QR"
+            ],
+            "techniques": [
+              "slideUp",
+              "fadeIn",
+              "inertialOvershoot"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "NEW_10_GROUP",
+      "prompt": "QR и Phone появляются снизу через Fade с инерцией.",
+      "fixture": "motion",
+      "seed": "none",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "fadeIn",
+        "inertialOvershoot",
+        "slideUp"
+      ],
+      "checks": [
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "slideUp",
+            "fadeIn",
+            "inertialOvershoot"
+          ]
+        },
+        {
+          "target": "phone",
+          "scene": "s0",
+          "techniques": [
+            "slideUp",
+            "fadeIn",
+            "inertialOvershoot"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "QR и Phone появляются снизу через Fade с инерцией."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "QR",
+              "Phone"
+            ],
+            "techniques": [
+              "slideUp",
+              "fadeIn",
+              "inertialOvershoot"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "NEW_11_OFFSCREEN",
+      "prompt": "QR появляется снизу из-за кадра через Fade.",
+      "fixture": "motion",
+      "seed": "none",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "fadeIn",
+        "slideUp"
+      ],
+      "checks": [
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "slideUp",
+            "fadeIn"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "QR появляется снизу из-за кадра через Fade."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "QR"
+            ],
+            "techniques": [
+              "slideUp",
+              "fadeIn"
+            ],
+            "parameters": [
+              {
+                "key": "entrance",
+                "value": "offscreen"
+              }
+            ],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "NEW_12_TEXT_COMPOUND",
+      "prompt": "Text появляется сверху с Fade и инерцией.",
+      "fixture": "motion",
+      "seed": "none",
+      "target": "text",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "fadeIn",
+        "inertialOvershoot",
+        "slideDown"
+      ],
+      "checks": [
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "text",
+          "scene": "s0",
+          "techniques": [
+            "slideDown",
+            "fadeIn",
+            "inertialOvershoot"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Text появляется сверху с Fade и инерцией."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "Text"
+            ],
+            "techniques": [
+              "slideDown",
+              "fadeIn",
+              "inertialOvershoot"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "EDIT_01_EASING",
+      "prompt": "Измени easing QR на linear.",
+      "fixture": "motion",
+      "seed": "slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "slideUp"
+      ],
+      "checks": [
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "slideUp"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Измени easing QR на linear."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "editAnimation",
+            "scene": "s0",
+            "targets": [
+              "QR"
+            ],
+            "techniques": [
+              "slideUp"
+            ],
+            "parameters": [
+              {
+                "key": "easing",
+                "value": "linear"
+              }
+            ],
+            "constraints": [],
+            "unresolvedReason": null,
+            "relation": "unchanged"
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "EDIT_02_DURATION",
+      "prompt": "Сделай движение QR вдвое быстрее.",
+      "fixture": "motion",
+      "seed": "linear-slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "slideUp"
+      ],
+      "checks": [
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "slideUp"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Сделай движение QR вдвое быстрее."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "editAnimation",
+            "scene": "s0",
+            "targets": [
+              "QR"
+            ],
+            "techniques": [
+              "slideUp"
+            ],
+            "parameters": [
+              {
+                "key": "durationFactor",
+                "value": 0.5
+              }
+            ],
+            "constraints": [],
+            "unresolvedReason": null,
+            "relation": "unchanged"
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "EDIT_03_ADD_FADE",
+      "prompt": "Добавь QR ещё Fade при появлении.",
+      "fixture": "motion",
+      "seed": "linear-slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "fadeIn"
+      ],
+      "checks": [
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "fadeIn"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Добавь QR ещё Fade при появлении."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "QR"
+            ],
+            "techniques": [
+              "fadeIn"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "EDIT_04_INERTIA",
+      "prompt": "Добавь QR инерцию после движения.",
+      "fixture": "motion",
+      "seed": "linear-slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "inertialOvershoot"
+      ],
+      "checks": [
+        "procedural",
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "inertialOvershoot"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Добавь QR инерцию после движения."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "QR"
+            ],
+            "techniques": [
+              "inertialOvershoot"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "CONTEXT_01",
+      "prompt": "Сделай колебания послабее.",
+      "fixture": "motion",
+      "seed": "inertia",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "inertialOvershoot"
+      ],
+      "checks": [
+        "baseUnchanged",
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "inertialOvershoot"
+          ],
+          "amplitudeFactor": 0.5
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Сделай колебания послабее."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "editAnimation",
+            "scene": "s0",
+            "targets": [],
+            "techniques": [
+              "inertialOvershoot"
+            ],
+            "parameters": [
+              {
+                "key": "amplitudeFactor",
+                "value": 0.5
+              }
+            ],
+            "constraints": [],
+            "unresolvedReason": null,
+            "relation": "unchanged",
+            "selector": {
+              "type": "recentSuccessfulTargets",
+              "effect": "inertialOvershoot"
+            }
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "CONTEXT_02",
+      "prompt": "Ещё слабее.",
+      "fixture": "motion",
+      "seed": "inertia",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "inertialOvershoot"
+      ],
+      "checks": [
+        "baseUnchanged",
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "inertialOvershoot"
+          ],
+          "amplitudeFactor": 0.5
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Ещё слабее."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "editAnimation",
+            "scene": "s0",
+            "targets": [],
+            "techniques": [
+              "inertialOvershoot"
+            ],
+            "parameters": [
+              {
+                "key": "amplitudeFactor",
+                "value": 0.5
+              }
+            ],
+            "constraints": [],
+            "unresolvedReason": null,
+            "relation": "unchanged",
+            "selector": {
+              "type": "recentSuccessfulTargets",
+              "effect": "inertialOvershoot"
+            }
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "CONTEXT_03",
+      "prompt": "Сделай их немного слабее.",
+      "fixture": "motion",
+      "seed": "inertia",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "inertialOvershoot"
+      ],
+      "checks": [
+        "baseUnchanged",
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "inertialOvershoot"
+          ],
+          "amplitudeFactor": 0.8
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Сделай их немного слабее."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "editAnimation",
+            "scene": "s0",
+            "targets": [],
+            "techniques": [
+              "inertialOvershoot"
+            ],
+            "parameters": [
+              {
+                "key": "amplitudeFactor",
+                "value": 0.8
+              }
+            ],
+            "constraints": [],
+            "unresolvedReason": null,
+            "relation": "unchanged",
+            "selector": {
+              "type": "recentSuccessfulTargets",
+              "effect": "inertialOvershoot"
+            }
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "CONTEXT_04",
+      "prompt": "У всех объектов с инерцией уменьши амплитуду вдвое.",
+      "fixture": "motion",
+      "seed": "inertia",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "inertialOvershoot"
+      ],
+      "checks": [
+        "baseUnchanged",
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "inertialOvershoot"
+          ],
+          "amplitudeFactor": 0.5
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "У всех объектов с инерцией уменьши амплитуду вдвое."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "editAnimation",
+            "scene": "s0",
+            "targets": [],
+            "techniques": [
+              "inertialOvershoot"
+            ],
+            "parameters": [
+              {
+                "key": "amplitudeFactor",
+                "value": 0.5
+              }
+            ],
+            "constraints": [],
+            "unresolvedReason": null,
+            "relation": "unchanged",
+            "selector": {
+              "type": "byExistingEffect",
+              "effect": "inertialOvershoot"
+            }
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "EDIT_05_FREQUENCY",
+      "prompt": "Сделай колебания QR в полтора раза чаще.",
+      "fixture": "motion",
+      "seed": "inertia",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "inertialOvershoot"
+      ],
+      "checks": [
+        "frequencyFactor",
+        "baseUnchanged",
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "inertialOvershoot"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Сделай колебания QR в полтора раза чаще."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "editAnimation",
+            "scene": "s0",
+            "targets": [
+              "QR"
+            ],
+            "techniques": [
+              "inertialOvershoot"
+            ],
+            "parameters": [
+              {
+                "key": "frequencyFactor",
+                "value": 1.5
+              }
+            ],
+            "constraints": [],
+            "unresolvedReason": null,
+            "relation": "unchanged"
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "EDIT_06_COMPOUND",
+      "prompt": "Измени easing QR на linear и добавь инерцию после движения.",
+      "fixture": "motion",
+      "seed": "slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "inertialOvershoot",
+        "slideUp"
+      ],
+      "checks": [
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "slideUp",
+            "inertialOvershoot"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Измени easing QR на linear и добавь инерцию после движения."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "editAnimation",
+            "scene": "s0",
+            "targets": [
+              "QR"
+            ],
+            "techniques": [
+              "slideUp",
+              "inertialOvershoot"
+            ],
+            "parameters": [
+              {
+                "key": "easing",
+                "value": "linear"
+              }
+            ],
+            "constraints": [],
+            "unresolvedReason": null,
+            "relation": "unchanged"
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "WORKFLOW_01_SEQUENCE",
+      "prompt": "QR появляется снизу с фейдом. Когда закончится, Phone аналогично.",
+      "fixture": "motion",
+      "seed": "none",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "fadeIn",
+        "slideUp"
+      ],
+      "checks": [
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "slideUp",
+            "fadeIn"
+          ]
+        },
+        {
+          "target": "phone",
+          "scene": "s0",
+          "techniques": [
+            "slideUp",
+            "fadeIn"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "QR появляется снизу с фейдом. Когда закончится, Phone аналогично."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "qr",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "QR"
+            ],
+            "techniques": [
+              "slideUp",
+              "fadeIn"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          },
+          {
+            "actionId": "phone",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "Phone"
+            ],
+            "techniques": [
+              "slideUp",
+              "fadeIn"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null,
+            "dependsOn": "qr",
+            "inheritFrom": "qr"
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "WORKFLOW_02_SCENES",
+      "prompt": "В сцене 1 QR снизу. В сцене 2 qrNext появляется через Fade.",
+      "fixture": "motion",
+      "seed": "none",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "fadeIn",
+        "slideUp"
+      ],
+      "checks": [
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "slideUp"
+          ]
+        },
+        {
+          "target": "qrNext",
+          "scene": "s1",
+          "techniques": [
+            "fadeIn"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "В сцене 1 QR снизу. В сцене 2 qrNext появляется через Fade."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "qr",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "QR"
+            ],
+            "techniques": [
+              "slideUp"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          },
+          {
+            "actionId": "next",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s1",
+            "targets": [
+              "qrNext"
+            ],
+            "techniques": [
+              "fadeIn"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "WORKFLOW_03_MOVE_SCALE",
+      "prompt": "QR перемещается в центр и увеличивается вдвое.",
+      "fixture": "motion",
+      "seed": "none",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "moveTo",
+        "scaleIn"
+      ],
+      "checks": [
+        "moveScale",
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "moveTo",
+            "scaleIn"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "QR перемещается в центр и увеличивается вдвое."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "QR"
+            ],
+            "techniques": [
+              "moveTo",
+              "scaleIn"
+            ],
+            "parameters": [
+              {
+                "key": "moveToCenter",
+                "value": true
+              },
+              {
+                "key": "scaleFrom",
+                "value": 1
+              },
+              {
+                "key": "scaleTo",
+                "value": 2
+              }
+            ],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "EDGE_01_UNKNOWN",
+      "prompt": "Анимируй Missing Object.",
+      "fixture": "motion",
+      "seed": "none",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "fadeIn"
+      ],
+      "checks": [],
+      "expectedFailure": true,
+      "expectations": [
+        {
+          "target": "Missing Object",
+          "scene": "s0",
+          "techniques": [
+            "fadeIn"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Анимируй Missing Object."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "Missing Object"
+            ],
+            "techniques": [
+              "fadeIn"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "EDGE_02_DEPENDENCY",
+      "prompt": "QR появляется после отсутствующей анимации.",
+      "fixture": "motion",
+      "seed": "none",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "fadeIn"
+      ],
+      "checks": [],
+      "expectedFailure": true,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "fadeIn"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "QR появляется после отсутствующей анимации."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "QR"
+            ],
+            "techniques": [
+              "fadeIn"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null,
+            "dependsOn": "missing"
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "EDGE_03_MISSING_FADE",
+      "prompt": "QR появляется снизу через Fade.",
+      "fixture": "motion",
+      "seed": "none",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "slideUp"
+      ],
+      "checks": [],
+      "expectedFailure": true,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "slideUp"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "QR появляется снизу через Fade."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "QR"
+            ],
+            "techniques": [
+              "slideUp"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "EDGE_04_BAD_TECHNIQUE",
+      "prompt": "Сделай QR через hologram.",
+      "fixture": "motion",
+      "seed": "none",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "hologram"
+      ],
+      "checks": [],
+      "expectedFailure": true,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "hologram"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Сделай QR через hologram."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "QR"
+            ],
+            "techniques": [
+              "hologram"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "EDGE_05_WRONG_OBJECT_TRIM",
+      "prompt": "Прорисуй Phone через Trim Paths.",
+      "fixture": "motion",
+      "seed": "none",
+      "target": "phone",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "trimPath"
+      ],
+      "checks": [],
+      "expectedFailure": true,
+      "expectations": [
+        {
+          "target": "phone",
+          "scene": "s0",
+          "techniques": [
+            "trimPath"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Прорисуй Phone через Trim Paths."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "Phone"
+            ],
+            "techniques": [
+              "trimPath"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "WORKFLOW_04_EIGHT_OBJECTS",
+      "prompt": "2 сцена начинается на 30 кадре:\nтарелка куар лого 1 лого 2 появляются снизу из-за кадра через фейд с затухающими колебаниями после конца движения\n\nа текст 1 появляется сверху через фейд с затухающими колебаниями после конца движения\n\n3 сцена начинается на 90 кадре:\nлента 1 анимируется по trimpaths\n\nи в момент как она заканчивает анимацию анимируется аналогично лента 2\n\nтекст 2 появляется сверху через фейд с колебаниями",
+      "fixture": "eight-object",
+      "seed": "none",
+      "target": "qr",
+      "scene": "s1",
+      "expectedCapabilities": [
+        "slideUp",
+        "slideDown",
+        "fadeIn",
+        "inertialOvershoot",
+        "trimPath"
+      ],
+      "checks": [
+        "qa",
+        "frameScheduling",
+        "sequence",
+        "compoundNumerical"
+      ],
+      "expectations": [
+        {
+          "target": "plate",
+          "scene": "s1",
+          "techniques": [
+            "slideUp",
+            "fadeIn",
+            "inertialOvershoot"
+          ]
+        },
+        {
+          "target": "qr",
+          "scene": "s1",
+          "techniques": [
+            "slideUp",
+            "fadeIn",
+            "inertialOvershoot"
+          ]
+        },
+        {
+          "target": "logo1",
+          "scene": "s1",
+          "techniques": [
+            "slideUp",
+            "fadeIn",
+            "inertialOvershoot"
+          ]
+        },
+        {
+          "target": "logo2",
+          "scene": "s1",
+          "techniques": [
+            "slideUp",
+            "fadeIn",
+            "inertialOvershoot"
+          ]
+        },
+        {
+          "target": "text1",
+          "scene": "s1",
+          "techniques": [
+            "slideDown",
+            "fadeIn",
+            "inertialOvershoot"
+          ]
+        },
+        {
+          "target": "ribbon1",
+          "scene": "s2",
+          "techniques": [
+            "trimPath"
+          ]
+        },
+        {
+          "target": "ribbon2",
+          "scene": "s2",
+          "techniques": [
+            "trimPath"
+          ]
+        },
+        {
+          "target": "text2",
+          "scene": "s2",
+          "techniques": [
+            "slideDown",
+            "fadeIn",
+            "inertialOvershoot"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "c0",
+            "text": "2 сцена начинается на 30 кадре:"
+          },
+          {
+            "clauseId": "c1",
+            "text": "тарелка куар лого 1 лого 2 появляются снизу из-за кадра через фейд с затухающими колебаниями после конца движения"
+          },
+          {
+            "clauseId": "c2",
+            "text": "а текст 1 появляется сверху через фейд с затухающими колебаниями после конца движения"
+          },
+          {
+            "clauseId": "c3",
+            "text": "3 сцена начинается на 90 кадре:"
+          },
+          {
+            "clauseId": "c4",
+            "text": "лента 1 анимируется по trimpaths"
+          },
+          {
+            "clauseId": "c5",
+            "text": "и в момент как она заканчивает анимацию анимируется аналогично лента 2"
+          },
+          {
+            "clauseId": "c6",
+            "text": "текст 2 появляется сверху через фейд с колебаниями"
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "a0",
+            "clauseId": "c0",
+            "kind": "sceneTiming",
+            "scene": 2,
+            "targets": [],
+            "techniques": [],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null,
+            "start": {
+              "unit": "frames",
+              "value": 30
+            }
+          },
+          {
+            "actionId": "a1",
+            "clauseId": "c1",
+            "kind": "objectAnimation",
+            "scene": 2,
+            "targets": [
+              "тарелка",
+              "куар",
+              "лого 1",
+              "лого 2"
+            ],
+            "techniques": [
+              "slideUp",
+              "fadeIn",
+              "inertialOvershoot"
+            ],
+            "parameters": [
+              {
+                "key": "entrance",
+                "value": "offscreen"
+              }
+            ],
+            "constraints": [],
+            "unresolvedReason": null
+          },
+          {
+            "actionId": "a2",
+            "clauseId": "c2",
+            "kind": "objectAnimation",
+            "scene": 2,
+            "targets": [
+              "текст 1"
+            ],
+            "techniques": [
+              "slideDown",
+              "fadeIn",
+              "inertialOvershoot"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          },
+          {
+            "actionId": "a3",
+            "clauseId": "c3",
+            "kind": "sceneTiming",
+            "scene": 3,
+            "targets": [],
+            "techniques": [],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null,
+            "start": {
+              "unit": "frames",
+              "value": 90
+            }
+          },
+          {
+            "actionId": "a4",
+            "clauseId": "c4",
+            "kind": "objectAnimation",
+            "scene": 3,
+            "targets": [
+              "лента 1"
+            ],
+            "techniques": [
+              "trimPath"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          },
+          {
+            "actionId": "a5",
+            "clauseId": "c5",
+            "kind": "objectAnimation",
+            "scene": 3,
+            "targets": [
+              "лента 2"
+            ],
+            "techniques": [
+              "trimPath"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null,
+            "dependsOn": "a4",
+            "inheritFrom": "a4"
+          },
+          {
+            "actionId": "a6",
+            "clauseId": "c6",
+            "kind": "objectAnimation",
+            "scene": 3,
+            "targets": [
+              "текст 2"
+            ],
+            "techniques": [
+              "slideDown",
+              "fadeIn",
+              "inertialOvershoot"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "WORKFLOW_05_PATH_SEQUENCE",
+      "prompt": "Vector Line прорисовывается через Trim Paths. Когда закончится, Vector Line 2 аналогично.",
+      "fixture": "two-paths",
+      "seed": "none",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "fadeIn",
+        "slideUp"
+      ],
+      "checks": [
+        "qa",
+        "sequence"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "line",
+          "scene": "s0",
+          "techniques": [
+            "trimPath"
+          ]
+        },
+        {
+          "target": "line2",
+          "scene": "s0",
+          "techniques": [
+            "trimPath"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Vector Line прорисовывается через Trim Paths. Когда закончится, Vector Line 2 аналогично."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "qr",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "Vector Line"
+            ],
+            "techniques": [
+              "trimPath"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          },
+          {
+            "actionId": "phone",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "Vector Line 2"
+            ],
+            "techniques": [
+              "trimPath"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null,
+            "dependsOn": "qr",
+            "inheritFrom": "qr"
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "EDGE_06_CYCLE",
+      "prompt": "Vector Line прорисовывается через Trim Paths. Когда закончится, Vector Line 2 аналогично.",
+      "fixture": "two-paths",
+      "seed": "none",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "fadeIn",
+        "slideUp"
+      ],
+      "checks": [],
+      "expectedFailure": true,
+      "expectations": [
+        {
+          "target": "line",
+          "scene": "s0",
+          "techniques": [
+            "trimPath"
+          ]
+        },
+        {
+          "target": "line2",
+          "scene": "s0",
+          "techniques": [
+            "trimPath"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Vector Line прорисовывается через Trim Paths. Когда закончится, Vector Line 2 аналогично."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "qr",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "Vector Line"
+            ],
+            "techniques": [
+              "trimPath"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null,
+            "dependsOn": "phone"
+          },
+          {
+            "actionId": "phone",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "Vector Line 2"
+            ],
+            "techniques": [
+              "trimPath"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null,
+            "dependsOn": "qr",
+            "inheritFrom": "qr"
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "EDGE_07_AMBIGUITY",
+      "prompt": "QR появляется снизу.",
+      "fixture": "ambiguous",
+      "seed": "none",
+      "target": "unselected",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "slideUp"
+      ],
+      "checks": [],
+      "expectedFailure": true,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "slideUp"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "QR появляется снизу."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "QR"
+            ],
+            "techniques": [
+              "slideUp"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "WORKFLOW_06_MULTI_TURN",
+      "prompt": "QR и Phone появляются снизу через Fade с инерцией.",
+      "fixture": "motion",
+      "seed": "none",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "fadeIn",
+        "inertialOvershoot",
+        "slideUp"
+      ],
+      "checks": [
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "slideUp",
+            "fadeIn",
+            "inertialOvershoot"
+          ]
+        },
+        {
+          "target": "phone",
+          "scene": "s0",
+          "techniques": [
+            "slideUp",
+            "fadeIn",
+            "inertialOvershoot"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "QR и Phone появляются снизу через Fade с инерцией."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "QR",
+              "Phone"
+            ],
+            "techniques": [
+              "slideUp",
+              "fadeIn",
+              "inertialOvershoot"
+            ],
+            "parameters": [
+              {
+                "key": "easing",
+                "value": "linear"
+              }
+            ],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      },
+      "turns": [
+        {
+          "prompt": "QR и Phone появляются снизу через Fade с инерцией.",
+          "referenceOutput": {
+            "schemaVersion": "semantic-graph/1.0",
+            "clauses": [
+              {
+                "clauseId": "source",
+                "text": "QR и Phone появляются снизу через Fade с инерцией."
+              }
+            ],
+            "actions": [
+              {
+                "actionId": "entrance",
+                "clauseId": "source",
+                "kind": "objectAnimation",
+                "scene": "s0",
+                "targets": [
+                  "QR",
+                  "Phone"
+                ],
+                "techniques": [
+                  "slideUp",
+                  "fadeIn",
+                  "inertialOvershoot"
+                ],
+                "parameters": [
+                  {
+                    "key": "easing",
+                    "value": "linear"
+                  }
+                ],
+                "constraints": [],
+                "unresolvedReason": null
+              }
+            ],
+            "assumptions": []
+          }
+        },
+        {
+          "prompt": "Сделай колебания послабее.",
+          "referenceOutput": {
+            "schemaVersion": "semantic-graph/1.0",
+            "clauses": [
+              {
+                "clauseId": "source",
+                "text": "Сделай колебания послабее."
+              }
+            ],
+            "actions": [
+              {
+                "actionId": "entrance",
+                "clauseId": "source",
+                "kind": "editAnimation",
+                "scene": "s0",
+                "targets": [],
+                "techniques": [
+                  "inertialOvershoot"
+                ],
+                "parameters": [
+                  {
+                    "key": "amplitudeFactor",
+                    "value": 0.5
+                  }
+                ],
+                "constraints": [],
+                "unresolvedReason": null,
+                "relation": "unchanged",
+                "selector": {
+                  "type": "recentSuccessfulTargets",
+                  "effect": "inertialOvershoot"
+                }
+              }
+            ],
+            "assumptions": []
+          }
+        },
+        {
+          "prompt": "Ещё слабее.",
+          "referenceOutput": {
+            "schemaVersion": "semantic-graph/1.0",
+            "clauses": [
+              {
+                "clauseId": "source",
+                "text": "Ещё слабее."
+              }
+            ],
+            "actions": [
+              {
+                "actionId": "entrance",
+                "clauseId": "source",
+                "kind": "editAnimation",
+                "scene": "s0",
+                "targets": [],
+                "techniques": [
+                  "inertialOvershoot"
+                ],
+                "parameters": [
+                  {
+                    "key": "amplitudeFactor",
+                    "value": 0.5
+                  }
+                ],
+                "constraints": [],
+                "unresolvedReason": null,
+                "relation": "unchanged",
+                "selector": {
+                  "type": "recentSuccessfulTargets",
+                  "effect": "inertialOvershoot"
+                }
+              }
+            ],
+            "assumptions": []
+          }
+        }
+      ]
+    },
+    {
+      "evalId": "CONTEXT_05_RECENT_FOUR",
+      "prompt": "Сделай колебания послабее.",
+      "fixture": "six-inertia",
+      "seed": "inertia",
+      "target": "n0",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "inertialOvershoot"
+      ],
+      "checks": [
+        "qa",
+        "baseUnchanged",
+        "preserveOtherExpressions"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "n0",
+          "scene": "s0",
+          "techniques": [
+            "inertialOvershoot"
+          ],
+          "amplitudeFactor": 0.5
+        },
+        {
+          "target": "n1",
+          "scene": "s0",
+          "techniques": [
+            "inertialOvershoot"
+          ],
+          "amplitudeFactor": 0.5
+        },
+        {
+          "target": "n2",
+          "scene": "s0",
+          "techniques": [
+            "inertialOvershoot"
+          ],
+          "amplitudeFactor": 0.5
+        },
+        {
+          "target": "n3",
+          "scene": "s0",
+          "techniques": [
+            "inertialOvershoot"
+          ],
+          "amplitudeFactor": 0.5
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Сделай колебания послабее."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "editAnimation",
+            "scene": "s0",
+            "targets": [],
+            "techniques": [
+              "inertialOvershoot"
+            ],
+            "parameters": [
+              {
+                "key": "amplitudeFactor",
+                "value": 0.5
+              }
+            ],
+            "constraints": [],
+            "unresolvedReason": null,
+            "relation": "unchanged",
+            "selector": {
+              "type": "recentSuccessfulTargets",
+              "effect": "inertialOvershoot"
+            }
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "CONTEXT_06_GLOBAL_SIX",
+      "prompt": "У всех объектов с инерцией уменьши амплитуду вдвое.",
+      "fixture": "six-inertia",
+      "seed": "inertia",
+      "target": "n0",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "inertialOvershoot"
+      ],
+      "checks": [
+        "qa",
+        "baseUnchanged",
+        "preserveOtherExpressions"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "n0",
+          "scene": "s0",
+          "techniques": [
+            "inertialOvershoot"
+          ],
+          "amplitudeFactor": 0.5
+        },
+        {
+          "target": "n1",
+          "scene": "s0",
+          "techniques": [
+            "inertialOvershoot"
+          ],
+          "amplitudeFactor": 0.5
+        },
+        {
+          "target": "n2",
+          "scene": "s0",
+          "techniques": [
+            "inertialOvershoot"
+          ],
+          "amplitudeFactor": 0.5
+        },
+        {
+          "target": "n3",
+          "scene": "s0",
+          "techniques": [
+            "inertialOvershoot"
+          ],
+          "amplitudeFactor": 0.5
+        },
+        {
+          "target": "n4",
+          "scene": "s0",
+          "techniques": [
+            "inertialOvershoot"
+          ],
+          "amplitudeFactor": 0.5
+        },
+        {
+          "target": "n5",
+          "scene": "s0",
+          "techniques": [
+            "inertialOvershoot"
+          ],
+          "amplitudeFactor": 0.5
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "У всех объектов с инерцией уменьши амплитуду вдвое."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "editAnimation",
+            "scene": "s0",
+            "targets": [],
+            "techniques": [
+              "inertialOvershoot"
+            ],
+            "parameters": [
+              {
+                "key": "amplitudeFactor",
+                "value": 0.5
+              }
+            ],
+            "constraints": [],
+            "unresolvedReason": null,
+            "relation": "unchanged",
+            "selector": {
+              "type": "byExistingEffect",
+              "effect": "inertialOvershoot"
+            }
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "CONTEXT_07_SPEED",
+      "prompt": "Сделай их быстрее.",
+      "fixture": "motion",
+      "seed": "inertia",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "inertialOvershoot"
+      ],
+      "checks": [
+        "frequencyIncreased",
+        "baseUnchanged",
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "inertialOvershoot"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Сделай их быстрее."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "editAnimation",
+            "scene": "s0",
+            "targets": [],
+            "techniques": [
+              "inertialOvershoot"
+            ],
+            "parameters": [
+              {
+                "key": "frequencyFactor",
+                "value": 1.5
+              }
+            ],
+            "constraints": [],
+            "unresolvedReason": null,
+            "relation": "unchanged",
+            "selector": {
+              "type": "recentSuccessfulTargets",
+              "effect": "inertialOvershoot"
+            }
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "EDGE_08_UNSUPPORTED_CAPABILITY",
+      "prompt": "Сделай QR через hologram.",
+      "fixture": "motion",
+      "seed": "none",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "hologram"
+      ],
+      "checks": [],
+      "expectedFailure": true,
+      "expectations": [
+        {
+          "target": "qr",
+          "scene": "s0",
+          "techniques": [
+            "hologram"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Сделай QR через hologram."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "entrance",
+            "clauseId": "source",
+            "kind": "unsupported",
+            "scene": "s0",
+            "targets": [
+              "QR"
+            ],
+            "techniques": [],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": "UNSUPPORTED_CAPABILITY: hologram"
+          }
+        ],
+        "assumptions": []
+      }
+    }
+  ]
+}

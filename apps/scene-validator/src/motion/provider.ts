@@ -68,6 +68,27 @@ export function normalizeProviderOutput(
       ];
     return normalizeProviderOutput(value, resolved, root);
   }
+  if (
+    Array.isArray(shape.anyOf) &&
+    value &&
+    typeof value === "object" &&
+    "schemaVersion" in value
+  ) {
+    for (const alternative of shape.anyOf) {
+      let branch = alternative as Record<string, unknown>;
+      if (typeof branch.$ref === "string") {
+        let resolved: unknown = root;
+        for (const part of branch.$ref.slice(2).split("/"))
+          resolved = (resolved as Record<string, unknown>)?.[part];
+        branch = resolved as Record<string, unknown>;
+      }
+      const discriminator = (
+        branch?.properties as Record<string, { const?: unknown }>
+      )?.schemaVersion?.const;
+      if (discriminator === (value as { schemaVersion: unknown }).schemaVersion)
+        return normalizeProviderOutput(value, branch, root);
+    }
+  }
   if (Array.isArray(value) && shape.items)
     return value.map((v) => normalizeProviderOutput(v, shape.items, root));
   if (
@@ -184,6 +205,7 @@ export class AIClient implements AIProvider {
     instructions: string,
     schema: z.ZodType<T>,
     mode = "semantic",
+    nativeSchema?: z.ZodType,
   ): Promise<T> {
     const compact = JSON.stringify({ mode, context, userRequest: request });
     if (compact.length > 300000)
@@ -193,7 +215,11 @@ export class AIClient implements AIProvider {
       io: "output",
       reused: "ref",
     });
-    const responseSchema = compatibleSchema(runtimeSchema);
+    const responseSchema = compatibleSchema(
+      nativeSchema
+        ? z.toJSONSchema(nativeSchema, { io: "output", reused: "ref" })
+        : runtimeSchema,
+    );
     await writeFile(
       path.join(this.directory, "request.txt"),
       redactSecrets(prompt),
@@ -282,7 +308,9 @@ export class AIClient implements AIProvider {
     try {
       return schema.parse(normalized);
     } catch (e) {
-      throw new Error(`INVALID_OUTPUT: ${String(e)}`);
+      throw new Error(
+        `INVALID_OUTPUT: ответ не соответствует структурированному контракту. Подробности сохранены в contract-validation.json.`,
+      );
     }
   }
 }

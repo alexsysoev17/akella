@@ -60,7 +60,7 @@ function explicitTechniques(text: string): IntentTechnique[] {
 }
 const inheritance = /аналогично|так\s+же|как\s+предыдущ|как\s+перв/i;
 const sequential =
-  /(?:в\s+момент\s+)?как\s+законч|после\s+(?:заверш|оконч|перв)|когда\s*(?:он[аои]?\s*)?(?:законч|конча)|(?:а\s+)?(?:потом|затем)|сразу\s+(?:вслед|после)/i;
+  /(?:в\s+момент\s+)?(?:как|когда)\s*(?:он[аои]?\s*)?(?:законч|заканч|конча)|после\s+(?:заверш|оконч|перв)|когда\s*(?:он[аои]?\s*)?(?:законч|конча)|(?:а\s+)?(?:потом|затем)|сразу\s+(?:вслед|после)/i;
 const ordinals: Record<string, number> = {
   первой: 1,
   первую: 1,
@@ -85,6 +85,15 @@ export function inspectSemanticCoverage(
   const objects = scenes
     .flatMap(objectsIn)
     .filter((o) => o.parentId && !roots.has(o.targetId));
+  const sourceClauses = new Map(
+    (plan.sourceClauses ?? []).map((c) => [c.clauseId, c]),
+  );
+  const belongs = (r: IntentRequirement, start: number, end: number) => {
+    const clause = r.sourceClauseId
+      ? sourceClauses.get(r.sourceClauseId)
+      : undefined;
+    return !clause || (clause.start < end && clause.end > start);
+  };
   const boundaries = new Set<number>([0, request.length]);
   for (const m of request.matchAll(
     /(?:[!?;\n]+|(?<!\d)[.,]|[.,](?!\d)|(?=сцен[аыуе]?\s*\d+\s*(?:нач|на\s|start)))/gi,
@@ -185,10 +194,11 @@ export function inspectSemanticCoverage(
       end = spans[i + 1],
       text = request.slice(start, end);
     if (!text.trim() || /^[.,!?;\s]+$/.test(text)) continue;
-    const header = text.match(/сцен[аыуе]?\s*(\d+)/i);
+    const header = text.match(/(?:сцен[аыуе]?\s*(\d+)|(\d+)\s*сцен[аыуе]?)/i);
     if (header) {
       sceneId =
-        scenes.find((s) => s.index === Number(header[1]) - 1)?.sceneId ?? null;
+        scenes.find((s) => s.index === Number(header[1] ?? header[2]) - 1)
+          ?.sceneId ?? null;
       activeIds = [];
       pendingIds = [];
       previous = undefined;
@@ -226,6 +236,7 @@ export function inspectSemanticCoverage(
       (m) =>
         m.start >= start &&
         m.start < end &&
+        m.end <= end &&
         (sceneId
           ? m.object.sceneId === sceneId
           : !inferredScenes.size || inferredScenes.has(m.object.sceneId)),
@@ -254,6 +265,7 @@ export function inspectSemanticCoverage(
     let rs = plan.requirements.filter(
       (r) =>
         r.kind !== "sceneTiming" &&
+        belongs(r, start, end) &&
         (!sceneId || !r.sceneId || r.sceneId === sceneId) &&
         (targetIds.includes(r.sceneId + "/" + r.target.sourceNodeId) ||
           unresolvedMention(r)),
@@ -262,6 +274,7 @@ export function inspectSemanticCoverage(
       rs = plan.requirements.filter(
         (r) =>
           r.kind !== "sceneTiming" &&
+          belongs(r, start, end) &&
           (!sceneId || r.sceneId === sceneId) &&
           r.sourceText.includes(text.trim()),
       );
@@ -335,7 +348,7 @@ export function inspectSemanticCoverage(
         !negated &&
         !r.inheritFromRequirementId
       )
-        r.inheritFromRequirementId = previous.requirementId;
+        issue("MISSING_INHERITANCE_LINK", text, [r], previous.requirementId);
       const have = effective(r);
       if (!negated)
         for (const technique of techs)

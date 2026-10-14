@@ -13,7 +13,7 @@ import { recentSuccessfulActions } from "./contextual-resolution.js";
 import { RunQA } from "../harness/qa.js";
 import type { HarnessConfig } from "../harness/config.js";
 import { semanticPlan, SemanticCodexProvider } from "./intent/planner.js";
-import { runIntentTasks } from "./intent/execution.js";
+import { preflightIntentPlan, runIntentTasks } from "./intent/execution.js";
 import { motionQA, stateDigest } from "./qa/render.js";
 import {
   intentRequirements,
@@ -223,7 +223,12 @@ export async function proposeMotion(
     );
     let resolution: ReturnType<typeof resolveTarget> | undefined;
     let enrichedContext: Record<string, unknown>;
+    const sceneTimingHint =
+      /(?:сцен|scene)[\s\S]{0,70}(?:начина|начн|starts|\bна\s*\d+\s*(?:кадр|сек)|\bat\s*\d+\s*(?:frame|second))/iu.test(
+        request.request,
+      );
     const contextualEditHint =
+      !sceneTimingHint &&
       (/колеб|инерц|амплитуд/iu.test(request.request) ||
         (recentSuccessfulActions(doc).length > 0 &&
           request.request.length < 120)) &&
@@ -391,6 +396,29 @@ export async function proposeMotion(
             requirements: contract.requirements,
           });
           runQA = new RunQA(harness);
+        }
+        if (contract.requirements.some((r) => r.semanticActionId)) {
+          try {
+            const preflight = preflightIntentPlan(project, doc.state, contract);
+            await atomicJson(
+              path.join(directory, "compilation-preflight.json"),
+              preflight,
+            );
+            await harness?.diagnostic("compilation-preflight", preflight);
+          } catch (error) {
+            await atomicJson(
+              path.join(directory, "compilation-preflight.json"),
+              (error as { report?: unknown }).report ?? {
+                status: "FAILED",
+                failure: String(error),
+              },
+            );
+            await harness?.diagnostic(
+              "compilation-preflight",
+              (error as { report?: unknown }).report ?? { status: "FAILED" },
+            );
+            throw error;
+          }
         }
         let committed = doc;
         const generated = await runIntentTasks(project, doc.state, contract, {

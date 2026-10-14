@@ -97,6 +97,10 @@ export function attachInspector(container, url) {
       body.innerHTML =
         "<h3>Требования и привязки объектов</h3>" +
         block(
+          "Групповые действия, исходные фразы и зависимости",
+          data.semanticTaskGraph,
+        ) +
+        block(
           "Разрешение объектов, селекторов и контекстных ссылок",
           data.targetResolution,
         ) +
@@ -106,7 +110,19 @@ export function attachInspector(container, url) {
     if (tab === 2)
       body.innerHTML =
         cards(tasks) +
-        block("Полнота операций — ожидается / скомпилировано / пропущено", tasks.map(t => ({taskId:t.taskId,target:t.targetReference,coverage:t.operationCoverage ?? "NOT_AVAILABLE",primaryFailureReason:t.primaryFailureReason ?? null}))) +
+        block(
+          "Предварительная проверка полного плана",
+          data.compilationPreflight,
+        ) +
+        block(
+          "Полнота операций — ожидается / скомпилировано / пропущено",
+          tasks.map((t) => ({
+            taskId: t.taskId,
+            target: t.targetReference,
+            coverage: t.operationCoverage ?? "NOT_AVAILABLE",
+            primaryFailureReason: t.primaryFailureReason ?? null,
+          })),
+        ) +
         block("Сравнение попыток ремонта", data.repairComparisons) +
         block("Evaluator и метод выборки скорости", data.evaluator) +
         block(
@@ -259,7 +275,12 @@ export function attachInspector(container, url) {
     }
   };
   panel.querySelector("[data-project-zip]").onclick = () => {
-    if(selectedId){const a=document.createElement("a");a.href=url+"/inspector/"+selectedId+"/project-bundle";a.download="project-diagnostic-"+selectedId+".zip";a.click();}
+    if (selectedId) {
+      const a = document.createElement("a");
+      a.href = url + "/inspector/" + selectedId + "/project-bundle";
+      a.download = "project-diagnostic-" + selectedId + ".zip";
+      a.click();
+    }
   };
   const grip = panel.querySelector(".inspector-resize");
   grip.onpointerdown = (e) => {

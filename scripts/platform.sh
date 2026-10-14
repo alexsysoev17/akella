@@ -17,6 +17,11 @@ if [ ! -d node_modules/tsx ]; then
   echo 'Dependencies missing. Run npm ci in platform/ first.' >&2
   exit 1
 fi
+case "${1:-}" in
+  benchmark) shift; exec "$task_node" --import tsx "$task_root/scripts/benchmark.ts" "$@" ;;
+  benchmark-report) shift; exec "$task_node" --import tsx "$task_root/scripts/benchmark-report.ts" "$@" ;;
+  benchmark-replay) shift; exec "$task_node" --import tsx "$task_root/scripts/replay-agent-run.ts" "$@" ;;
+esac
 if [ "${1:-}" = "dev" ]; then
   "$task_node" "$task_root/scripts/build-ui.mjs"
 fi

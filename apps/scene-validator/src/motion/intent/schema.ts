@@ -21,6 +21,8 @@ export const intentTechnique = z.enum([
 ]);
 export const intentRequirementSchema = z
   .object({
+    semanticActionId: z.string().optional(),
+    sourceClauseId: z.string().optional(),
     requirementId: z.string().min(1).max(100),
     kind: z.enum([
       "sceneTiming",
@@ -75,6 +77,7 @@ export const intentRequirementSchema = z
     expressionAction: z.enum(["update", "remove"]).optional(),
     parameters: z
       .object({
+        entrance: z.enum(["offscreen"]).nullable().optional(),
         property: z
           .enum(["x", "y", "rotation", "scaleX", "scaleY", "opacity"])
           .nullable()
@@ -139,6 +142,18 @@ export const intentRequirementSchema = z
 export const intentPlanSchema = z
   .object({
     schemaVersion: z.literal("1.0.0"),
+    sourceClauses: z
+      .array(
+        z
+          .object({
+            clauseId: z.string(),
+            text: z.string(),
+            start: z.number().int(),
+            end: z.number().int(),
+          })
+          .strict(),
+      )
+      .optional(),
     requirements: z.array(intentRequirementSchema).min(1).max(200),
     coverage: z
       .array(

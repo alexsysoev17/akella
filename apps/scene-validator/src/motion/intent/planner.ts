@@ -1,3 +1,11 @@
+import { targetedRepairSchema, mergeTargetedRepair } from "./repair.js";
+import {
+  semanticGraphSchema,
+  semanticResponseSchema,
+  normalizeSemanticGraph,
+  graphInstructions,
+  GraphReferenceError,
+} from "./graph.js";
 import { z } from "zod";
 import {
   selectorEditSchema,
@@ -11,7 +19,7 @@ import {
   resolveObjectReference,
   resolveExistingAnimation,
 } from "../object-resolution.js";
-import { equivalentObjectName } from "../object-aliases.js";
+import { objectMentioned, equivalentObjectName } from "../object-aliases.js";
 import { resolveBaseMotion } from "../base-motion.js";
 import { relativeIntensityFactors } from "../../motion-library/expressions/registry.js";
 import {
@@ -71,9 +79,29 @@ export function semanticContext(context: unknown): unknown {
   const rows = (v: unknown, keys: string[]) =>
     Array.isArray(v) ? v.map((x) => pick(x, keys)) : v;
   const knowledge = c.motionKnowledge as Record<string, unknown> | undefined;
-  const { userRequest: _duplicate, ...rest } = c;
+  const rest = pick(c, [
+    "project",
+    "sceneIndex",
+    "objectIndex",
+    "motion",
+    "selectedObjectId",
+    "selectedObjectIds",
+    "selectedSceneId",
+    "activeSceneId",
+    "mentions",
+    "extraGuidance",
+    "timing",
+    "projectRevision",
+    "contextualEditHint",
+  ]) as Record<string, unknown>;
   return {
     ...rest,
+    recentConversation: Array.isArray(c.recentConversation)
+      ? c.recentConversation.slice(-2)
+      : [],
+    recentSuccessfulActions: Array.isArray(c.recentSuccessfulActions)
+      ? c.recentSuccessfulActions.slice(0, 3)
+      : [],
     logicalObjects: Array.isArray(c.logicalObjects)
       ? c.logicalObjects.map((v) => {
           const o = v as Record<string, unknown>;
@@ -97,7 +125,16 @@ export function semanticContext(context: unknown): unknown {
       : c.logicalObjects,
     motionKnowledge: knowledge
       ? {
-          ...knowledge,
+          version: knowledge.version,
+          techniques: rows(knowledge.techniques, [
+            "id",
+            "name",
+            "description",
+            "implementationId",
+          ]),
+          easingIds: knowledge.easingIds,
+          composition: knowledge.composition,
+          skills: rows(knowledge.skills, ["id"]),
           capabilities: rows(knowledge.capabilities, [
             "id",
             "kind",
@@ -139,6 +176,58 @@ export class SemanticProvider implements IntentProvider {
   }
   constructor(private providerFor: (phase: string) => Promise<CodexProvider>) {}
   async interpret(context: unknown, request: string, feedback?: unknown) {
+    const referenceRepair = (
+      feedback as {
+        graphReferenceRepair?: {
+          graph: Parameters<typeof normalizeSemanticGraph>[0];
+          issue: {
+            actionId: string;
+            field: "dependsOn" | "inheritFrom";
+            reference: string;
+          };
+        };
+      }
+    )?.graphReferenceRepair;
+    if (referenceRepair) {
+      const graph = semanticGraphSchema.parse(referenceRepair.graph),
+        action = graph.actions.find(
+          (a) => a.actionId === referenceRepair.issue.actionId,
+        )!;
+      const ids = graph.actions
+        .map((a) => a.actionId)
+        .filter((id) => id !== action.actionId);
+      if (!ids.length) throw new Error("NO_AVAILABLE_DEPENDENCY_ANCHOR");
+      const patchSchema = z
+        .object({
+          actionId: z.literal(action.actionId),
+          reference: z.enum(ids as [string, ...string[]]),
+        })
+        .strict();
+      const patch = await (
+        await this.provider("graph-reference-repair")
+      ).structured(
+        {
+          failedRelationship: referenceRepair.issue,
+          affectedAction: action,
+          availableAnchors: graph.actions
+            .filter((a) => ids.includes(a.actionId))
+            .map((a) => ({
+              actionId: a.actionId,
+              targets: a.targets,
+              techniques: a.techniques,
+              sourceText: graph.clauses.find((c) => c.clauseId === a.clauseId)
+                ?.text,
+            })),
+        },
+        request,
+        "Repair only the unresolved action reference using the complete user request. Choose an actual existing action ID matching the intended dependency/behavior source. Do not alter techniques, targets, parameters or unrelated actions.",
+        patchSchema,
+        "semantic-repair",
+      );
+      action[referenceRepair.issue.field] = patch.reference;
+      return normalizeSemanticGraph(graph, context, request);
+    }
+
     if ((context as { contextualEditHint?: boolean })?.contextualEditHint)
       return normalizeSelectorPlan(
         await (
@@ -151,15 +240,61 @@ export class SemanticProvider implements IntentProvider {
           "semantic-planning",
         ),
       );
-    return (await this.provider("interpret")).structured(
-      { ...(semanticContext(context) as object), feedback },
+    return normalizeSemanticGraph(
+      await (
+        await this.provider("interpret")
+      ).structured(
+        { ...(semanticContext(context) as object), feedback },
+        request,
+        graphInstructions,
+        semanticResponseSchema,
+        "semantic-planning",
+        semanticGraphSchema,
+      ),
+      context,
       request,
-      semanticInstructions,
-      intentPlanSchema,
-      "semantic-planning",
     );
   }
   async audit(context: unknown, request: string, plan: IntentPlan) {
+    const feedback = (
+      context as {
+        coverageFeedback?: {
+          issues: { sourceText: string; requirementIds: string[] }[];
+        };
+      }
+    )?.coverageFeedback;
+    if (feedback?.issues.length) {
+      const ids = new Set(feedback.issues.flatMap((i) => i.requirementIds));
+      const affected = plan.requirements.filter((r) =>
+        ids.has(r.requirementId),
+      );
+      const anchors = new Set(
+        affected.flatMap((r) =>
+          [r.timing.anchorRequirementId, r.inheritFromRequirementId].filter(
+            Boolean,
+          ),
+        ),
+      );
+      const patch = await (
+        await this.provider("coverage-audit")
+      ).structured(
+        {
+          project: (context as Record<string, unknown>).project,
+          sceneIndex: (context as Record<string, unknown>).sceneIndex,
+          objectIndex: (context as Record<string, unknown>).objectIndex,
+          failedRelationships: feedback.issues,
+          affectedRequirements: affected,
+          anchors: plan.requirements.filter((r) =>
+            anchors.has(r.requirementId),
+          ),
+        },
+        request,
+        "Repair ONLY the reported semantic relationships. Return replacement requirements preserving existing IDs and verbatim sourceText, plus coverageRows for the exact affected clauses. Do not change unrelated actions. New requirements are permitted only for an actually missing instruction in the reported clause. Preserve correct techniques, targets and dependencies. Technical execution is deterministic; never invent source IDs.",
+        targetedRepairSchema,
+        "semantic-repair",
+      );
+      return mergeTargetedRepair(plan, patch, feedback.issues);
+    }
     if ((context as { contextualEditHint?: boolean })?.contextualEditHint)
       return normalizeSelectorPlan(
         await (
@@ -200,6 +335,24 @@ export function validateIntentPlan(
 ): IntentPlan {
   const plan = intentPlanSchema.parse(input),
     ids = new Set<string>();
+  const sourceClauses = new Map(
+    (plan.sourceClauses ?? []).map((c) => [c.clauseId, c]),
+  );
+  if (sourceClauses.size !== (plan.sourceClauses ?? []).length)
+    throw new Error("DUPLICATE_SOURCE_CLAUSE");
+  for (const clause of sourceClauses.values())
+    if (
+      clause.start < 0 ||
+      clause.end <= clause.start ||
+      request.slice(clause.start, clause.end) !== clause.text
+    )
+      throw new Error("INVALID_SOURCE_CLAUSE_SPAN");
+  for (const r of plan.requirements)
+    if (
+      r.sourceClauseId &&
+      sourceClauses.get(r.sourceClauseId)?.text !== r.sourceText
+    )
+      throw new Error("INVALID_REQUIREMENT_PROVENANCE");
   for (const r of plan.requirements)
     if (r.parameters.amplitudeFactor === null && r.parameters.relativeIntensity)
       r.parameters.amplitudeFactor =
@@ -514,6 +667,80 @@ export function validateIntentPlan(
       );
     }
   }
+  const visited = new Set<string>(),
+    visiting = new Set<string>();
+  function checkTemporal(id: string) {
+    if (visiting.has(id)) throw new Error("Temporal dependency cycle");
+    if (visited.has(id)) return;
+    visiting.add(id);
+    const r = plan.requirements.find((r) => r.requirementId === id)!;
+    if (r.timing.anchorRequirementId)
+      checkTemporal(r.timing.anchorRequirementId);
+    visiting.delete(id);
+    visited.add(id);
+  }
+  plan.requirements.forEach((r) => checkTemporal(r.requirementId));
+  // Only safe structural provenance/inheritance fixes; never invent techniques/targets.
+  const preliminary = inspectSemanticCoverage(project, request, plan, fps);
+  for (const issue of preliminary.issues) {
+    if (
+      issue.code === "MISSING_INHERITANCE_LINK" &&
+      typeof issue.expected === "string"
+    ) {
+      const r = plan.requirements.find(
+        (r) => r.requirementId === issue.requirementIds[0],
+      );
+      const parent = plan.requirements.find(
+        (r) => r.requirementId === issue.expected,
+      );
+      if (
+        r &&
+        parent &&
+        r.sceneId === parent.sceneId &&
+        r.sourceText.includes(issue.sourceText.trim()) &&
+        !r.inheritFromRequirementId
+      ) {
+        r.inheritFromRequirementId = parent.requirementId;
+        resolutionContext?.onResolution?.({
+          event: "STRUCTURAL_INHERITANCE_LINK_REPAIRED",
+          requirementId: r.requirementId,
+          parentId: parent.requirementId,
+          sourceText: issue.sourceText,
+        });
+      }
+    }
+    if (issue.code === "UNLINKED_CLAUSE_REQUIREMENT") {
+      const r = plan.requirements.find(
+        (r) => r.requirementId === issue.requirementIds[0],
+      );
+      const matches = plan.coverage.filter(
+        (row) => row.sourceText.trim() === r?.sourceText.trim(),
+      );
+      if (
+        r &&
+        matches.length === 1 &&
+        r.sourceText.trim() === issue.sourceText.trim() &&
+        matches[0].requirementIds.every((id) => {
+          const linked = plan.requirements.find((x) => x.requirementId === id);
+          return (
+            linked &&
+            (linked.requirementId === r.timing.anchorRequirementId ||
+              (!!linked.target.name &&
+                objectMentioned(linked.target.name, matches[0].sourceText)))
+          );
+        })
+      ) {
+        matches[0].requirementIds = [
+          ...new Set([...matches[0].requirementIds, r.requirementId]),
+        ];
+        resolutionContext?.onResolution?.({
+          event: "STRUCTURAL_PROVENANCE_LINK_REPAIRED",
+          requirementId: r.requirementId,
+          sourceText: issue.sourceText,
+        });
+      }
+    }
+  }
   const coverage = inspectSemanticCoverage(project, request, plan, fps);
   if (coverage.status !== "PASSED") throw new SemanticCoverageError(coverage);
   for (const r of plan.requirements)
@@ -604,15 +831,18 @@ export async function semanticPlan(
     providerConversation: projectedContext.recentConversation ?? [],
     contextProjectionBytes: Buffer.byteLength(JSON.stringify(projectedContext)),
     instructionBytes: Buffer.byteLength(
-      compactTier ? selectorEditInstructions : semanticInstructions,
+      compactTier ? selectorEditInstructions : graphInstructions,
     ),
     outputSchemaBytes: Buffer.byteLength(
       JSON.stringify(
         compatibleSchema(
-          z.toJSONSchema(compactTier ? selectorEditSchema : intentPlanSchema, {
-            io: "output",
-            reused: "ref",
-          }),
+          z.toJSONSchema(
+            compactTier ? selectorEditSchema : semanticGraphSchema,
+            {
+              io: "output",
+              reused: "ref",
+            },
+          ),
         ),
       ),
     ),
@@ -709,6 +939,9 @@ export async function semanticPlan(
       const repeated = previousFailure === failure;
       previousFailure = failure;
       feedback = {
+        ...(error instanceof GraphReferenceError
+          ? { graphReferenceRepair: { graph: error.graph, issue: error.issue } }
+          : {}),
         category: semanticFailureCategory(error),
         failureReason: failure,
         source:
