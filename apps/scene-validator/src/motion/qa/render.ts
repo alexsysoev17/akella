@@ -133,8 +133,15 @@ export async function motionQA(
         .filter((e) => e.enabled && changed(e, previous?.expressions ?? []))
         .map((e) => ({ ...e, id: e.expressionId, kind: e.type })),
     ];
+    const retiredAnimations = (previous?.animations ?? []).filter(
+      (a) =>
+        !state.animations.some((next) => next.animationId === a.animationId) &&
+        (!targetScope ||
+          (a.sceneId === targetScope.sceneId &&
+            a.targetId === targetScope.targetId)),
+    );
     const frameSet = new Set<number>();
-    for (const e of effects)
+    for (const e of [...effects, ...retiredAnimations])
       for (const t of [-1, 0, 0.25, 0.5, 0.75, 1, 1 + 1 / e.durationFrames])
         frameSet.add(
           Math.max(
@@ -162,6 +169,46 @@ export async function motionQA(
       await writeFile(path.join(directory, file), image);
       images.push(image);
       report.samples.push({ frame, file });
+    }
+    for (const a of retiredAnimations.filter((a) => a.effect === "trimPath")) {
+      await page.evaluate(
+        (f) => window.motionFrame(f),
+        Math.min(
+          state.settings.durationFrames - 1,
+          a.startFrame + Math.round(a.durationFrames / 2),
+        ),
+      );
+      const target = page
+        .locator(
+          `[data-motion-scene="${a.sceneId}"] [data-motion-target="${a.targetId}"]`,
+        )
+        .first();
+      const exists = await target.count();
+      const visible = exists ? await target.isVisible() : false;
+      const paths = exists ? await target.locator("path").count() : 0;
+      const masks = exists
+        ? await target.locator("[data-motion-reveal-progress]").count()
+        : 0;
+      checks.push({
+        name: "PATH_REVEAL_REMOVAL",
+        target: a.targetId,
+        status:
+          !exists || masks
+            ? "FAILED"
+            : !visible
+              ? "NOT_TESTED"
+              : paths
+                ? "PASSED"
+                : "FAILED",
+        reason: !visible
+          ? "Source target is outside visible composition at sampled former interval"
+          : "Original SVG geometry remains; no generated path reveal mask in rebuilt renderer",
+        metrics: {
+          removedAnimationId: a.animationId,
+          sourcePathCount: paths,
+          remainingRevealCount: masks,
+        },
+      });
     }
     const textTargets = [
       ...new Map(

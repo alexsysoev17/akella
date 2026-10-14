@@ -488,7 +488,65 @@ export function evalChecks(
           (a) => a.targetId === "logo" && a.effect === "trimPath",
         ),
       );
-    } else if (
+    } else if (name === "noTrimTracks")
+      add(name, !after.animations.some((a) => a.effect === "trimPath"));
+    else if (name === "dependencyIntegrity")
+      add(
+        name,
+        (after.timingDependencies ?? []).every(
+          (d) =>
+            after.animations.some((a) => a.animationId === d.animationId) &&
+            after.animations.some((a) => a.animationId === d.anchorAnimationId),
+        ),
+      );
+    else if (name === "reverseSpatial")
+      add(
+        name,
+        after.animations.filter((a) => a.effect === "trimPath").length === 2 &&
+          after.animations
+            .filter((a) => a.effect === "trimPath")
+            .every(
+              (a) =>
+                a.parameters.direction === "reverse" &&
+                a.parameters.from === 0 &&
+                a.parameters.to === 1,
+            ),
+      );
+    else if (name === "trackIdsPreserved")
+      add(
+        name,
+        JSON.stringify(
+          before.animations
+            .filter((a) => a.effect === "trimPath")
+            .map((a) => a.animationId)
+            .sort(),
+        ) ===
+          JSON.stringify(
+            after.animations
+              .filter((a) => a.effect === "trimPath")
+              .map((a) => a.animationId)
+              .sort(),
+          ),
+      );
+    else if (name === "fadeRemoved")
+      add(
+        name,
+        !after.animations.some(
+          (a) => a.targetId === "qr" && a.effect === "fadeIn",
+        ),
+      );
+    else if (name === "inertiaRemoved")
+      add(
+        name,
+        !after.expressions?.some((e) => e.type === "inertialOvershoot"),
+      );
+    else if (name === "dependentStartPreserved")
+      add(
+        name,
+        after.animations.find((a) => a.targetId === "line2")?.startFrame ===
+          before.animations.find((a) => a.targetId === "line2")?.startFrame,
+      );
+    else if (
       !["frameScheduling", "sequence", "compoundNumerical"].includes(name)
     )
       throw new Error("Unknown eval check: " + name);

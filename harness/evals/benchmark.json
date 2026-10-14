@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0.0",
-  "version": "2026-10-14.semantic-graph.1",
+  "version": "2026-10-14.effect-lifecycle.1",
   "cases": [
     {
       "evalId": "NEW_01",
@@ -2630,6 +2630,476 @@
         ],
         "assumptions": []
       }
+    },
+    {
+      "evalId": "LIFECYCLE_01_REMOVE_ONE",
+      "prompt": "Vector Line: убери Trim Paths.",
+      "fixture": "two-paths",
+      "seed": "trim-sequence",
+      "target": "line",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "dependencyIntegrity",
+        "dependentStartPreserved"
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Vector Line: убери Trim Paths."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "effect_change",
+            "clauseId": "source",
+            "kind": "editAnimation",
+            "scene": "s0",
+            "targets": [
+              "Vector Line"
+            ],
+            "techniques": [
+              "trimPath"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null,
+            "relation": "unchanged",
+            "effectOperation": {
+              "storage": "animation",
+              "action": "remove"
+            }
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "LIFECYCLE_02_REMOVE_GROUP",
+      "prompt": "Vector Line и Vector Line 2: убери Trim Paths у обеих.",
+      "fixture": "two-paths",
+      "seed": "trim-sequence",
+      "target": "line",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "noTrimTracks",
+        "dependencyIntegrity"
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Vector Line и Vector Line 2: убери Trim Paths у обеих."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "effect_change",
+            "clauseId": "source",
+            "kind": "editAnimation",
+            "scene": "s0",
+            "targets": [
+              "Vector Line",
+              "Vector Line 2"
+            ],
+            "techniques": [
+              "trimPath"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null,
+            "relation": "unchanged",
+            "effectOperation": {
+              "storage": "animation",
+              "action": "remove"
+            }
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "LIFECYCLE_03_REVERSE_GROUP",
+      "prompt": "Vector Line и Vector Line 2: Trim Paths наоборот от конца к началу.",
+      "fixture": "two-paths",
+      "seed": "trim-sequence",
+      "target": "line",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "reverseSpatial",
+        "trackIdsPreserved",
+        "sequence"
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Vector Line и Vector Line 2: Trim Paths наоборот от конца к началу."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "effect_change",
+            "clauseId": "source",
+            "kind": "editAnimation",
+            "scene": "s0",
+            "targets": [
+              "Vector Line",
+              "Vector Line 2"
+            ],
+            "techniques": [
+              "trimPath"
+            ],
+            "parameters": [
+              {
+                "key": "direction",
+                "value": "reverse"
+              }
+            ],
+            "constraints": [],
+            "unresolvedReason": null,
+            "relation": "unchanged",
+            "effectOperation": {
+              "storage": "animation",
+              "action": "update"
+            }
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "LIFECYCLE_04_MISSING_TRACK",
+      "prompt": "Vector Line: убери Trim Paths.",
+      "fixture": "two-paths",
+      "seed": "none",
+      "target": "line",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [],
+      "expectedFailure": true,
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Vector Line: убери Trim Paths."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "effect_change",
+            "clauseId": "source",
+            "kind": "editAnimation",
+            "scene": "s0",
+            "targets": [
+              "Vector Line"
+            ],
+            "techniques": [
+              "trimPath"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null,
+            "relation": "unchanged",
+            "effectOperation": {
+              "storage": "animation",
+              "action": "remove"
+            }
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "LIFECYCLE_05_REMOVE_FADE",
+      "prompt": "QR: убери Fade.",
+      "fixture": "motion",
+      "seed": "fade",
+      "target": "line",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "fadeRemoved"
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "QR: убери Fade."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "effect_change",
+            "clauseId": "source",
+            "kind": "editAnimation",
+            "scene": "s0",
+            "targets": [
+              "QR"
+            ],
+            "techniques": [
+              "fadeIn"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null,
+            "relation": "unchanged",
+            "effectOperation": {
+              "storage": "animation",
+              "action": "remove"
+            }
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "LIFECYCLE_06_REMOVE_EXPRESSION",
+      "prompt": "QR: убери инерцию.",
+      "fixture": "motion",
+      "seed": "inertia",
+      "target": "line",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "inertiaRemoved",
+        "baseUnchanged"
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "QR: убери инерцию."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "effect_change",
+            "clauseId": "source",
+            "kind": "editAnimation",
+            "scene": "s0",
+            "targets": [
+              "QR"
+            ],
+            "techniques": [
+              "inertialOvershoot"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null,
+            "relation": "unchanged",
+            "effectOperation": {
+              "storage": "expression",
+              "action": "remove"
+            }
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "LIFECYCLE_07_CREATE_REVERSE_REMOVE",
+      "prompt": "Vector Line прорисовывается через Trim Paths. Когда закончится, Vector Line 2 аналогично.",
+      "fixture": "two-paths",
+      "seed": "none",
+      "target": "line",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "noTrimTracks",
+        "dependencyIntegrity"
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Vector Line прорисовывается через Trim Paths. Когда закончится, Vector Line 2 аналогично."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "qr",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "Vector Line"
+            ],
+            "techniques": [
+              "trimPath"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          },
+          {
+            "actionId": "phone",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "Vector Line 2"
+            ],
+            "techniques": [
+              "trimPath"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null,
+            "dependsOn": "qr",
+            "inheritFrom": "qr"
+          }
+        ],
+        "assumptions": []
+      },
+      "turns": [
+        {
+          "prompt": "Vector Line прорисовывается через Trim Paths. Когда закончится, Vector Line 2 аналогично.",
+          "referenceOutput": {
+            "schemaVersion": "semantic-graph/1.0",
+            "clauses": [
+              {
+                "clauseId": "source",
+                "text": "Vector Line прорисовывается через Trim Paths. Когда закончится, Vector Line 2 аналогично."
+              }
+            ],
+            "actions": [
+              {
+                "actionId": "qr",
+                "clauseId": "source",
+                "kind": "objectAnimation",
+                "scene": "s0",
+                "targets": [
+                  "Vector Line"
+                ],
+                "techniques": [
+                  "trimPath"
+                ],
+                "parameters": [],
+                "constraints": [],
+                "unresolvedReason": null
+              },
+              {
+                "actionId": "phone",
+                "clauseId": "source",
+                "kind": "objectAnimation",
+                "scene": "s0",
+                "targets": [
+                  "Vector Line 2"
+                ],
+                "techniques": [
+                  "trimPath"
+                ],
+                "parameters": [],
+                "constraints": [],
+                "unresolvedReason": null,
+                "dependsOn": "qr",
+                "inheritFrom": "qr"
+              }
+            ],
+            "assumptions": []
+          }
+        },
+        {
+          "prompt": "Vector Line и Vector Line 2: Trim Paths наоборот от конца к началу.",
+          "referenceOutput": {
+            "schemaVersion": "semantic-graph/1.0",
+            "clauses": [
+              {
+                "clauseId": "source",
+                "text": "Vector Line и Vector Line 2: Trim Paths наоборот от конца к началу."
+              }
+            ],
+            "actions": [
+              {
+                "actionId": "effect_change",
+                "clauseId": "source",
+                "kind": "editAnimation",
+                "scene": "s0",
+                "targets": [
+                  "Vector Line",
+                  "Vector Line 2"
+                ],
+                "techniques": [
+                  "trimPath"
+                ],
+                "parameters": [
+                  {
+                    "key": "direction",
+                    "value": "reverse"
+                  }
+                ],
+                "constraints": [],
+                "unresolvedReason": null,
+                "relation": "unchanged",
+                "effectOperation": {
+                  "storage": "animation",
+                  "action": "update"
+                }
+              }
+            ],
+            "assumptions": []
+          }
+        },
+        {
+          "prompt": "Vector Line и Vector Line 2: убери Trim Paths у обеих.",
+          "referenceOutput": {
+            "schemaVersion": "semantic-graph/1.0",
+            "clauses": [
+              {
+                "clauseId": "source",
+                "text": "Vector Line и Vector Line 2: убери Trim Paths у обеих."
+              }
+            ],
+            "actions": [
+              {
+                "actionId": "effect_change",
+                "clauseId": "source",
+                "kind": "editAnimation",
+                "scene": "s0",
+                "targets": [
+                  "Vector Line",
+                  "Vector Line 2"
+                ],
+                "techniques": [
+                  "trimPath"
+                ],
+                "parameters": [],
+                "constraints": [],
+                "unresolvedReason": null,
+                "relation": "unchanged",
+                "effectOperation": {
+                  "storage": "animation",
+                  "action": "remove"
+                }
+              }
+            ],
+            "assumptions": []
+          }
+        }
+      ]
     }
   ]
 }

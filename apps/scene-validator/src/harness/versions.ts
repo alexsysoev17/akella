@@ -27,6 +27,7 @@ const components = [
   "motion/intent/planner",
   "motion/intent/schema",
   "motion/intent/selector-schema",
+  "motion-library/registry/capabilities",
   "motion/intent/graph",
   "motion/intent/provenance",
   "motion/intent/entrance",

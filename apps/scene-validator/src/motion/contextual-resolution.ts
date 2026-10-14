@@ -1,3 +1,4 @@
+import { semanticBindings } from "../motion-library/techniques/registry.js";
 import { createHash } from "node:crypto";
 import type { MotionDocument } from "./store.js";
 import type { MotionState } from "./schema.js";
@@ -12,6 +13,7 @@ export interface RecentAction {
   createdAt: string;
   effect: string;
   expressionIds: string[];
+  animationIds?: string[];
   targets: { sceneId: string; targetId: string }[];
 }
 const projectFilter =
@@ -21,11 +23,47 @@ const contextualGroup =
 const explicitProjectFilter = (text: string) =>
   projectFilter.test(text) && !contextualGroup.test(text);
 /** Derived from the effective committed history; never from model proposals or failed runs. */
-export function recentSuccessfulActions(doc: MotionDocument): RecentAction[] {
+export function recentSuccessfulActions(
+  doc: MotionDocument,
+  includeAnimations = false,
+): RecentAction[] {
   const groups = new Map<string, RecentAction>();
   for (const entry of doc.history.slice(0, doc.cursor)) {
     const group =
       entry.request.match(/^\[([a-f0-9-]{36})\//)?.[1] ?? entry.editId;
+    for (const op of includeAnimations ? entry.operations : []) {
+      const id =
+        op.type === "addAnimation" || op.type === "updateAnimation"
+          ? op.animation.animationId
+          : ["setDuration", "setStartFrame", "shiftAnimation"].includes(
+                op.type,
+              ) && "animationId" in op
+            ? op.animationId
+            : undefined;
+      const a = id
+        ? entry.after.animations.find((a) => a.animationId === id)
+        : undefined;
+      if (!a) continue;
+      const key = group + "/" + a.effect;
+      const action = groups.get(key) ?? {
+        actionId: group,
+        editIds: [],
+        createdAt: entry.createdAt,
+        effect: a.effect,
+        expressionIds: [],
+        animationIds: [],
+        targets: [],
+      };
+      if (!action.editIds.includes(entry.editId))
+        action.editIds.push(entry.editId);
+      action.animationIds ??= [];
+      if (!action.animationIds.includes(a.animationId)) {
+        action.animationIds.push(a.animationId);
+        action.targets.push({ sceneId: a.sceneId, targetId: a.targetId });
+      }
+      groups.delete(key);
+      groups.set(key, action);
+    }
     for (const op of entry.operations) {
       const ids =
         op.type === "setExpression"
@@ -126,6 +164,7 @@ export function resolveIntentSelectors(
     r.requirementId = parent;
     r.selectionRequirementId = undefined;
     r.expressionIds = undefined;
+    r.animationIds = undefined;
     r.target = { sourceNodeId: null, logicalObjectId: null, name: null };
     return true;
   });
@@ -137,6 +176,21 @@ export function resolveIntentSelectors(
     objects = project.inspection.document.scenes.flatMap(objectsIn);
   const replacements = new Map<string, string[]>();
   for (const r of plan.requirements) {
+    const trackMembers = resolveTrackLifecycle(
+      project,
+      state,
+      r,
+      context,
+      onResolution,
+    );
+    if (trackMembers) {
+      expanded.push(...trackMembers);
+      replacements.set(
+        r.requirementId,
+        trackMembers.map((m) => m.requirementId),
+      );
+      continue;
+    }
     if (
       r.kind === "unsupported" &&
       r.unresolvedReason &&
@@ -457,4 +511,231 @@ export function resolveIntentSelectors(
       row.classification = "executable";
   }
   return plan;
+}
+
+/** Storage routing uses the canonical capability bindings, never the presence of expressions. */
+function resolveTrackLifecycle(
+  project: LoadedProject,
+  state: MotionState,
+  r: IntentRequirement,
+  context: ReferenceContext,
+  onResolution?: (v: unknown) => void,
+): IntentRequirement[] | false {
+  const kinds = new Set(r.techniques.map((t) => semanticBindings[t]));
+  if (r.effectOperation?.storage === "expression") {
+    if (kinds.has("animation")) {
+      r.kind = "unsupported";
+      r.unresolvedReason =
+        "UNSUPPORTED_EFFECT_OPERATION: capability storage mismatch";
+      return [r];
+    }
+    r.expressionAction = r.effectOperation.action;
+  }
+  // Historical graph encoded all deletions as expressionAction; migrate only provably track-only intents.
+  if (
+    !r.effectOperation &&
+    r.expressionAction &&
+    kinds.size === 1 &&
+    kinds.has("animation")
+  ) {
+    r.effectOperation = { storage: "animation", action: r.expressionAction };
+    delete r.expressionAction;
+  }
+  if (r.effectOperation?.storage !== "animation") return false;
+  const fail = (status: string) => {
+    r.kind = "unsupported";
+    r.unresolvedReason = status;
+    onResolution?.({
+      event: "EFFECT_LIFECYCLE_RESOLUTION",
+      requirementId: r.requirementId,
+      status,
+      storage: "animation",
+      objects: targets.map((o) => ({
+        sceneId: o.sceneId,
+        targetId: o.targetId,
+      })),
+      objectResolution: {
+        status: targets.length ? "RESOLVED" : "OBJECT_NOT_FOUND",
+        count: targets.length,
+      },
+      effectResolution: {
+        storage: "animation",
+        status,
+        matchedAnimationIds: [],
+      },
+      selectedObjectCount: targets.length,
+      selectedAnimationCount: 0,
+      expressionLookup: "NOT_APPLICABLE",
+    });
+    return [r];
+  };
+  let targets = project.inspection.document.scenes
+    .flatMap(objectsIn)
+    .filter((o) => o.parentId);
+  const selector = r.selector;
+  let recentIds: Set<string> | undefined;
+  if (
+    selector?.effect &&
+    !r.techniques.includes(
+      selector.effect as IntentRequirement["techniques"][number],
+    )
+  )
+    return fail("UNSUPPORTED_EFFECT_OPERATION");
+  if (
+    selector?.type === "filteredSet" ||
+    selector?.type === "byAnimatedProperty"
+  )
+    return fail("SELECTOR_UNSUPPORTED");
+  const scene = selector?.sceneId ?? r.sceneId;
+  if (scene) targets = targets.filter((o) => o.sceneId === scene);
+  if (r.target.sourceNodeId)
+    targets = targets.filter((o) => o.targetId === r.target.sourceNodeId);
+  else if (selector?.type === "explicitObject")
+    targets = targets.filter((o) => selector.targetIds?.includes(o.targetId));
+  else if (selector?.type === "currentSelection")
+    targets = targets.filter((o) =>
+      (context.selectedObjectIds ?? [context.selectedObjectId]).includes(
+        o.targetId,
+      ),
+    );
+  else if (selector?.type === "recentSuccessfulTargets") {
+    const recent = context.recentActions?.find(
+      (a) =>
+        r.techniques.includes(
+          a.effect as IntentRequirement["techniques"][number],
+        ) && a.animationIds?.length,
+    );
+    if (!recent) return fail("IMPLICIT_REFERENCE_UNRESOLVED");
+    recentIds = new Set(recent.animationIds);
+    targets = targets.filter((o) =>
+      recent.targets.some(
+        (t) => t.targetId === o.targetId && t.sceneId === o.sceneId,
+      ),
+    );
+  } else if (
+    selector?.type === "byExistingEffect" ||
+    selector?.type === "byScene"
+  ) {
+    if (
+      selector.type === "byScene"
+        ? !scene || !/сцен|scene|здесь|тут/iu.test(r.sourceText)
+        : !explicitProjectFilter(r.sourceText)
+    )
+      return fail("SELECTOR_SCOPE_NOT_AUTHORIZED");
+    const matching = targets.filter((o) =>
+      state.animations.some(
+        (a) =>
+          a.sceneId === o.sceneId &&
+          a.targetId === o.targetId &&
+          r.techniques.includes(
+            a.effect as IntentRequirement["techniques"][number],
+          ),
+      ),
+    );
+    if (!matching.length) return fail("ANIMATION_TRACK_NOT_FOUND");
+    targets = matching;
+  } else {
+    const result = resolveObjectReference(project, state, {
+      name: r.target.name,
+      sourceNodeId: r.target.sourceNodeId,
+      sceneId: r.sceneId,
+      referenceText: r.sourceText,
+      activeSceneId: context.activeSceneId,
+      selectedObjectId: context.selectedObjectId,
+      techniques: r.techniques,
+      preferExisting: true,
+    });
+    if (!result.target) {
+      targets = [];
+      return fail(
+        result.status === "AMBIGUOUS_TARGET"
+          ? "AMBIGUOUS_EFFECT_MATCH"
+          : "OBJECT_NOT_FOUND",
+      );
+    }
+    targets = targets.filter(
+      (o) =>
+        o.targetId === result.target!.sourceNodeId &&
+        o.sceneId === result.target!.sceneId,
+    );
+  }
+  if (recentIds)
+    targets = targets.filter((o) =>
+      state.animations.some(
+        (a) =>
+          recentIds!.has(a.animationId) &&
+          a.sceneId === o.sceneId &&
+          a.targetId === o.targetId,
+      ),
+    );
+  if (kinds.size !== 1 || !kinds.has("animation"))
+    return fail("UNSUPPORTED_EFFECT_OPERATION");
+  if (!targets.length) return fail("OBJECT_NOT_FOUND");
+  if (targets.length > 200) return fail("SELECTOR_UNSUPPORTED_BATCH_LIMIT");
+  const members: IntentRequirement[] = [];
+  for (const target of targets) {
+    const tracks = state.animations.filter(
+      (a) =>
+        a.sceneId === target.sceneId &&
+        a.targetId === target.targetId &&
+        r.techniques.includes(
+          a.effect as IntentRequirement["techniques"][number],
+        ),
+    );
+    if (r.techniques.some((t) => !tracks.some((a) => a.effect === t)))
+      return fail("ANIMATION_TRACK_NOT_FOUND");
+    // Multiple tracks for an effect have independent intervals; never silently pick or delete one.
+    if (
+      r.techniques.some((t) => tracks.filter((a) => a.effect === t).length > 1)
+    )
+      return fail("AMBIGUOUS_EFFECT_MATCH");
+    const member = structuredClone(r);
+    member.kind = "editAnimation";
+    member.unresolvedReason = null;
+    member.sceneId = target.sceneId;
+    member.target = {
+      sourceNodeId: target.targetId,
+      name: target.name,
+      logicalObjectId: r.target.logicalObjectId,
+    };
+    member.animationIds = tracks.map((a) => a.animationId);
+    delete member.expressionAction;
+    delete member.expressionIds;
+    if (targets.length > 1) {
+      member.selectionRequirementId = r.requirementId;
+      member.requirementId =
+        "trackset_" +
+        createHash("sha256")
+          .update(
+            r.requirementId + "/" + target.sceneId + "/" + target.targetId,
+          )
+          .digest("hex")
+          .slice(0, 24);
+    }
+    members.push(member);
+    onResolution?.({
+      event: "EFFECT_LIFECYCLE_RESOLUTION",
+      requirementId: r.requirementId,
+      status: "RESOLVED",
+      storage: "animation",
+      objectResolution: { status: "RESOLVED", count: 1 },
+      effectResolution: {
+        storage: "animation",
+        status: "RESOLVED",
+        matchedAnimationIds: member.animationIds,
+      },
+      selectedObjectCount: 1,
+      selectedAnimationCount: tracks.length,
+      objects: [{ targetId: target.targetId, sceneId: target.sceneId }],
+      animationIds: member.animationIds,
+      expressionLookup: "NOT_APPLICABLE",
+      operation: r.effectOperation.action,
+      dependencies: state.timingDependencies?.filter(
+        (d) =>
+          member.animationIds!.includes(d.animationId) ||
+          member.animationIds!.includes(d.anchorAnimationId),
+      ),
+    });
+  }
+  return members;
 }

@@ -9,6 +9,7 @@ import {
 import { recentSuccessfulActions } from "../motion/contextual-resolution.js";
 import { expressionRegistry } from "../motion-library/expressions/registry.js";
 import { codeVersions } from "./versions.js";
+import { capabilityCatalog } from "../motion-library/registry/capabilities.js";
 import { digest } from "./context.js";
 export async function selectorContext(
   project: LoadedProject,
@@ -23,19 +24,18 @@ export async function selectorContext(
   recent: unknown[],
   config: HarnessConfig,
 ) {
-  const actions = recentSuccessfulActions(doc)
+  const actions = recentSuccessfulActions(doc, true)
       .filter(
         (a, i, all) =>
           all.findIndex((other) => other.effect === a.effect) === i,
       )
-      .slice(0, 5),
+      .slice(0, 3),
     selected =
       input.selectedObjectIds ??
       (input.selectedObjectId ? [input.selectedObjectId] : []);
   const ids = new Set([
     ...selected,
     ...(input.mentions ?? []).map((m) => m.sourceNodeId),
-    ...actions.flatMap((a) => a.targets.slice(0, 5).map((t) => t.targetId)),
   ]);
   const roots = new Set(
     project.inspection.document.scenes.map((s) => s.figmaNodeId),
@@ -44,6 +44,14 @@ export async function selectorContext(
     project.inspection.document,
     project.inspection.fingerprint,
   );
+  // Explicit object references do not need unrelated historical group members.
+  if (
+    !registry.objects.some(
+      (o) => objectMentionRanges(o.name, input.request).length,
+    )
+  )
+    for (const a of actions)
+      for (const t of a.targets.slice(0, 5)) ids.add(t.targetId);
   const objectIndex = registry.objects
     .filter(
       (o) =>
@@ -59,6 +67,17 @@ export async function selectorContext(
           logicalObjectId: o.logicalObjectId,
           name: o.name,
           aliases: objectAliases(o.name),
+          existingAnimations: doc.state.animations
+            .filter(
+              (a) => a.sceneId === i.sceneId && a.targetId === i.sourceNodeId,
+            )
+            .map((a) => ({
+              animationId: a.animationId,
+              effect: a.effect,
+              enabled: a.enabled,
+              startFrame: a.startFrame,
+              durationFrames: a.durationFrames,
+            })),
           existingExpressions: (doc.state.expressions ?? [])
             .filter(
               (e) =>
@@ -114,6 +133,7 @@ export async function selectorContext(
       editCount: a.editIds.length,
       editIdSamples: a.editIds.slice(0, 3),
       expressionCount: a.expressionIds.length,
+      animationCount: a.animationIds?.length ?? 0,
       targetCount: new Set(a.targets.map((t) => t.sceneId + "/" + t.targetId))
         .size,
       targetSamples: a.targets.slice(0, 5),
@@ -130,11 +150,36 @@ export async function selectorContext(
         requestTruncated: (r.request?.length ?? 0) > 1500,
       };
     }),
-    motionKnowledge: {
-      expressions: expressionRegistry.map(({ id, description }) => ({
-        id,
-        description,
+    lifecycleCatalog: capabilityCatalog()
+      .filter((c) => c.kind === "animation" || c.kind === "expression")
+      .map((c) => ({
+        id: c.id,
+        kind: c.kind,
+        operations:
+          "lifecycle" in c
+            ? { update: c.lifecycle.update, remove: c.lifecycle.remove }
+            : null,
       })),
+    animationInventory: [
+      ...new Set(doc.state.animations.map((a) => a.sceneId + "/" + a.effect)),
+    ].map((key) => ({
+      sceneId: key.split("/")[0],
+      effect: key.split("/")[1],
+      count: doc.state.animations.filter(
+        (a) => a.sceneId + "/" + a.effect === key,
+      ).length,
+    })),
+    motionKnowledge: {
+      expressions: expressionRegistry
+        .filter((e) =>
+          objectIndex.some((o) =>
+            o.existingExpressions.some((x) => x.type === e.id),
+          ),
+        )
+        .map(({ id, description }) => ({
+          id,
+          description,
+        })),
     },
     extraGuidance: config.extraGuidance,
     disclosure: {

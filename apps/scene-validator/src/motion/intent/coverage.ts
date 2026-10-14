@@ -308,7 +308,9 @@ export function inspectSemanticCoverage(
       !(
         rs.every(
           (r) =>
-            r.selectionRequirementId && r.selector && r.expressionIds?.length,
+            r.selectionRequirementId &&
+            r.selector &&
+            (r.expressionIds?.length || r.animationIds?.length),
         ) && new Set(rs.map((r) => r.selectionRequirementId)).size === 1
       )
     )

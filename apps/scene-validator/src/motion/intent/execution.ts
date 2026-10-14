@@ -100,10 +100,18 @@ export function assertIntentScope(
   ];
   baseline.timingDependencies = [
     ...(before.timingDependencies ?? []).filter(
-      (d) => !allowedIds.has(d.animationId),
+      (d) =>
+        !allowedIds.has(d.animationId) &&
+        !(
+          r.effectOperation?.action === "remove" &&
+          allowedIds.has(d.anchorAnimationId)
+        ),
     ),
-    ...(next.timingDependencies ?? []).filter((d) =>
-      allowedIds.has(d.animationId),
+    ...(next.timingDependencies ?? []).filter(
+      (d) =>
+        allowedIds.has(d.animationId) ||
+        (r.effectOperation?.action === "remove" &&
+          allowedIds.has(d.anchorAnimationId)),
     ),
   ];
   if (r.techniques.includes("objectStateTransition")) {
@@ -142,6 +150,23 @@ export function requirementChecks(
   plan: IntentPlan,
   previous?: MotionState,
 ) {
+  if (
+    r.effectOperation?.storage === "animation" &&
+    r.effectOperation.action === "remove"
+  ) {
+    const ids = r.animationIds ?? [];
+    return [
+      {
+        name: "existingAnimationRemoved",
+        requirementId: r.requirementId,
+        status:
+          ids.length &&
+          ids.every((id) => !state.animations.some((a) => a.animationId === id))
+            ? "PASSED"
+            : "FAILED",
+      },
+    ];
+  }
   if (r.expressionAction === "remove") {
     const ids =
       r.expressionIds ??
@@ -170,7 +195,19 @@ export function requirementChecks(
       },
     ];
   }
-  const checks = validateRequirement(state, r).map((c) => ({
+  // Disabled tracks remain editable; presence checks must not imply enabling or visible playback.
+  const presenceState =
+    r.effectOperation?.storage === "animation"
+      ? {
+          ...state,
+          animations: state.animations.map((a) =>
+            r.animationIds?.includes(a.animationId)
+              ? { ...a, enabled: true }
+              : a,
+          ),
+        }
+      : state;
+  const checks = validateRequirement(presenceState, r).map((c) => ({
     ...c,
     requirementId: r.requirementId,
   }));
@@ -587,20 +624,24 @@ export async function runIntentTasks(
               ...r.techniques.map((technique) => ({
                 technique,
                 action:
-                  semanticBindings[technique] === "expression"
-                    ? current.expressions?.some(
-                        (e) =>
-                          e.sceneId === r.sceneId &&
-                          e.targetId === r.target.sourceNodeId &&
-                          e.type === technique,
-                      )
-                      ? "updateExpression"
-                      : "createExpression"
-                    : semanticBindings[technique] === "easing"
-                      ? "updateEasing"
-                      : r.kind === "editAnimation"
-                        ? "updateAnimation"
-                        : "create required effect",
+                  r.effectOperation?.action === "remove"
+                    ? r.effectOperation.storage === "animation"
+                      ? "removeAnimation"
+                      : "removeExpression"
+                    : semanticBindings[technique] === "expression"
+                      ? current.expressions?.some(
+                          (e) =>
+                            e.sceneId === r.sceneId &&
+                            e.targetId === r.target.sourceNodeId &&
+                            e.type === technique,
+                        )
+                        ? "updateExpression"
+                        : "createExpression"
+                      : semanticBindings[technique] === "easing"
+                        ? "updateEasing"
+                        : r.kind === "editAnimation"
+                          ? "updateAnimation"
+                          : "create required effect",
               })),
               ...Object.entries(r.parameters)
                 .filter(
@@ -809,6 +850,9 @@ export async function runIntentTasks(
       plan.requirements
         .filter((r) => r.target.sourceNodeId)
         .map((r) => r.sceneId + "/" + r.target.sourceNodeId),
+    ).size,
+    selectedAnimationCount: new Set(
+      plan.requirements.flatMap((r) => r.animationIds ?? []),
     ).size,
     selectedExpressionCount: new Set(
       plan.requirements.flatMap((r) => r.expressionIds ?? []),

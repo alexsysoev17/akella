@@ -227,15 +227,22 @@ export async function proposeMotion(
       /(?:сцен|scene)[\s\S]{0,70}(?:начина|начн|starts|\bна\s*\d+\s*(?:кадр|сек)|\bat\s*\d+\s*(?:frame|second))/iu.test(
         request.request,
       );
+    const lifecycleEditHint =
+      /убер|удал|remove|delete|быстр|направлен|наоборот|от конца|reverse/iu.test(
+        request.request,
+      ) &&
+      /trim|прорис|fade|фейд|slide|инерц|колеб/iu.test(request.request) &&
+      !/появ|добав|создай/iu.test(request.request);
     const contextualEditHint =
       !sceneTimingHint &&
-      (/колеб|инерц|амплитуд/iu.test(request.request) ||
-        (recentSuccessfulActions(doc).length > 0 &&
-          request.request.length < 120)) &&
-      /слаб|силь|уменьш|убер/iu.test(request.request) &&
-      !/добав|появ|движ|позици|создай|изинг|easing|фейд|fade|trim|масштаб|ключ/iu.test(
-        request.request,
-      );
+      (lifecycleEditHint ||
+        ((/колеб|инерц|амплитуд/iu.test(request.request) ||
+          (recentSuccessfulActions(doc).length > 0 &&
+            request.request.length < 120)) &&
+          /слаб|силь|уменьш|убер/iu.test(request.request) &&
+          !/добав|появ|движ|позици|создай|изинг|easing|фейд|fade|trim|масштаб|ключ/iu.test(
+            request.request,
+          )));
     const selectedContext = harness
       ? contextualEditHint
         ? await selectorContext(project, doc, request, recent, harness.config)
@@ -382,7 +389,7 @@ export async function proposeMotion(
           },
           {
             auditAlways: false,
-            recentActions: recentSuccessfulActions(doc),
+            recentActions: recentSuccessfulActions(doc, true),
             projectRevision: doc.revision,
             selectedObjectIds: request.selectedObjectIds,
             maxAttempts: harness?.config.maxLLMCalls ?? 3,
@@ -397,7 +404,11 @@ export async function proposeMotion(
           });
           runQA = new RunQA(harness);
         }
-        if (contract.requirements.some((r) => r.semanticActionId)) {
+        if (
+          contract.requirements.some(
+            (r) => r.semanticActionId || r.effectOperation,
+          )
+        ) {
           try {
             const preflight = preflightIntentPlan(project, doc.state, contract);
             await atomicJson(

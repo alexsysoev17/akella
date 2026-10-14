@@ -1,3 +1,4 @@
+import { semanticBindings } from "../../motion-library/techniques/registry.js";
 import { targetedRepairSchema, mergeTargetedRepair } from "./repair.js";
 import {
   semanticGraphSchema,
@@ -59,6 +60,8 @@ export function semanticContext(context: unknown): unknown {
       objectIndex: c.objectIndex,
       recentSuccessfulActions: c.recentSuccessfulActions,
       effectInventory: c.effectInventory,
+      animationInventory: c.animationInventory,
+      lifecycleCatalog: c.lifecycleCatalog,
       extraGuidance: c.extraGuidance,
       selectedObjectIds: c.selectedObjectIds,
       activeSceneId: c.activeSceneId,
@@ -69,7 +72,7 @@ export function semanticContext(context: unknown): unknown {
         expressions: (c.motionKnowledge as Record<string, unknown>)
           ?.expressions,
       },
-      payloadTier: "contextual-expression-edit",
+      payloadTier: "contextual-effect-edit",
     };
   }
   const pick = (v: unknown, keys: string[]) =>
@@ -138,6 +141,7 @@ export function semanticContext(context: unknown): unknown {
           capabilities: rows(knowledge.capabilities, [
             "id",
             "kind",
+            "lifecycle",
             "description",
             "semanticTechniques",
             "supportedProperties",
@@ -228,18 +232,24 @@ export class SemanticProvider implements IntentProvider {
       return normalizeSemanticGraph(graph, context, request);
     }
 
-    if ((context as { contextualEditHint?: boolean })?.contextualEditHint)
-      return normalizeSelectorPlan(
-        await (
-          await this.provider("interpret")
-        ).structured(
-          { ...(semanticContext(context) as object), feedback },
-          request,
-          selectorEditInstructions,
-          selectorEditSchema,
-          "semantic-planning",
-        ),
+    if ((context as { contextualEditHint?: boolean })?.contextualEditHint) {
+      const output = await (
+        await this.provider("interpret")
+      ).structured(
+        { ...(semanticContext(context) as object), feedback },
+        request,
+        selectorEditInstructions,
+        z.union([selectorEditSchema, semanticGraphSchema, intentPlanSchema]),
+        "semantic-planning",
+        selectorEditSchema,
       );
+      if (output.schemaVersion === "semantic-graph/1.0")
+        return normalizeSemanticGraph(output, context, request);
+      const compact = selectorEditSchema.safeParse(output);
+      return compact.success
+        ? normalizeSelectorPlan(compact.data)
+        : intentPlanSchema.parse(output);
+    }
     return normalizeSemanticGraph(
       await (
         await this.provider("interpret")
@@ -415,6 +425,13 @@ export function validateIntentPlan(
       continue;
     }
     if (r.kind === "sceneTiming") continue;
+    if (
+      r.effectOperation &&
+      r.kind === "unsupported" &&
+      r.unresolvedReason?.startsWith("UNSUPPORTED_EFFECT_OPERATION")
+    )
+      continue;
+    if (r.effectOperation?.storage === "animation") continue;
     if (r.selector && r.kind === "unsupported" && r.unresolvedReason) continue;
     const state = currentState;
     const result = resolveObjectReference(project, state, {
@@ -562,6 +579,15 @@ export function validateIntentPlan(
         sourceText: r.sourceText,
         ...result,
         existingAnimationLookup: lookup,
+        ...(r.effectOperation
+          ? {
+              effectOperation: r.effectOperation,
+              storage: r.effectOperation.storage,
+              animationIds: r.animationIds ?? [],
+              selectedObjectCount: 1,
+              selectedAnimationCount: r.animationIds?.length ?? 0,
+            }
+          : {}),
         event: "TARGET_RECOVERY_BLOCKED",
       });
       if (missingTargetUnsupported)
@@ -623,6 +649,16 @@ export function validateIntentPlan(
     }
     r.unresolvedReason = null;
     if (
+      !r.effectOperation &&
+      r.kind === "editAnimation" &&
+      lookup?.status === "RESOLVED" &&
+      lookup.animations.length &&
+      r.techniques.every((t) => semanticBindings[t] === "animation")
+    ) {
+      r.effectOperation = { storage: "animation", action: "update" };
+      r.animationIds = lookup.animations.map((a) => a.animationId);
+    }
+    if (
       resolutionContext &&
       r.kind === "editAnimation" &&
       lookup?.status !== "RESOLVED" &&
@@ -631,12 +667,25 @@ export function validateIntentPlan(
         r.techniques.includes(t as (typeof r.techniques)[number]),
       )
     )
-      r.unresolvedReason = lookup?.status ?? "EXISTING_ANIMATION_NOT_FOUND";
+      r.unresolvedReason =
+        r.effectOperation?.storage === "expression" &&
+        !lookup?.expressions.length
+          ? "EXPRESSION_NOT_FOUND"
+          : (lookup?.status ?? "EXISTING_ANIMATION_NOT_FOUND");
     resolutionContext?.onResolution?.({
       requirementId: r.requirementId,
       sourceText: r.sourceText,
       ...result,
       existingAnimationLookup: lookup,
+      ...(r.effectOperation
+        ? {
+            effectOperation: r.effectOperation,
+            storage: r.effectOperation.storage,
+            animationIds: r.animationIds ?? [],
+            selectedObjectCount: 1,
+            selectedAnimationCount: r.animationIds?.length ?? 0,
+          }
+        : {}),
       event: recovered
         ? "TARGET_RECOVERED_FROM_PROJECT_STATE"
         : normalizeExistingEdit

@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   intentRequirementSchema,
   intentPlanSchema,
+  intentTechnique,
   type IntentPlan,
 } from "./schema.js";
 const parameters = intentRequirementSchema.shape.parameters.shape;
@@ -15,13 +16,11 @@ export const selectorEditSchema = z.object({
         kind: z.enum(["editAnimation", "unsupported"]),
         sourceText: z.string().min(1).max(20000),
         selector: intentRequirementSchema.shape.selector,
-        techniques: z
-          .array(z.enum(["inertialOvershoot", "wiggle", "spring"]))
-          .min(1)
-          .max(3),
+        techniques: z.array(intentTechnique).min(1).max(3),
         target: intentRequirementSchema.shape.target.optional(),
         sceneId: z.string().nullable().optional(),
         expressionAction: intentRequirementSchema.shape.expressionAction,
+        effectOperation: intentRequirementSchema.shape.effectOperation,
         parameters: z.object({
           amplitudeFactor: parameters.amplitudeFactor.optional(),
           relativeIntensity: parameters.relativeIntensity,
@@ -32,6 +31,8 @@ export const selectorEditSchema = z.object({
           durationFactor: parameters.durationFactor.optional(),
           durationSeconds: parameters.durationSeconds.optional(),
           property: parameters.property,
+          direction: parameters.direction.optional(),
+          easing: parameters.easing.optional(),
         }),
         unresolvedReason: z.string().nullable().optional(),
       }),
@@ -86,4 +87,4 @@ export function normalizeSelectorPlan(
     })),
   });
 }
-export const selectorEditInstructions = `Interpret the entire natural-language request as an edit/removal of EXISTING expressions. Resolve meaning, pronouns, typo-tolerant references and qualitative modifiers; never compute existing parameter values or invent IDs. Return the compact contract, verbatim sourceText and complete coverage. Explicit object names/IDs take precedence. byExistingEffect is EXPLICIT all matching project expressions; never use it for an unqualified follow-up. recentSuccessfulTargets is the recent committed effect group; currentSelection is explicit selected objects; byScene uses an explicitly requested canonical scene. filteredSet intersects effect/property/scene with base=recentSuccessfulTargets or currentSelection; project is the default only for explicit project filters. Current state is queried deterministically after interpretation. Failed proposals are not committed actions. Do not broaden scope on ambiguity; retain an unsupported requirement. expressionAction=remove removes existing expressions; update preserves IDs and all unspecified values. relativeIntensity selects slightlyWeaker/weaker/muchWeaker/slightlyStronger/stronger/muchStronger, or amplitudeFactor for an explicit numeric ratio. No new effects, geometry, base keyframes, easing, timing or full project regeneration. Unrelated edits and natural-language Undo are unsupported by this compact contract.`;
+export const selectorEditInstructions = `Interpret the entire natural-language request as an edit/removal of EXISTING effects. trimPath/Fade/Slide/etc live in animation tracks; inertia/wiggle live in expressions. Use effectOperation={storage:"animation"|"expression",action:"update"|"remove"} according to the supplied lifecycle catalog. Track edits preserve animationId, timing, easing and geometry. Direction reverse is spatial, hidden-to-visible progress stays 0 to 1. Resolve meaning, pronouns, typo-tolerant references and qualitative modifiers; never compute existing parameter values or invent IDs. Return the compact contract, verbatim sourceText and complete coverage. Explicit object names/IDs take precedence. byExistingEffect is EXPLICIT all matching project expressions; never use it for an unqualified follow-up. recentSuccessfulTargets is the recent committed effect group; currentSelection is explicit selected objects; byScene uses an explicitly requested canonical scene. filteredSet intersects effect/property/scene with base=recentSuccessfulTargets or currentSelection; project is the default only for explicit project filters. Current state is queried deterministically after interpretation. Failed proposals are not committed actions. Do not broaden scope on ambiguity; retain an unsupported requirement. expressionAction=remove removes existing expressions; update preserves IDs and all unspecified values. relativeIntensity selects slightlyWeaker/weaker/muchWeaker/slightlyStronger/stronger/muchStronger, or amplitudeFactor for an explicit numeric ratio. No new effects, geometry, base keyframes, easing, timing or full project regeneration. Unrelated edits and natural-language Undo are unsupported by this compact contract.`;

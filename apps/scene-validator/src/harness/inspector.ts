@@ -249,6 +249,9 @@ export async function inspectorRun(root: string, id: string, raw = false) {
               target: r.target,
               sceneId: r.sceneId,
               techniques: r.techniques,
+              effectOperation: r.effectOperation ?? null,
+              animationIds: r.animationIds ?? [],
+              expressionIds: r.expressionIds ?? [],
               timing: r.timing,
               inheritFromRequirementId: r.inheritFromRequirementId,
             })),
@@ -553,6 +556,10 @@ export async function projectDiagnosticBundle(root: string, id: string) {
     data = await inspectorRun(root, id),
     zip = new JSZip();
   const resolution = data.targetResolution as Data[];
+  const animationIds = new Set<string>();
+  for (const row of Array.isArray(resolution) ? resolution : [])
+    for (const id of Array.isArray(row.animationIds) ? row.animationIds : [])
+      animationIds.add(id);
   const ids = new Set<string>();
   for (const row of Array.isArray(resolution) ? resolution : [])
     for (const member of Array.isArray(row.members) ? row.members : [])
@@ -561,13 +568,14 @@ export async function projectDiagnosticBundle(root: string, id: string) {
     doc.state.expressions?.filter(
       (e) =>
         ids.has(e.expressionId) ||
-        (!ids.size && e.type === "inertialOvershoot"),
+        (!ids.size && !animationIds.size && e.type === "inertialOvershoot"),
     ) ?? [];
   const sourceIds = new Set(
     relevant.flatMap((e) =>
       "sourceAnimationId" in e ? [e.sourceAnimationId] : [],
     ),
   );
+  for (const id of animationIds) sourceIds.add(id);
   const full = (data.run as Data).privacy === "full";
   const context = (
     full
@@ -641,17 +649,27 @@ export async function projectDiagnosticBundle(root: string, id: string) {
     "relevant-state": full
       ? {
           settings: doc.state.settings,
-          blocks: doc.state.blocks.filter((b) =>
-            relevant.some((e) => e.sceneId === b.sceneId),
+          blocks: doc.state.blocks.filter(
+            (b) =>
+              relevant.some((e) => e.sceneId === b.sceneId) ||
+              doc.state.animations.some(
+                (a) => sourceIds.has(a.animationId) && a.sceneId === b.sceneId,
+              ),
           ),
           animations: doc.state.animations.filter((a) =>
             sourceIds.has(a.animationId),
           ),
           expressions: relevant,
+          matchedAnimationIds: [...animationIds],
+          timingDependencies: doc.state.timingDependencies?.filter(
+            (d) =>
+              sourceIds.has(d.animationId) ||
+              sourceIds.has(d.anchorAnimationId),
+          ),
         }
       : "NOT_AVAILABLE_PRIVACY",
     "recent-committed-actions": full
-      ? recentSuccessfulActions(doc).slice(0, 20)
+      ? recentSuccessfulActions(doc, true).slice(0, 20)
       : "NOT_AVAILABLE_PRIVACY",
     "reference-context": recordedReference ?? {
       providerConversation: full
@@ -666,7 +684,7 @@ export async function projectDiagnosticBundle(root: string, id: string) {
       projectRevision: context?.projectRevision ?? "NOT_AVAILABLE",
       payloadTier:
         context?.contextualEditHint === true
-          ? "contextual-expression-edit"
+          ? "contextual-effect-edit"
           : "standard",
     },
     "run-trace": {

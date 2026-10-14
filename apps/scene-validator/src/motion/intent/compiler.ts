@@ -94,9 +94,11 @@ export function compileTasks(
       r.unresolvedReason ??
       (!target
         ? "TARGET_UNRESOLVED"
-        : target.mask
+        : target.mask && r.effectOperation?.action !== "remove"
           ? "MASK_TARGET"
-          : r.techniques.includes("trimPath") && !target.trimSupported
+          : r.effectOperation?.action !== "remove" &&
+              r.techniques.includes("trimPath") &&
+              !target.trimSupported
             ? "MISSING_PATH_GEOMETRY: " + target.trimReason
             : undefined);
     tasks.push({
@@ -140,7 +142,8 @@ export function requirementAnimations(
 ): Animation[] {
   const own = state.animations.filter(
     (a) =>
-      a.enabled &&
+      (a.enabled || r.effectOperation?.storage === "animation") &&
+      (!r.animationIds || r.animationIds.includes(a.animationId)) &&
       a.sceneId === r.sceneId &&
       a.targetId === r.target.sourceNodeId,
   );
@@ -364,6 +367,30 @@ export function compileRequirement(
         proceduralEffects: [],
         layerPolicy: { type: "switch", switchProgress: 1 },
       });
+    } else if (
+      r.effectOperation?.storage === "animation" &&
+      r.effectOperation.action === "remove"
+    ) {
+      const ids = r.animationIds ?? [];
+      if (!ids.length) throw new Error("ANIMATION_TRACK_NOT_FOUND");
+      for (const d of state.timingDependencies ?? [])
+        if (
+          ids.includes(d.anchorAnimationId) &&
+          !plan.requirements.some(
+            (member) =>
+              member.effectOperation?.action === "remove" &&
+              member.animationIds?.includes(d.animationId),
+          )
+        )
+          warnings.push(
+            `Связь после удалённого эффекта снята; начало оставшейся анимации сохранено на кадре ${state.animations.find((a) => a.animationId === d.animationId)?.startFrame}.`,
+          );
+      operations.push(
+        ...ids.map((animationId) => ({
+          type: "removeAnimation" as const,
+          animationId,
+        })),
+      );
     } else if (task.kind === "editAnimation") {
       const targets = requirementAnimations(state, r);
       const expressions =

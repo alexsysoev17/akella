@@ -56,6 +56,18 @@ export const intentRequirementSchema = z
           .optional(),
         effect: z
           .enum([
+            "trimPath",
+            "fadeIn",
+            "fadeOut",
+            "slideUp",
+            "slideDown",
+            "slideLeft",
+            "slideRight",
+            "moveTo",
+            "scaleIn",
+            "scaleOut",
+            "rotation",
+            "maskReveal",
             "inertialOvershoot",
             "wiggle",
             "dampedOscillation",
@@ -75,6 +87,23 @@ export const intentRequirementSchema = z
     selectionRequirementId: z.string().optional(),
     expressionIds: z.array(z.string()).max(5000).optional(),
     expressionAction: z.enum(["update", "remove"]).optional(),
+    effectOperation: z
+      .discriminatedUnion("storage", [
+        z
+          .object({
+            storage: z.literal("animation"),
+            action: z.enum(["update", "remove"]),
+          })
+          .strict(),
+        z
+          .object({
+            storage: z.literal("expression"),
+            action: z.enum(["update", "remove"]),
+          })
+          .strict(),
+      ])
+      .optional(),
+    animationIds: z.array(z.string()).max(5000).optional(),
     parameters: z
       .object({
         entrance: z.enum(["offscreen"]).nullable().optional(),

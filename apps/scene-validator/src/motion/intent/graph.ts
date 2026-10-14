@@ -71,6 +71,7 @@ export const semanticGraphSchema = z
             delaySeconds: z.number().optional(),
             selector: intentRequirementSchema.shape.selector,
             expressionAction: intentRequirementSchema.shape.expressionAction,
+            effectOperation: intentRequirementSchema.shape.effectOperation,
             constraints: z.array(z.string()).max(20),
             unresolvedReason: z.string().nullable(),
           })
@@ -246,7 +247,13 @@ export function normalizeSemanticGraph(
           : null,
         constraints: action.constraints,
         unresolvedReason: action.unresolvedReason,
-        ...(action.selector ? { selector: action.selector } : {}),
+        ...(action.selector &&
+        !(action.selector.type === "explicitObject" && action.targets.length)
+          ? { selector: action.selector }
+          : {}),
+        ...(action.effectOperation
+          ? { effectOperation: action.effectOperation }
+          : {}),
         ...(action.expressionAction
           ? { expressionAction: action.expressionAction }
           : {}),
@@ -270,5 +277,7 @@ export function normalizeSemanticGraph(
     assumptions: graph.assumptions,
   });
 }
-export const graphInstructions = `Interpret the entire user request semantically. Return the compact semantic graph. Clauses must quote exact contiguous original text and cover every instruction (including scene headers and connecting words); no paraphrases. Harmless whitespace differences are restored to exact original spans. If the same quote appears repeatedly, provide its zero-based occurrence; never guess an ambiguous source span. One action can target multiple named objects with the same behavior. Use object names or canonical source IDs from objectIndex; never invent identifiers. Scene is a canonical sceneId or 1-based scene number. Action IDs are stable references, not array positions. Source clause IDs describe provenance ONLY; dependsOn and inheritFrom are independent action references. For "when it finishes, second ribbon similarly" inheritFrom=first ribbon and dependsOn=first ribbon; text following that clause is a separate action. Temporal anchors must refer to a single-target action. Behavior inheritance may reference a grouped action: only shared techniques/parameters are inherited, never another target's coordinates.
+export const graphInstructions = `Existing effect lifecycle: classify using the supplied capability storage kinds. Existing animation edits/removals use kind=editAnimation and effectOperation={storage:"animation",action:"update"|"remove"}; expressions use storage="expression". Creation remains objectAnimation. Never use expressionAction to remove animation tracks, never mark a supported removal unsupported. trimPath is an animation, not an expression. Reverse path direction updates direction="reverse"; progress stays from=0 to=1. Preserve IDs, geometry, unspecified timing/easing/dependencies. Interpret the entire user request semantically. Return the compact semantic graph. Clauses must quote exact contiguous original text and cover every instruction (including scene headers and connecting words); no paraphrases. Harmless whitespace differences are restored to exact original spans. If the same quote appears repeatedly, provide its zero-based occurrence; never guess an ambiguous source span. One action can target multiple named objects with the same behavior. Use object names or canonical source IDs from objectIndex; never invent identifiers. Scene is a canonical sceneId or 1-based scene number. Action IDs are stable references, not array positions. Source clause IDs describe provenance ONLY; dependsOn and inheritFrom are independent action references. For "when it finishes, second ribbon similarly" inheritFrom=first ribbon and dependsOn=first ribbon; text following that clause is a separate action. Temporal anchors must refer to a single-target action. Behavior inheritance may reference a grouped action: only shared techniques/parameters are inherited, never another target's coordinates.
 Use current request, not previous conversation, to choose action/technique. Default timing/duration/easing are computed by the compiler: omit unspecified parameters (empty parameters array). Explicit starts keep original units frames/seconds. Parameter values must match supported typed contracts. Unsupported identity is retained with unresolvedReason, never silently broaden targets. A standalone additional fade is objectAnimation/fadeIn preserving base movement. Existing parameter edits are editAnimation. Compound movement/fade/inertia requires all three techniques. Below=slideUp, above=slideDown; offscreen entrances use parameter entrance=offscreen. Damped inertia starts after the base endpoint; no fabricated keyframes. True Trim Paths=trimPath, never scale. Explicit easing/scene changes/dependencies must be preserved. AE Easy Ease=aeEasyEase. All technical constraints and engine limits remain enforced by deterministic execution.`;
+
+// Lifecycle interpretation belongs to the same semantic graph and compiler.

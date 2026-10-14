@@ -305,6 +305,19 @@ export function applyOperations(
         state.animations.push(op.animation);
         break;
       case "removeAnimation":
+        // Removal + re-add of the same ID is a replacement in one candidate transaction.
+        if (
+          !ops.some(
+            (other) =>
+              other.type === "addAnimation" &&
+              other.animation.animationId === op.animationId,
+          )
+        )
+          state.timingDependencies = (state.timingDependencies ?? []).filter(
+            (d) =>
+              d.animationId !== op.animationId &&
+              d.anchorAnimationId !== op.animationId,
+          );
         state.animations = state.animations.filter(
           (a) => a.animationId !== op.animationId,
         );
@@ -401,6 +414,16 @@ export function applyOperations(
         after.durationFrames -
         (before.startFrame + before.durationFrames);
   }
+  if (
+    state.expressions?.some(
+      (e) =>
+        "sourceAnimationId" in e &&
+        !state.animations.some((a) => a.animationId === e.sourceAnimationId),
+    )
+  )
+    throw new Error(
+      "ANIMATION_HAS_DEPENDENT_EXPRESSION: remove the expression explicitly first",
+    );
   return validateMotion(state, project);
 }
 export function motionDiff(before: MotionState, after: MotionState) {

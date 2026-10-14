@@ -49,12 +49,10 @@ export async function evalFixture(c: AgentEval) {
             type: "addAnimation" as const,
             animation,
           })),
-          ...expressions
-            .slice(4)
-            .map((expression) => ({
-              type: "setExpression" as const,
-              expression,
-            })),
+          ...expressions.slice(4).map((expression) => ({
+            type: "setExpression" as const,
+            expression,
+          })),
         ],
       })
     ).document;
@@ -133,6 +131,62 @@ export async function evalFixture(c: AgentEval) {
       node("phoneNext", "Phone", 10, 20, 30, 70),
     ];
   });
+  if (c.seed === "trim-sequence") {
+    await changeMotion(f.project.root, {
+      expectedRevision: "initial",
+      request: "synthetic Trim Paths lifecycle seed",
+      operations: [
+        ...["line", "line2"].map((targetId, i) => ({
+          type: "addAnimation" as const,
+          animation: {
+            animationId: "seed_trim_" + targetId,
+            targetId,
+            sceneId: "s0",
+            effect: "trimPath" as const,
+            startFrame: i * 21,
+            durationFrames: 21,
+            easing: "linear" as const,
+            enabled: true,
+            parameters: { from: 0, to: 1, direction: "forward" as const },
+          },
+        })),
+        {
+          type: "setTimingDependency" as const,
+          dependency: {
+            dependencyId: "seed_ribbon_sequence",
+            animationId: "seed_trim_line2",
+            anchorAnimationId: "seed_trim_line",
+            relation: "after" as const,
+            offsetFrames: 0,
+          },
+        },
+      ],
+    });
+    return f;
+  }
+  if (c.seed === "fade") {
+    await changeMotion(f.project.root, {
+      expectedRevision: "initial",
+      request: "synthetic Fade lifecycle seed",
+      operations: [
+        {
+          type: "addAnimation",
+          animation: {
+            animationId: "seed_fade",
+            targetId: "qr",
+            sceneId: "s0",
+            effect: "fadeIn",
+            startFrame: 0,
+            durationFrames: 21,
+            easing: "linear",
+            enabled: true,
+            parameters: { from: 0, to: 1 },
+          },
+        },
+      ],
+    });
+    return f;
+  }
   if (c.seed !== "none") {
     const base = {
       animationId: "seed_position",

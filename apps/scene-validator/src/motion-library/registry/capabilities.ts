@@ -67,6 +67,28 @@ const catalog = [
     };
     return {
       ...data,
+      lifecycle:
+        data.kind === "animation" || data.kind === "expression"
+          ? {
+              storage: data.kind,
+              create:
+                data.kind === "animation" ? "addAnimation" : "setExpression",
+              update:
+                data.kind === "animation" ? "updateAnimation" : "setExpression",
+              remove:
+                data.kind === "animation"
+                  ? "removeAnimation"
+                  : "removeExpression",
+              semanticSupport:
+                data.kind === "animation"
+                  ? "explicit effect operation; supported compiler parameters"
+                  : "existing expression compiler techniques only",
+            }
+          : {
+              storage: data.kind,
+              semanticSupport:
+                "not an independently removable track/expression",
+            },
       semanticTechniques: Object.entries(semanticBindings)
         .filter(
           ([id, kind]) =>
