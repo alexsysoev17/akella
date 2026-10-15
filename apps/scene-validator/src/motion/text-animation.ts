@@ -7,9 +7,16 @@ type Entry = {
   source: SVGForeignObjectElement;
   layout: TextLayout;
   root: SVGGElement;
-  units: { mover: SVGGElement; mask: SVGRectElement; bounds: TextUnit }[];
+  units: { mover: SVGGElement; sliceRect: SVGRectElement; bounds: TextUnit }[];
   signature: string;
   track: Animation;
+  lastFrame?: number;
+  atRest?: boolean;
+  evaluations?: {
+    tracks: Animation[];
+    expressions: NonNullable<MotionState["expressions"]>;
+    values: Values;
+  }[];
   ctm: DOMMatrix | null;
   viewport: { x: number; y: number; width: number; height: number };
 };
@@ -109,6 +116,11 @@ export function prepareTextAnimation(node: SVGGElement, state: MotionState) {
     slice.setAttribute("clip-path", `url(#${clip.id})`);
     const clone = source.cloneNode(true) as SVGForeignObjectElement;
     clone.style.visibility = "visible";
+    const html = clone.firstElementChild as HTMLElement;
+    html.style.willChange = "transform, opacity";
+    html.style.transformOrigin = "0 0";
+    html.style.transform = "translate3d(0,0,0)";
+    mover.setAttribute("data-text-renderer", "html-compositor");
     slice.append(clone);
     mover.append(slice);
     mask.append(mover);
@@ -119,7 +131,7 @@ export function prepareTextAnimation(node: SVGGElement, state: MotionState) {
       root.append(maskClip);
       mask.setAttribute("clip-path", `url(#${maskClip.id})`);
     }
-    return { mover, mask: rect, bounds };
+    return { mover, sliceRect: rect, bounds };
   });
   source.style.visibility = "hidden";
   source.parentNode!.appendChild(root);
@@ -166,14 +178,13 @@ export function applyTextAnimation(
     ...selected.map((a) => a.startFrame + a.durationFrames),
     ...expressions.map((e) => e.startFrame + e.durationFrames),
   );
-  // At rest, restore the original shaped text exactly, including spaces, kerning and overhangs.
-  if (frame >= end) {
-    entry.source.style.visibility = "";
-    entry.root.style.display = "none";
-    return;
-  }
+  entry.lastFrame = frame;
+  entry.atRest = frame >= end;
+  // Keep the same shaped compositor planes through rest. Swapping to the source
+  // changes Chromium glyph raster phase even when both transforms are zero.
   entry.source.style.visibility = "hidden";
   entry.root.style.display = "";
+  entry.evaluations = [];
   entry.units.forEach((unit, index) => {
     const tracks = selected.map((a) => {
       const schedule = textSchedule(
@@ -270,8 +281,156 @@ export function applyTextAnimation(
         frame,
       ).nodes[JSON.stringify([entry.track.sceneId, entry.track.targetId])] ??
       {};
-    unit.mover.setAttribute("transform", `translate(${v.x ?? 0} ${v.y ?? 0})`);
-    unit.mover.setAttribute("opacity", String(v.opacity ?? 1));
+    entry.evaluations!.push({
+      tracks,
+      expressions: localExpressions,
+      values: v,
+    });
+    placeTextUnit(unit, v);
   });
   node.setAttribute("data-text-frame-ms", String(performance.now() - begin));
+}
+
+export function placeTextUnit(
+  unit: { mover: SVGGElement; sliceRect: SVGRectElement; bounds: TextUnit },
+  v: Values,
+) {
+  const dx = v.x ?? 0,
+    dy = v.y ?? 0;
+  // SVG-transforming foreignObject re-hints text at integer baselines in Chromium.
+  // Move its composited HTML plane instead; the source slice follows that plane,
+  // while an optional reveal mask remains fixed in the source coordinate system.
+  unit.mover.setAttribute("transform", "translate(0 0)");
+  unit.mover.setAttribute("data-text-offset", JSON.stringify({ x: dx, y: dy }));
+  const html = unit.mover.querySelector("foreignObject")!
+    .firstElementChild as HTMLElement;
+  html.style.transform = `translate3d(${dx}px,${dy}px,0)`;
+  unit.sliceRect.setAttribute("x", String(unit.bounds.x + dx));
+  unit.sliceRect.setAttribute("y", String(unit.bounds.y + dy));
+  unit.mover.setAttribute("opacity", "1");
+  unit.mover.setAttribute("data-text-opacity", String(v.opacity ?? 1));
+  html.style.opacity = String(v.opacity ?? 1);
+}
+
+/** Read-on-demand diagnostics: rendering does not measure/rebuild layout here. */
+export function textDiagnostics(
+  root: Document,
+  state: MotionState,
+  evaluate: (
+    state: MotionState,
+    frame: number,
+  ) => { nodes: Record<string, Values> },
+) {
+  return [
+    ...root.querySelectorAll<SVGGElement>("[data-motion-target]"),
+  ].flatMap((node) => {
+    const e = cache.get(node);
+    if (!e) return [];
+    const frame = e.lastFrame ?? 0;
+    const block = node.closest<HTMLElement>("[data-motion-block]");
+    const visibleInScene =
+      !!block &&
+      block.style.display !== "none" &&
+      Number(block.style.opacity || 1) > 0 &&
+      node.style.display !== "none";
+    const signature = JSON.stringify([
+      e.layout.text,
+      e.layout.lines,
+      e.source.innerHTML,
+    ]);
+    let hash = 2166136261;
+    for (let i = 0; i < signature.length; i++)
+      hash = Math.imul(hash ^ signature.charCodeAt(i), 16777619);
+    return [
+      {
+        targetId: e.track.targetId,
+        sceneId: e.track.sceneId,
+        frame,
+        visibleInScene,
+        segmentation: e.track.text!.segmentation,
+        staggerFrames: e.track.text!.staggerFrames,
+        renderer: "foreignObject/html-compositor",
+        layoutHash: "text-layout/1-" + (hash >>> 0).toString(16),
+        preparationMs: e.layout.preparationMs,
+        lineCount: e.layout.lines.length,
+        fonts: root.body.dataset.motionMissingFonts
+          ? {
+              status: "fallback",
+              missing: JSON.parse(root.body.dataset.motionMissingFonts),
+            }
+          : { status: "ready" },
+        atRest: e.atRest,
+        renderPlaneStable:
+          e.source.style.visibility === "hidden" &&
+          e.root.style.display !== "none",
+        units: e.units.map((unit, index) => {
+          const sample = e.evaluations?.[index],
+            tracks = sample?.tracks ?? [],
+            expressions = sample?.expressions ?? [];
+          const key = JSON.stringify([e.track.sceneId, e.track.targetId]);
+          const local = {
+            ...state,
+            animations: tracks,
+            expressions: [],
+            objectTransitions: [],
+          };
+          const base = evaluate(local, frame).nodes[key] ?? {};
+          const expected =
+            evaluate({ ...local, expressions }, frame).nodes[key] ?? {};
+          const values = sample?.values ?? {};
+          const matrix = unit.mover.getScreenCTM(),
+            html =
+              unit.mover.querySelector("foreignObject")!.firstElementChild!;
+          const rendered = new DOMMatrix(getComputedStyle(html).transform);
+          const effective = matrix
+            ? DOMMatrix.fromMatrix(matrix).multiply(
+                new DOMMatrix(getComputedStyle(html).transform),
+              )
+            : null;
+          return {
+            index,
+            range: { start: unit.bounds.start, end: unit.bounds.end },
+            baseLayout: { ...unit.bounds },
+            baseline: null,
+            baselineStatus: "NOT_EXPORTED_BY_BROWSER_RANGE",
+            starts: tracks.map((a) => ({
+              animationId: a.animationId,
+              startFrame: a.startFrame,
+              endFrame: a.startFrame + a.durationFrames,
+              localTime: frame - a.startFrame,
+            })),
+            inertia: expressions.map((x) => ({
+              expressionId: x.expressionId,
+              startFrame: x.startFrame,
+              endFrame: x.startFrame + x.durationFrames,
+              scope: "source-animation-segment",
+            })),
+            baseOffset: { x: base.x ?? 0, y: base.y ?? 0 },
+            inertiaOffset: {
+              x: (values.x ?? 0) - (base.x ?? 0),
+              y: (values.y ?? 0) - (base.y ?? 0),
+            },
+            offset: { x: values.x ?? 0, y: values.y ?? 0 },
+            opacity: values.opacity ?? 1,
+            renderedOpacity: Number(getComputedStyle(html).opacity),
+            expectedOpacity: expected.opacity ?? 1,
+            renderedOffset: !visibleInScene
+              ? null
+              : { x: rendered.e, y: rendered.f },
+            expectedOffset: { x: expected.x ?? 0, y: expected.y ?? 0 },
+            effectiveMatrix: effective
+              ? [
+                  effective.a,
+                  effective.b,
+                  effective.c,
+                  effective.d,
+                  effective.e,
+                  effective.f,
+                ]
+              : null,
+          };
+        }),
+      },
+    ];
+  });
 }

@@ -18,6 +18,7 @@ if [ ! -d node_modules/tsx ]; then
   exit 1
 fi
 case "${1:-}" in
+  diagnose-text) shift; exec "$task_node" --import tsx "$task_root/scripts/diagnose-text.ts" "$@" ;;
   benchmark) shift; exec "$task_node" --import tsx "$task_root/scripts/benchmark.ts" "$@" ;;
   benchmark-report) shift; exec "$task_node" --import tsx "$task_root/scripts/benchmark-report.ts" "$@" ;;
   benchmark-replay) shift; exec "$task_node" --import tsx "$task_root/scripts/replay-agent-run.ts" "$@" ;;

@@ -1,3 +1,4 @@
+import { textRasterQA } from "./text.js";
 import { chromium, type Page, type Browser } from "playwright";
 import type { LoadedProject } from "../../types.js";
 import type { MotionState } from "../schema.js";
@@ -160,7 +161,13 @@ export async function motionQA(
           .evaluate((el) => ({
             layout: el.getAttribute("data-text-layout"),
             units: [...el.querySelectorAll("[data-text-unit-bounds]")].map(
-              (n) => [n.getAttribute("transform"), n.getAttribute("opacity")],
+              (n) => [
+                n.getAttribute("data-text-offset"),
+                n.getAttribute("data-text-opacity"),
+                getComputedStyle(
+                  n.querySelector("foreignObject")!.firstElementChild!,
+                ).transform,
+              ],
             ),
           }));
       await page.evaluate((f) => window.motionFrame(f), sample);
@@ -193,6 +200,138 @@ export async function motionQA(
         reason:
           "Actual shaped layout snapshot and local transforms checked after nonsequential seek; does not prove Figma font parity.",
       });
+      const matching = state.animations.filter(
+        (t) =>
+          t.enabled &&
+          t.sceneId === a.sceneId &&
+          t.targetId === a.targetId &&
+          t.text &&
+          t.text.segmentation !== "block",
+      );
+      const ids = new Set(matching.map((t) => t.animationId));
+      const attached = (state.expressions ?? []).filter(
+        (e) => "sourceAnimationId" in e && ids.has(e.sourceAnimationId),
+      );
+      const first = Math.max(
+          0,
+          Math.min(...matching.map((t) => t.startFrame)) - 1,
+        ),
+        last = Math.min(
+          state.settings.durationFrames - 1,
+          Math.max(
+            ...matching.map((t) => t.startFrame + t.durationFrames),
+            ...attached.map((e) => e.startFrame + e.durationFrames),
+          ) + 1,
+        );
+      const temporal = [];
+      if (last - first <= 240) {
+        for (let f = first; f <= last; f++) {
+          options.signal?.throwIfAborted();
+          await page.evaluate((frame) => window.motionFrame(frame), f);
+          const row = await page.evaluate(
+            ({ targetId, sceneId }) =>
+              window
+                .motionTextDiagnostics()
+                .find((t) => t.targetId === targetId && t.sceneId === sceneId),
+            a,
+          );
+          if (row) temporal.push(row);
+        }
+      }
+      const errors = temporal
+        .filter((row) => row.visibleInScene)
+        .flatMap((row) =>
+          row.units.flatMap((u) =>
+            u.renderedOffset
+              ? [
+                  Math.abs(u.renderedOffset.x - u.expectedOffset.x),
+                  Math.abs(u.renderedOffset.y - u.expectedOffset.y),
+                  Math.abs(u.renderedOpacity - u.expectedOpacity),
+                ]
+              : [],
+          ),
+        );
+      checks.push({
+        name: "TEXT_SEGMENT_FRAME_CONTINUITY",
+        target: a.targetId,
+        status: !temporal.length
+          ? "NOT_TESTED"
+          : new Set(temporal.map((t) => t.layoutHash)).size === 1 &&
+              temporal.every((t) => t.renderPlaneStable) &&
+              errors.every((e) => Number.isFinite(e) && e < 0.0001)
+            ? "PASSED"
+            : "FAILED",
+        reason:
+          "Every bounded interval frame compared to independent existing evaluator; stable layout hash, persistent shaped planes through rest and actual HTML transform/opacity. Intended motion is not rejected by a velocity threshold.",
+        metrics: {
+          frames: temporal.length,
+          maximumTransformError: errors.length ? Math.max(...errors) : null,
+        },
+      });
+      if (temporal.length)
+        await atomicJson(
+          path.join(
+            directory,
+            "text-" +
+              Buffer.from(a.sceneId + "/" + a.targetId).toString("hex") +
+              "-frames.json",
+          ),
+          temporal,
+        );
+      await page.evaluate((f) => window.motionFrame(f), sample);
+      const detail = await page.evaluate(
+        ({ targetId, sceneId }) =>
+          window
+            .motionTextDiagnostics()
+            .find((t) => t.targetId === targetId && t.sceneId === sceneId),
+        a,
+      );
+      if (detail) {
+        checks.push({
+          name: "TEXT_STAGGER_CONTRACT",
+          target: a.targetId,
+          status:
+            detail.units.length > 1 &&
+            a.text?.timing === "staggered" &&
+            a.text.staggerFrames === 0
+              ? "FAILED"
+              : "PASSED",
+          reason:
+            "Staggered multi-unit motion requires nonzero separation; simultaneous is a separate explicit timing mode.",
+          metrics: detail,
+        });
+        const indices =
+          detail.segmentation === "line"
+            ? Array.from(
+                { length: Math.min(3, detail.units.length) },
+                (_, i) => i,
+              )
+            : [0];
+        for (const index of indices) {
+          const raster = await textRasterQA(
+            page,
+            a.targetId,
+            a.sceneId,
+            index,
+            false,
+            renderCheck,
+          );
+          checks.push({
+            name: "TEXT_RENDERED_SUBPIXEL_TRANSPORT",
+            target: a.targetId + ":" + index,
+            ...raster,
+          });
+        }
+        if (detail.units.length > indices.length)
+          checks.push({
+            name: "TEXT_REMAINING_UNIT_RASTER_COVERAGE",
+            target: a.targetId,
+            status: "NOT_TESTED",
+            reason:
+              "Render probes are bounded; tested unit indices: " +
+              indices.join(","),
+          });
+      }
       if (a.text?.segmentation === "character")
         checks.push({
           name: "TEXT_SHAPING_LIMIT",
@@ -873,7 +1012,7 @@ export async function motionQA(
       metrics: { count: images.length },
     });
     checks.push({
-      name: "artisticIntentAndTextClipping",
+      name: "artisticQualityReview",
       status: "NOT_TESTED",
       reason:
         "No vision model; geometry and pixel checks do not establish subjective quality or text semantics",

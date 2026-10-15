@@ -1,3 +1,7 @@
+import {
+  resolveTextSettings,
+  textMotionDefaults,
+} from "../../motion-library/techniques/text.js";
 import type { SourceNode } from "../registry.js";
 import { resolveTemporalReference } from "./references.js";
 import { offscreenDistance } from "./entrance.js";
@@ -243,6 +247,38 @@ export function requirementAnchor(
     throw new Error("AMBIGUOUS_ANCHOR_TIMING");
   return anchors.sort((a, b) => a.animationId.localeCompare(b.animationId))[0];
 }
+function textSource(
+  project: LoadedProject,
+  sceneId: string | null,
+  targetId: string | null,
+) {
+  const scene = project.inspection.document.scenes.find(
+    (s) => s.sceneId === sceneId,
+  );
+  const pending: SourceNode[] = scene ? [scene as unknown as SourceNode] : [];
+  while (pending.length) {
+    const node = pending.pop()!;
+    if (node.figmaNodeId === targetId) return node;
+    pending.push(...(node.children ?? []));
+  }
+  return undefined;
+}
+function textLocalDistance(project: LoadedProject, r: IntentRequirement) {
+  if (!r.parameters.text) return undefined;
+  const source = textSource(project, r.sceneId, r.target.sourceNodeId),
+    metadata = source?.text as
+      | { fontSize?: unknown; segments?: { fontSize?: unknown }[] }
+      | undefined;
+  const sizes = [
+    metadata?.fontSize,
+    ...(metadata?.segments ?? []).map((s) => s.fontSize),
+  ].filter(
+    (s): s is number => typeof s === "number" && Number.isFinite(s) && s > 0,
+  );
+  return sizes.length
+    ? Math.max(...sizes) * textMotionDefaults.localDistanceEm
+    : undefined;
+}
 export function compileRequirement(
   project: LoadedProject,
   state: MotionState,
@@ -289,6 +325,12 @@ export function compileRequirement(
             ? anchor!.startFrame
             : block.startFrame;
     start += r.timing.offsetFrames ?? Math.round(r.timing.delaySeconds * fps);
+    if (r.parameters.text)
+      r.parameters.text = resolveTextSettings(
+        r.parameters.text,
+        fps,
+        Math.max(1, Math.round((r.parameters.durationSeconds ?? 0.7) * fps)),
+      );
     let duration = Math.max(
       1,
       Math.round(
@@ -304,38 +346,62 @@ export function compileRequirement(
       r.parameters.text.segmentation !== "block" &&
       r.parameters.durationSeconds === null
     ) {
-      const scene = project.inspection.document.scenes.find(
-        (s) => s.sceneId === r.sceneId,
-      );
-      const pending: SourceNode[] = scene
-        ? [scene as unknown as SourceNode]
-        : [];
-      let target: SourceNode | undefined;
-      while (pending.length) {
-        const current = pending.pop()!;
-        if (current.figmaNodeId === r.target.sourceNodeId) {
-          target = current;
-          break;
-        }
-        pending.push(...(current.children ?? []));
-      }
-      const metadata = target?.text as { characters?: unknown } | undefined;
+      const target = textSource(project, r.sceneId, r.target.sourceNodeId);
+      const metadata = target?.text as
+        | {
+            characters?: unknown;
+            fontSize?: unknown;
+            lineHeight?: { unit?: string; value?: number };
+          }
+        | undefined;
       const characters = String(
         metadata?.characters ?? target?.properties.characters ?? "",
       );
-      // A safe layout-independent upper bound. Explicit durations remain strict and are checked against actual layout in QA.
-      const count = Math.max(
-        1,
-        [
-          ...new Intl.Segmenter("und", { granularity: "grapheme" }).segment(
-            characters,
-          ),
-        ].filter((s) => !/^\s+$/u.test(s.segment)).length,
+      const graphemes = [
+        ...new Intl.Segmenter("und", { granularity: "grapheme" }).segment(
+          characters,
+        ),
+      ].filter((s) => !/^\s+$/u.test(s.segment)).length;
+      const fontSize =
+        typeof metadata?.fontSize === "number" ? metadata.fontSize : 16;
+      const lineHeight =
+        metadata?.lineHeight?.unit === "PIXELS"
+          ? (metadata.lineHeight.value ?? fontSize)
+          : metadata?.lineHeight?.unit === "PERCENT"
+            ? (fontSize * (metadata.lineHeight.value ?? 120)) / 100
+            : fontSize * 1.2;
+      // Duration hints only, never glyph placement. Actual layout/schedules are validated by Chromium QA.
+      const lines = Math.max(
+        characters.split("\n").length,
+        Math.ceil(
+          Number(target?.properties.height ?? lineHeight) / lineHeight - 0.001,
+        ),
       );
-      const text = r.parameters.text;
+      const words = [
+        ...new Intl.Segmenter("und", { granularity: "word" }).segment(
+          characters,
+        ),
+      ].filter((s) => !/^\s+$/u.test(s.segment)).length;
+      const text = r.parameters.text,
+        count = Math.max(
+          1,
+          text.segmentation === "character"
+            ? graphemes
+            : text.segmentation === "word"
+              ? words + Math.max(0, lines - 1)
+              : lines,
+        );
+      const minimum = Math.max(
+        1,
+        Math.round(fps * textMotionDefaults.minimumUnitSeconds),
+      );
       if (text.timing === "staggered")
-        duration += text.staggerFrames * (count - 1);
-      else if (text.timing === "sequential") duration *= count;
+        duration = Math.max(
+          duration,
+          minimum + text.staggerFrames * (count - 1),
+        );
+      else if (text.timing === "sequential")
+        duration = Math.max(duration, minimum * count);
     }
 
     if (
@@ -758,7 +824,7 @@ export function compileRequirement(
                       r.target.sourceNodeId!,
                       effect,
                     )
-                  : 80),
+                  : (textLocalDistance(project, r) ?? 80)),
               mode: "in",
             },
           };

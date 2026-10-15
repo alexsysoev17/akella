@@ -1,3 +1,5 @@
+import { textRasterQA } from "../src/motion/qa/text.js";
+import { resolveTextSettings } from "../src/motion-library/techniques/text.js";
 import test from "node:test";
 import { writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
@@ -31,7 +33,7 @@ test("text scheduling uses one bounded timeline interval and does not silently o
     /TEXT_STAGGER_EXCEEDS_DURATION/,
   );
 });
-test("shaped multiline snapshot, fade/offscreen, nonsequential seek and final source pixels", async () => {
+test("shaped multiline snapshot, fade/offscreen, nonsequential seek and persistent resting typography", async () => {
   const fixture = await identityFixture(1, (scenes) => {
     const t = node("text", "Headline", 20, 15, 180, 120);
     t.type = "TEXT";
@@ -108,6 +110,22 @@ test("shaped multiline snapshot, fade/offscreen, nonsequential seek and final so
     assert.ok(layout);
     const snapshot = JSON.parse(layout!);
     assert.equal(snapshot.lines.length, 3);
+    const raster = await textRasterQA(page, "text", "s0");
+    const legacy = await textRasterQA(page, "text", "s0", 0, true);
+    assert.equal(raster.status, "PASSED", JSON.stringify(raster));
+    assert.equal(legacy.status, "FAILED", JSON.stringify(legacy));
+    console.log(JSON.stringify({ textRaster: raster, legacyRaster: legacy }));
+    const retina = await browser.newPage({
+      viewport: { width: 240, height: 180 },
+      deviceScaleFactor: 2,
+    });
+    await retina.setContent((await motionHtml(fixture.project, active)).html);
+    await retina.evaluate(() => window.motionReady);
+    const retinaRaster = await textRasterQA(retina, "text", "s0");
+    assert.equal(retinaRaster.status, "PASSED", JSON.stringify(retinaRaster));
+    console.log(JSON.stringify({ retinaRaster }));
+    await retina.close();
+
     assert.equal(snapshot.text, text);
     assert.deepEqual(snapshot.explicitBreaks, [9, 22]);
     const capture = async (frame: number) => {
@@ -123,7 +141,15 @@ test("shaped multiline snapshot, fade/offscreen, nonsequential seek and final so
       .evaluateAll((es) =>
         es.map((e) => {
           const b = JSON.parse(e.getAttribute("data-text-unit-bounds")!);
-          const m = (e as unknown as SVGGraphicsElement).getScreenCTM()!;
+          const m = DOMMatrix.fromMatrix(
+            (e as unknown as SVGGraphicsElement).getScreenCTM()!,
+          ).multiply(
+            new DOMMatrix(
+              getComputedStyle(
+                e.querySelector("foreignObject")!.firstElementChild!,
+              ).transform,
+            ),
+          );
           const ps = [
             [b.x, b.y],
             [b.x + b.width, b.y],
@@ -132,7 +158,7 @@ test("shaped multiline snapshot, fade/offscreen, nonsequential seek and final so
           ].map(([x, y]) => new DOMPoint(x, y).matrixTransform(m));
           return {
             bottom: Math.max(...ps.map((p) => p.y)),
-            opacity: e.getAttribute("opacity"),
+            opacity: e.getAttribute("data-text-opacity"),
           };
         }),
       );
@@ -155,8 +181,22 @@ test("shaped multiline snapshot, fade/offscreen, nonsequential seek and final so
     assert.ok(Math.abs(resting.source - resting.slice) < 0.01);
     await capture(80);
     const final = await page.screenshot();
-    await page.evaluate((s) => window.motionUpdate(s), state);
-    assert.deepEqual(await page.screenshot(), final);
+    // Rest must retain the same raster planes; switching to the native source
+    // can change glyph raster phase even though both transforms equal zero.
+    for (let frame = 40; frame <= 80; frame++) {
+      await capture(frame);
+      const diagnostic = await page.evaluate(
+        () => window.motionTextDiagnostics()[0],
+      );
+      assert.equal(diagnostic.renderPlaneStable, true);
+      assert.ok(
+        diagnostic.units.every(
+          (u) => u.offset.x === 0 && u.offset.y === 0 && u.opacity === 1,
+        ),
+      );
+      assert.deepEqual(await page.screenshot(), final);
+    }
+
     const inertia = {
       expressionId: "inertia",
       type: "inertialOvershoot" as const,
@@ -180,10 +220,41 @@ test("shaped multiline snapshot, fade/offscreen, nonsequential seek and final so
       expressions: [inertia],
     });
     await page.evaluate(() => window.motionFrame(46));
+    const diagnostics = await page.evaluate(
+      () => window.motionTextDiagnostics()[0],
+    );
+    assert.deepEqual(
+      diagnostics.units.map((u) => u.starts[0].startFrame),
+      [0, 5, 10],
+    );
+    assert.deepEqual(
+      diagnostics.units.map((u) => u.starts[0].endFrame),
+      [30, 35, 40],
+    );
+    assert.deepEqual(
+      diagnostics.units.map((u) => u.inertia[0].startFrame),
+      [30, 35, 40],
+    );
+    assert.ok(
+      diagnostics.units.every(
+        (u) => Math.abs(u.renderedOffset!.y - u.expectedOffset.y) < 0.00001,
+      ),
+    );
+    const hash = diagnostics.layoutHash;
+    await page.evaluate((s) => window.motionUpdate(s), {
+      ...active,
+      expressions: [
+        { ...inertia, parameters: { ...inertia.parameters, amplitude: 0.125 } },
+      ],
+    });
+    assert.equal(
+      (await page.evaluate(() => window.motionTextDiagnostics()[0])).layoutHash,
+      hash,
+    );
     const inertial = await page
       .locator("[data-text-unit-bounds]")
-      .evaluateAll((es) => es.map((e) => e.getAttribute("transform")));
-    assert.ok(inertial.some((t) => t !== "translate(0 0)"));
+      .evaluateAll((es) => es.map((e) => e.getAttribute("data-text-offset")));
+    assert.ok(inertial.some((t) => t !== '{"x":0,"y":0}'));
     await page.evaluate(() => window.motionFrame(80));
     assert.deepEqual(await page.screenshot(), final);
     const motionDocument = await readMotion(fixture.project);
@@ -297,7 +368,7 @@ test("word/grapheme snapshots retain Unicode, wrapping, repeated spaces and mixe
     const base = (await motionHtml(f.project, state)).html;
     await page.setContent(base);
     await page.evaluate(() => window.motionReady);
-    const baseline = await page.screenshot();
+
     for (const segmentation of ["word", "character"] as const) {
       const cfg = {
         ...settings,
@@ -349,7 +420,26 @@ test("word/grapheme snapshots retain Unicode, wrapping, repeated spaces and mixe
       await page.evaluate(() => window.motionFrame(20));
       assert.deepEqual(await page.screenshot(), before);
       await page.evaluate(() => window.motionFrame(90));
-      assert.deepEqual(await page.screenshot(), baseline);
+      const resting = await page.screenshot();
+      const diagnostic = await page.evaluate(
+        () => window.motionTextDiagnostics()[0],
+      );
+      assert.equal(diagnostic.renderPlaneStable, true);
+      assert.ok(
+        diagnostic.units.every(
+          (u) => u.offset.x === 0 && u.offset.y === 0 && u.opacity === 1,
+        ),
+      );
+      assert.equal(
+        JSON.parse(
+          (await page
+            .locator("[data-text-layout]")
+            .getAttribute("data-text-layout"))!,
+        ).text,
+        content,
+      );
+      await page.evaluate(() => window.motionFrame(99));
+      assert.deepEqual(await page.screenshot(), resting);
       const timing = await page.evaluate(() => {
         const samples = [];
         for (let i = 0; i < 80; i++) {
@@ -518,7 +608,15 @@ test("each line clears the viewport through a rotated, nonuniformly scaled paren
       .evaluateAll((es) =>
         es.map((e) => {
           const b = JSON.parse(e.getAttribute("data-text-unit-bounds")!);
-          const m = (e as SVGGraphicsElement).getScreenCTM()!;
+          const m = DOMMatrix.fromMatrix(
+            (e as SVGGraphicsElement).getScreenCTM()!,
+          ).multiply(
+            new DOMMatrix(
+              getComputedStyle(
+                e.querySelector("foreignObject")!.firstElementChild!,
+              ).transform,
+            ),
+          );
           return Math.max(
             ...[
               [b.x, b.y],
@@ -534,5 +632,23 @@ test("each line clears the viewport through a rotated, nonuniformly scaled paren
   } finally {
     await browser.close();
     await f.cleanup();
+  }
+});
+
+test("default text rhythm distinguishes simultaneous from unspecified stagger, preserving explicit positive intervals", () => {
+  for (const fps of [24, 30, 60]) {
+    const zero = { ...settings, staggerFrames: 0 };
+    const resolved = resolveTextSettings(zero, fps, Math.round(fps * 0.7));
+    assert.ok(resolved.staggerFrames > 0);
+    assert.equal(
+      resolveTextSettings({ ...zero, timing: "simultaneous" }, fps, 21)
+        .staggerFrames,
+      0,
+    );
+    assert.equal(
+      resolveTextSettings({ ...settings, staggerFrames: 5 }, fps, 21)
+        .staggerFrames,
+      5,
+    );
   }
 });

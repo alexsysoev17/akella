@@ -1,3 +1,4 @@
+import { textMotionDefaults } from "../techniques/text.js";
 import { semanticBindings } from "../techniques/registry.js";
 import { z } from "zod";
 import {
@@ -16,6 +17,7 @@ export const capabilityRegistry = [
     kind: "animation",
     parameterSchema: z.toJSONSchema(s.shape.parameters),
     textContract: {
+      defaults: textMotionDefaults,
       schema: z.toJSONSchema(textAnimationSchema),
       supportedEffects: [
         "slideUp",

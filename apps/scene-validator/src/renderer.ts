@@ -356,7 +356,7 @@ export async function buildSceneSvg(
         return `<div style="margin-bottom:${i < all.length - 1 ? num(t.paragraphSpacing) : 0}px">${spans}</div>`;
       })
       .join("");
-    return `<foreignObject data-text-geometry="true" data-text-source="${escape(characters)}" width="${w}" height="${h}" overflow="visible"><div xmlns="http://www.w3.org/1999/xhtml" style="overflow:visible;width:${w}px;min-height:${h}px;display:flex;flex-direction:column;justify-content:${t.textAlignVertical === "CENTER" ? "center" : t.textAlignVertical === "BOTTOM" ? "flex-end" : "flex-start"};white-space:pre-wrap;overflow-wrap:normal;text-align:${t.textAlignHorizontal === "CENTER" ? "center" : t.textAlignHorizontal === "RIGHT" ? "right" : t.textAlignHorizontal === "JUSTIFIED" ? "justify" : "left"}"><div style="overflow:visible">${paragraphs}</div></div></foreignObject>`;
+    return `<foreignObject data-text-geometry="true" data-text-source="${escape(characters)}" width="${w}" height="${h}" overflow="visible"><div xmlns="http://www.w3.org/1999/xhtml" style="${options.motion ? "will-change:transform,opacity;opacity:1;transform:translate3d(0,0,0);transform-origin:0 0;" : ""}overflow:visible;width:${w}px;min-height:${h}px;display:flex;flex-direction:column;justify-content:${t.textAlignVertical === "CENTER" ? "center" : t.textAlignVertical === "BOTTOM" ? "flex-end" : "flex-start"};white-space:pre-wrap;overflow-wrap:normal;text-align:${t.textAlignHorizontal === "CENTER" ? "center" : t.textAlignHorizontal === "RIGHT" ? "right" : t.textAlignHorizontal === "JUSTIFIED" ? "justify" : "left"}"><div style="overflow:visible">${paragraphs}</div></div></foreignObject>`;
   }
   async function children(node: RenderNode): Promise<string> {
     let result = "",

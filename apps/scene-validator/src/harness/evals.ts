@@ -514,6 +514,23 @@ export function evalChecks(
           (a) => a.targetId === "logo" && a.effect === "trimPath",
         ),
       );
+    } else if (name === "textLocalInertia") {
+      const tracks = after.animations.filter((a) => a.targetId === c.target);
+      const slide = tracks.find((a) => a.effect === "slideDown");
+      add(
+        name,
+        tracks.length === 2 &&
+          tracks.every(
+            (a) => a.text?.segmentation === "line" && a.text.staggerFrames > 0,
+          ) &&
+          !!after.expressions?.some(
+            (e) =>
+              e.targetId === c.target &&
+              e.type === "inertialOvershoot" &&
+              "sourceAnimationId" in e &&
+              e.sourceAnimationId === slide?.animationId,
+          ),
+      );
     } else if (name === "textBlockTracks")
       add(
         name,

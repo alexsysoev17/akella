@@ -1,3 +1,4 @@
+import { resolveTextSettings } from "../../motion-library/techniques/text.js";
 import { isDeepStrictEqual } from "node:util";
 import { inertiaIntensityDefaults } from "../../motion-library/expressions/registry.js";
 import { semanticBindings } from "../../motion-library/techniques/registry.js";
@@ -228,7 +229,21 @@ export function requirementChecks(
       requirementId: r.requirementId,
       status:
         tracks.length > 0 &&
-        tracks.every((a) => isDeepStrictEqual(a.text, r.parameters.text))
+        tracks.every((a) =>
+          isDeepStrictEqual(
+            a.text,
+            resolveTextSettings(
+              r.parameters.text!,
+              state.settings.fps,
+              Math.max(
+                1,
+                Math.round(
+                  (r.parameters.durationSeconds ?? 0.7) * state.settings.fps,
+                ),
+              ),
+            ),
+          ),
+        )
           ? "PASSED"
           : "FAILED",
     });

@@ -1,3 +1,4 @@
+import { resolveTextSettings } from "../../motion-library/techniques/text.js";
 import {
   resolveTemporalReference,
   referenceDiagnostics,
@@ -359,6 +360,26 @@ export function validateIntentPlan(
 ): IntentPlan {
   const plan = intentPlanSchema.parse(input),
     ids = new Set<string>();
+  for (const r of plan.requirements) {
+    if (!r.parameters.text) continue;
+    const original = r.parameters.text;
+    r.parameters.text = resolveTextSettings(
+      original,
+      fps ?? resolutionContext?.state.settings.fps ?? 30,
+      Math.max(
+        1,
+        Math.round(
+          (r.parameters.durationSeconds ?? 0.7) *
+            (fps ?? resolutionContext?.state.settings.fps ?? 30),
+        ),
+      ),
+    );
+    if (original.staggerFrames !== r.parameters.text.staggerFrames)
+      plan.assumptions.push(
+        `Resolved unspecified stagger for ${r.requirementId}: ${r.parameters.text.staggerFrames} frames (text-rhythm/1).`,
+      );
+  }
+
   const sourceClauses = new Map(
     (plan.sourceClauses ?? []).map((c) => [c.clauseId, c]),
   );

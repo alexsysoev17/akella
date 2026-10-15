@@ -1,14 +1,18 @@
+import { textRenderProbe } from "./text-probe.js";
 import {
   prepareTextAnimation,
   invalidateTextLayouts,
+  textDiagnostics,
 } from "./text-animation.js";
-import { applyFrame } from "./engine.js";
+import { applyFrame, evaluateMotion } from "./engine.js";
 import type { MotionState } from "./schema.js";
 declare global {
   interface Window {
     motionFrame: (frame: number) => unknown;
     motionUpdate: (state: MotionState) => void;
     motionReady: Promise<void>;
+    motionTextProbe: typeof textRenderProbe;
+    motionTextDiagnostics: () => ReturnType<typeof textDiagnostics>;
   }
 }
 let state: MotionState = JSON.parse(
@@ -17,6 +21,9 @@ let state: MotionState = JSON.parse(
 const presentation = JSON.parse(
   document.getElementById("object-states")?.textContent ?? "{}",
 );
+window.motionTextProbe = textRenderProbe;
+window.motionTextDiagnostics = () =>
+  textDiagnostics(document, state, evaluateMotion);
 let frame = 0,
   ready = false;
 window.motionFrame = (value) => {

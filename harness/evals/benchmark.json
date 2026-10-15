@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0.0",
-  "version": "2026-10-15.text-animation.1",
+  "version": "2026-10-15.text-quality.1",
   "cases": [
     {
       "evalId": "NEW_01",
@@ -4041,6 +4041,75 @@
           }
         }
       ]
+    },
+    {
+      "evalId": "TEXT_06_LINE_INERTIA_QUALITY",
+      "prompt": "Headline построчно появляется сверху через фейд с затухающими колебаниями после конца движения.",
+      "fixture": "native-text",
+      "seed": "none",
+      "target": "headline",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "slideDown",
+        "fadeIn",
+        "inertialOvershoot"
+      ],
+      "checks": [
+        "qa",
+        "textLocalInertia"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "headline",
+          "scene": "s0",
+          "techniques": [
+            "slideDown",
+            "fadeIn",
+            "inertialOvershoot"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Headline построчно появляется сверху через фейд с затухающими колебаниями после конца движения."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "text",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "Headline"
+            ],
+            "techniques": [
+              "slideDown",
+              "fadeIn",
+              "inertialOvershoot"
+            ],
+            "parameters": [
+              {
+                "key": "text",
+                "value": {
+                  "segmentation": "line",
+                  "timing": "staggered",
+                  "staggerFrames": 0,
+                  "reverse": false,
+                  "origin": "local"
+                }
+              }
+            ],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
     }
   ]
 }

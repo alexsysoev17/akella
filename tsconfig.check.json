@@ -6,7 +6,8 @@
     "scripts/benchmark.ts",
     "scripts/replay-agent-run.ts",
     "scripts/harness-fixtures.ts",
-    "scripts/benchmark-report.ts"
+    "scripts/benchmark-report.ts",
+    "scripts/diagnose-text.ts"
   ],
   "exclude": [],
   "compilerOptions": {

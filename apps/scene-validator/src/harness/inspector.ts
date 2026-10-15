@@ -140,7 +140,16 @@ export async function inspectorRun(root: string, id: string, raw = false) {
     const frames = (await readdir(dir))
       .filter((f) => /^(contact-sheet|frame-\d+)\.png$/.test(f))
       .slice(0, 16);
-    qa.push({ attempt, report, frames, categories: qaCategories(report) });
+    const textTraceFiles = (await readdir(dir))
+      .filter((f) => /^text-[a-f0-9]+-frames\.json$/.test(f))
+      .slice(0, 10);
+    qa.push({
+      attempt,
+      report,
+      frames,
+      textTraceFiles,
+      categories: qaCategories(report),
+    });
   }
   const changes = history.slice(-80).map((h: Data) => ({
     editId: h.editId,
@@ -308,6 +317,22 @@ export async function inspectorRun(root: string, id: string, raw = false) {
         ? "AVAILABLE"
         : "NOT_AVAILABLE",
     qa,
+    textMotion: qa.map((value) => {
+      const q = value as {
+        attempt: string;
+        report: { checks?: Data[] } | undefined;
+        textTraceFiles: string[];
+      };
+      return {
+        attempt: q.attempt,
+        checks: (q.report?.checks ?? []).filter((c) =>
+          /^TEXT_(?:STAGGER|SEGMENT_FRAME|RENDERED_SUBPIXEL)/.test(
+            String(c.name),
+          ),
+        ),
+        traceFiles: q.textTraceFiles,
+      };
+    }),
     qaAvailability:
       attempts.length > 20
         ? "PARTIAL: QA_ATTEMPT_LIMIT"
@@ -374,16 +399,19 @@ export function qaCategories(report: unknown): Record<string, unknown> {
   };
   for (const check of checks) {
     const name = String(check.name);
+    if (/artistic/i.test(name)) continue;
     const group =
-      /render|MASK|GLYPH|CLIP|FINAL_STATE|GRADIENT|PATH_REVEAL|TRANSFORM_INTEGRITY/i.test(
-        name,
-      )
-        ? "render"
-        : /oscillation|frequency|decay|sampling|continuous|velocity|finite|revealParameters/i.test(
+      name === "TEXT_RENDERED_SUBPIXEL_TRANSPORT"
+        ? "visual"
+        : /render|MASK|GLYPH|CLIP|FINAL_STATE|GRADIENT|PATH_REVEAL|TRANSFORM_INTEGRITY/i.test(
               name,
             )
-          ? "mathematics"
-          : "technical";
+          ? "render"
+          : /oscillation|frequency|decay|sampling|continuous|velocity|finite|revealParameters/i.test(
+                name,
+              )
+            ? "mathematics"
+            : "technical";
     groups[group].push(check);
   }
   return {
@@ -535,6 +563,15 @@ export async function debugBundle(root: string, id: string) {
       }
       total += size;
       zip.file(`frames/${q.attempt}/${frame}`, await readFile(file));
+    }
+  for (const q of data.qa as { attempt: string; textTraceFiles?: string[] }[])
+    for (const name of q.textTraceFiles ?? []) {
+      const file = within(root, `motion/qa/${id}/${q.attempt}/${name}`);
+      await noSymlinkPath(root, file);
+      const size = (await stat(file)).size;
+      if (size > 2 * 1024 * 1024 || total + size > 25 * 1024 * 1024) continue;
+      total += size;
+      zip.file(`text-traces/${q.attempt}/${name}`, await readFile(file));
     }
   zip.file(
     "bundle-limits.json",
