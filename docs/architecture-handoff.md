@@ -4,14 +4,14 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-15 (Europe/Moscow) — partial temporal-reference and dependency reliability update |
+| Last Updated | 2026-10-15 (Europe/Moscow) — partial native text animation/layout integration |
 | Last Full Audit | 2026-10-13 — структурный аудит исходников перечисленных подсистем; не полный production E2E и не формальная верификация каждой ветви |
-| Git Commit | Pre-change checkpoint `99b4752` on top of `088e92a`; temporal-reference source/tests/docs reviewed for a subsequent local commit. Checkpoint does not contain the uncommitted implementation. |
+| Git Commit | Pre-change checkpoint `d075b08` on top of `51308d9`; native text source/tests/docs reviewed for subsequent local commit. The checkpoint does not contain the uncommitted implementation. |
 | Git Branch | `main`; локальный репозиторий создан после первоначального аудита |
 | Working Tree Status | Reviewed P0 source/tests/docs changes; ignored user projects/assets remain outside history. Final status checked after local commit. |
-| Documentation Version | 1.0.12 |
-| Scope of Last Update | Verified saved test12 temporal-reference failures; read/write intent separation, actual-state anchor resolution, existing scheduler/compiler integration, strict canonical cycles, compact timing context, Inspector state provenance and 50-case benchmark. No new full audit or live-provider test. |
-| Code snapshot SHA-256 | `f8d253c337f2d5ce7c2dfcc6b6a4d003768f505453a8480ea577190a220a7120` (post temporal-reference source verification; formatting included) |
+| Documentation Version | 1.0.13 |
+| Scope of Last Update | Native text import/render audit; stable browser layout snapshots, block/line/word/grapheme slices, shared evaluator/expression composition, semantic contracts, font readiness, real render/video checks and 55 reference-provider benchmark cases. Original reported jitter root cause NOT VERIFIED; no new full audit or live-provider test. |
+| Code snapshot SHA-256 | `dffdf7474f06023aff3f701860d68ed2ccc545a9c501d778104ec09e55bc2030` (post native text integration verification) |
 
 Git 2.54.0 (Apple Git-157): локальная история на main, без remote/network/push. В P0 update изменены context, semantic compiler/checks и coverage; математический Engine/Renderer не изменены. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
 
@@ -949,7 +949,60 @@ Both saved failures replayed successfully through production execution on isolat
 
 No new external provider call, live token reduction, live latency improvement or arbitrary-language completeness was measured. Saved-response local execution (~3.086s) is not provider latency. Unsupported reference kinds, genuinely ambiguous tracks and task-level partial commits remain explicit limitations. Original client projects/source assets were not modified by these replays.
 
+## Native text animation integration — 2026-10-15
+
+**IMPLEMENTED with shaping limits.** Main flow: native Figma TEXT metadata → existing renderer foreignObject/style runs → explicit font preparation → immutable browser layout snapshot → existing animation/easing/expression evaluators on local slices → existing Preview/frame renderer/MP4 → existing QA. No new renderer/agent, animation registry or persisted source of project state.
+
+### Import audit and instability diagnosis
+
+`figma-motion-exporter/src/exporter/text.ts` exports characters, UTF-16 styled segments, font family/style/weight/size, line height, tracking, case/decoration, alignment, paragraph settings and missing-font flag. Scene hierarchy/transforms remain separate. `renderer.ts` renders native text as styled HTML inside SVG foreignObject, not raster text. Original metadata remains in source/scene.json. SVG outlines/raster images have no independently addressable text and cannot acquire character animation by this implementation.
+
+Before this change there was no actual segmentation subsystem: existing slide/fade moved the whole wrapper; maskReveal was a block-level measured clip. No saved Run or specific Motion State for the exact singular three-line example was supplied/found. **The reported chaotic jitter itself was not reproduced on its original timeline; its exact cause is NOT VERIFIED.** A concrete readiness weakness was found: runtime awaited fonts while every scene block was display:none and only then exposed text. That does not explicitly request each hidden scene's font before animation/layout. Runtime now exposes fixed-size blocks under a hidden canvas, explicitly loads styled text fonts, awaits fonts/images, prepares snapshots, then evaluates the requested frame and reveals the canvas. Premature seeks are deferred. Missing font aliases are recorded in DOM and QA warnings, not declared exact font parity. Font loadingdone invalidates snapshots in a controlled rebuild.
+
+### Data contracts and layout
+
+`motion/schema.ts` adds optional animation.text: `{segmentation:block|line|word|character, timing:simultaneous|staggered|sequential, staggerFrames, reverse, origin:local|outsideViewport|masked}`. Old projects omit this field and retain their old evaluator semantics. Total track duration includes all stagger slots; unitDuration=total-step*(count-1), sequential step=total/count. Explicit invalid/too-short intervals are rejected, not silently stretched. For new segmented animations without explicit duration, compiler reserves base duration plus stagger slots using a conservative source-grapheme count upper bound (sequential multiplies base by the bound), so implicit defaults do not fail simply because text contains many units. For line/word modes this can yield a longer default than necessary; exact compact scheduling still uses the actual snapshot. This conservative default is a known duration-quality limitation, not a claim that line count is inferred from glyph widths. Timeline dependencies continue to reference one grouped track's full interval.
+
+`motion/text-layout.ts` measures complete already-shaped source via DOM Ranges in an isolated, fixed-size, untransformed SVG after fonts are ready. It never sums widths of separately rendered glyphs. Snapshot retains original text, UTF-16 ranges, explicit newline offsets, actual visual line boxes (including automatic wraps), word/grapheme ranges, unit positions and preparation time. Intl.Segmenter handles combining marks/emoji. Mixed-size vertical boxes are grouped by overlap within a paragraph. These are browser line boxes, **not exact glyph ink bounds or measured baselines**; no fabricated baseline values are stored.
+
+`motion/text-animation.ts` uses clipped copies of the entire shaped source, rather than replacing its content with independent character spans. The generated root sits in the source's original parent, preserving base transforms, source clipping, opacity and filters. Original source is retained; at rest it becomes visible verbatim and generated slices are hidden. Snapshots are cached per source DOM node; edits rebuild wrappers only when necessary, font changes invalidate, reimport/rebuilt iframe creates fresh DOM. Fixed scene resizing changes presentation scale, not text wrapping. Limits: 4096 UTF-16 source units and 512 visible slices; exceeding limits produces explicit errors. Copies cost more memory than span splitting; no claim of unlimited text scalability.
+
+### Composition, offscreen and procedural behavior
+
+Block motion stays on the normal outer motion wrapper. Line/word/character position and opacity operate inside the immutable source plane. Existing evaluateMotion/evaluateAnimation/easing and attached expression evaluator compute each unit at an offset within the same track interval. No frame accumulation, glyph-specific persisted animation IDs or per-character LLM calls. Expressions attached to sliced base tracks are excluded from the global wrapper and applied with per-unit shifted base endpoints; independent block effects remain outer transforms. Supported sliced effects: slideUp/Down/Left/Right and fadeIn/Out. Existing attached positional inertia is supported. Unsupported sliced scale/rotation/keyframes/maskReveal effects are rejected explicitly. Block effects keep existing capabilities. One segment granularity/settings set per node is supported, plus block transforms; simultaneous independent line+word+character hierarchies are **NOT IMPLEMENTED**.
+
+For outsideViewport, each unit's four layout corners are transformed by the cached full source CTM into scene viewport coordinates. A displacement beyond the relevant viewport edge is mapped back by the inverse linear matrix; this can generate local X+Y movement for rotated ancestors. Masked origin instead uses a fixed local unit clip outside its moving slice. These semantics differ from an ordinary local offset. Static rotated/scaled CTM is implemented; independently animated ancestor transforms at entrance time are **REQUIRES REVIEW**, not a universal offscreen guarantee. Existing block offscreen logic remains the existing entrance calculation and its previously documented parent-space limitation.
+
+### Harness integration and validation
+
+The same IntentPlan parameters.text, compact selector edit schema and graph parameter union carry high-level text settings; existing compiler copies them to animation create/update operations. Semantic instructions and kinetic-typography Skill describe granularity/timing/origin and editing existing tracks. Capability catalog advertises the typed text contract and bounds; component hashes include both new runtime modules. No new text-specific semantic planner exists. Existing revision/history/Undo APIs continue to own state. Validation rejects non-TEXT targets, unsupported sliced effects and incompatible segment settings; block+segment position compose independently, while same-level property conflicts retain existing rejection. Requirement reconciliation explicitly checks requested text settings persisted on the selected tracks.
+
+QA adds actual TEXT_LAYOUT_AND_SEEK comparisons of snapshot/local transforms after nonsequential seeks, plus font availability and character-shaping warnings. Existing rendered contribution, source clipping, numerical expression checks remain active. Inspector receives these checks and persisted text operations through the existing report, not a new diagnostic storage system.
+
+### Library research and decision
+
+Reviewed public official documentation, no package source was copied or library installed:
+
+- [GSAP SplitText](https://gsap.com/docs/v3/Plugins/SplitText/): font/resize resplitting, line/word/character wrappers, masks and revert lifecycle. [Standard license](https://gsap.com/community/standard-license/) has restrictions on competing visual animation tools; not selected.
+- [Anime.js splitText](https://animejs.com/documentation/text/splittext/): independently importable split/clone/wrap utility and lifecycle; [MIT license](https://github.com/juliangarnier/anime/blob/master/LICENSE.md). Technically viable HTML utility, but does not remove the need to preserve AKELLA SVG source shaping/transforms and deterministic seeking.
+- [Motion splitText](https://motion.dev/docs/split-text): HTML span replacement, font readiness/accessibility; the documented utility requires Motion+ membership, not assumed to have the core library's license/access.
+
+Decision: independent extension of existing SVG/foreignObject rendering with Range snapshots, immutable shaped slices, generated aria-hidden wrappers and existing frame evaluator. Generated copies are aria-hidden and original source HTML is retained; accessibility during its visibility:hidden animation interval was NOT VERIFIED. External realtime animation timelines are not introduced.
+
+### Actual verification, performance and limits
+
+Full suite **205/205 PASS**, TypeScript and builds checked. Dedicated text tests cover exact requested three lines, true offscreen geometry, simultaneous fade, local resting coordinates, attached inertia, nonsequential seeking, exact final-source screenshots, word/grapheme segmentation, Cyrillic/Latin/numbers/punctuation/repeated spaces, automatic wrapping, combining marks, emoji, mixed weights, alignment and fixed masks. Actual MP4 exported from the artificial fixture and decoded frames10/20/45 compared against Preview: mean absolute RGBA errors about **0.583 / 0.963 / 1.581 of255**, below test threshold3 (H264 is lossy). Test performance logs are in ignored local /tmp artifacts; no production client state was edited.
+
+Permanent benchmark now **55 cases**, including four text granularities and a create→speed-up→convert-to-block multi-turn workflow. Reference provider exercises production compiler/execution/Chromium QA; **55/55 PASS** in `artifacts/harness/text-final-55.json`. These fixtures do not measure live semantic interpretation. Original 50 scenarios remain covered. Regression comparison across dataset digests remains NOT COMPARABLE, not an invented rate.
+
+Local short Unicode fixture: snapshot preparation around4.4ms for4 wrapped lines,9 word slices/27 visible graphemes (measurement varies by run); snapshot reused across granularity changes. Targeted80-frame JS evaluation: word p50 at browser timer resolution0ms/p95≈0.2ms; character p50≈0.1ms/p95≈0.1–0.2ms. These small-fixture measurements exclude rasterization/encoding and are not a production p95 guarantee. Browser peak memory, live LLM tokens and total live-provider latency were NOT MEASURED. No extra provider calls per unit. Runtime cloning is bounded, not claimed allocation-free.
+
+**Fundamental limits:** character slices preserve the shaped source but do not expose true glyph/ligature cluster outlines. Independent fi/Arabic/Indic/variable-font glyph animation is NOT guaranteed; character mode produces a QA warning. Exact font availability/Figma shaping parity and precise ink bounds/baselines are separate problems. The final original-layout invariant holds for the actually loaded browser fonts; it is not proof of equivalence to unavailable Figma fonts. Complex-script/variable-font behavior was not exhaustively tested. The original client jitter diagnosis and new live natural-language prompts remain NOT VERIFIED. These limitations are not hidden behind a claim of complete typographic parity.
+
 ## ARCHITECTURE CHANGE HISTORY
+
+- 2026-10-15 — v1.0.13: optional typed text settings, immutable native layout/slices, explicit font readiness, shared segment evaluator, local masking/offscreen geometry, QA and 55-case reference benchmark. Verified 205 tests and actual text Preview/MP4 samples; original jitter root cause and live provider interpretation not verified.
+
 
 - 2026-10-15 — v1.0.12: temporal read references, scoped existing-track scheduling, canonical dependency diagnostics, archived/current state distinction, historical replay and 50-case benchmark. Verified 200 tests and actual saved-case Chromium path progress; no new live-provider test.
 

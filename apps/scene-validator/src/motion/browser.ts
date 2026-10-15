@@ -1,3 +1,7 @@
+import {
+  prepareTextAnimation,
+  invalidateTextLayouts,
+} from "./text-animation.js";
 import { applyFrame } from "./engine.js";
 import type { MotionState } from "./schema.js";
 declare global {
@@ -13,9 +17,11 @@ let state: MotionState = JSON.parse(
 const presentation = JSON.parse(
   document.getElementById("object-states")?.textContent ?? "{}",
 );
-let frame = 0;
+let frame = 0,
+  ready = false;
 window.motionFrame = (value) => {
   frame = value;
+  if (!ready) return;
   return applyFrame(document, state, frame, presentation);
 };
 window.motionUpdate = (value) => {
@@ -28,6 +34,32 @@ window.addEventListener("message", (e) => {
   if (e.data?.type === "motion-state") window.motionUpdate(e.data.state);
 });
 window.motionReady = (async () => {
+  const canvas = document.getElementById("canvas");
+  if (canvas) canvas.style.visibility = "hidden";
+  const blocks = [
+    ...document.querySelectorAll<HTMLElement>("[data-motion-block]"),
+  ];
+  for (const block of blocks) block.style.display = "block";
+  const missing: string[] = [];
+  await Promise.all(
+    [...document.querySelectorAll<HTMLElement>("[data-text-start]")].map(
+      async (span) => {
+        const style = getComputedStyle(span);
+        try {
+          await document.fonts.load(
+            `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`,
+            span.textContent ?? "",
+          );
+        } catch {
+          missing.push(style.fontFamily);
+        }
+      },
+    ),
+  );
+  if (missing.length)
+    document.body.dataset.motionMissingFonts = JSON.stringify([
+      ...new Set(missing),
+    ]);
   await document.fonts.ready;
   await Promise.all(
     [...document.querySelectorAll("svg image")].map(async (el) => {
@@ -36,7 +68,13 @@ window.motionReady = (async () => {
       await image.decode();
     }),
   );
-  window.motionFrame(0);
+  for (const node of document.querySelectorAll<SVGGElement>(
+    "[data-motion-target]",
+  ))
+    prepareTextAnimation(node, state);
+  ready = true;
+  window.motionFrame(frame);
+  if (canvas) canvas.style.visibility = "";
   if (parent !== window)
     parent.postMessage({ type: "motion-ready" }, location.origin);
 })();
@@ -53,4 +91,11 @@ document.addEventListener("click", (event) => {
     },
     location.origin,
   );
+});
+
+document.fonts.addEventListener("loadingdone", () => {
+  if (ready) {
+    invalidateTextLayouts(document);
+    window.motionFrame(frame);
+  }
 });

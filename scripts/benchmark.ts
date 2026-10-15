@@ -37,11 +37,20 @@ function nativeWire(value: unknown, schema: unknown, root = schema): unknown {
     typeof value === "object" &&
     !Array.isArray(value)
   ) {
-    for (const branch of s.anyOf) {
-      const candidate = branch as Record<string, unknown>;
-      if (candidate.type === "object" || candidate.$ref)
-        return nativeWire(value, candidate, root);
-    }
+    const candidates = s.anyOf
+      .map((branch) => nativeWire(value, branch, root))
+      .filter((v) => v && typeof v === "object" && !Array.isArray(v)) as Record<
+      string,
+      unknown
+    >[];
+    if (candidates.length)
+      return candidates.sort(
+        (a, b) =>
+          Object.keys(b).filter((k) => k in (value as object) && b[k] !== null)
+            .length -
+          Object.keys(a).filter((k) => k in (value as object) && a[k] !== null)
+            .length,
+      )[0];
   }
   if (Array.isArray(value) && s.items)
     return value.map((v) => nativeWire(v, s.items, root));

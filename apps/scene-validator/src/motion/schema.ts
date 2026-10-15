@@ -10,7 +10,19 @@ import {
   expressionSchema,
   propertySchema,
 } from "../motion-library/expressions/registry.js";
+export const textAnimationSchema = z
+  .object({
+    segmentation: z.enum(["block", "line", "word", "character"]),
+    timing: z
+      .enum(["simultaneous", "staggered", "sequential"])
+      .default("staggered"),
+    staggerFrames: z.number().int().min(0).max(1000).default(2),
+    reverse: z.boolean().default(false),
+    origin: z.enum(["local", "outsideViewport", "masked"]).default("local"),
+  })
+  .strict();
 const common = {
+  text: textAnimationSchema.optional(),
   animationId: id,
   targetId: id,
   sceneId: id,

@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0.0",
-  "version": "2026-10-14.temporal-reference.1",
+  "version": "2026-10-15.text-animation.1",
   "cases": [
     {
       "evalId": "NEW_01",
@@ -3573,6 +3573,472 @@
         {
           "prompt": "Undo последнего изменения через существующий редактор",
           "editorAction": "undo"
+        }
+      ]
+    },
+    {
+      "evalId": "TEXT_01",
+      "prompt": "Весь блок Headline появляется сверху через фейд.",
+      "fixture": "native-text",
+      "seed": "none",
+      "target": "headline",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "slideDown",
+        "fadeIn"
+      ],
+      "checks": [
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "headline",
+          "scene": "s0",
+          "techniques": [
+            "slideDown",
+            "fadeIn"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Весь блок Headline появляется сверху через фейд."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "text",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "Headline"
+            ],
+            "techniques": [
+              "slideDown",
+              "fadeIn"
+            ],
+            "parameters": [
+              {
+                "key": "text",
+                "value": {
+                  "segmentation": "block",
+                  "timing": "simultaneous",
+                  "staggerFrames": 1,
+                  "reverse": false,
+                  "origin": "local"
+                }
+              },
+              {
+                "key": "durationSeconds",
+                "value": 3
+              }
+            ],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "TEXT_02",
+      "prompt": "Headline появляется сверху из-за кадра построчно через фейд.",
+      "fixture": "native-text",
+      "seed": "none",
+      "target": "headline",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "slideDown",
+        "fadeIn"
+      ],
+      "checks": [
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "headline",
+          "scene": "s0",
+          "techniques": [
+            "slideDown",
+            "fadeIn"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Headline появляется сверху из-за кадра построчно через фейд."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "text",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "Headline"
+            ],
+            "techniques": [
+              "slideDown",
+              "fadeIn"
+            ],
+            "parameters": [
+              {
+                "key": "text",
+                "value": {
+                  "segmentation": "line",
+                  "timing": "staggered",
+                  "staggerFrames": 1,
+                  "reverse": false,
+                  "origin": "outsideViewport"
+                }
+              },
+              {
+                "key": "durationSeconds",
+                "value": 3
+              }
+            ],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "TEXT_03",
+      "prompt": "Слова Headline появляются по очереди снизу через фейд.",
+      "fixture": "native-text",
+      "seed": "none",
+      "target": "headline",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "slideUp",
+        "fadeIn"
+      ],
+      "checks": [
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "headline",
+          "scene": "s0",
+          "techniques": [
+            "slideUp",
+            "fadeIn"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Слова Headline появляются по очереди снизу через фейд."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "text",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "Headline"
+            ],
+            "techniques": [
+              "slideUp",
+              "fadeIn"
+            ],
+            "parameters": [
+              {
+                "key": "text",
+                "value": {
+                  "segmentation": "word",
+                  "timing": "sequential",
+                  "staggerFrames": 1,
+                  "reverse": false,
+                  "origin": "local"
+                }
+              },
+              {
+                "key": "durationSeconds",
+                "value": 3
+              }
+            ],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "TEXT_04",
+      "prompt": "Headline появляется побуквенно сверху через фейд.",
+      "fixture": "native-text",
+      "seed": "none",
+      "target": "headline",
+      "scene": "s0",
+      "expectedCapabilities": [
+        "slideDown",
+        "fadeIn"
+      ],
+      "checks": [
+        "qa"
+      ],
+      "expectedFailure": false,
+      "expectations": [
+        {
+          "target": "headline",
+          "scene": "s0",
+          "techniques": [
+            "slideDown",
+            "fadeIn"
+          ]
+        }
+      ],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Headline появляется побуквенно сверху через фейд."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "text",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "Headline"
+            ],
+            "techniques": [
+              "slideDown",
+              "fadeIn"
+            ],
+            "parameters": [
+              {
+                "key": "text",
+                "value": {
+                  "segmentation": "character",
+                  "timing": "staggered",
+                  "staggerFrames": 1,
+                  "reverse": false,
+                  "origin": "local"
+                }
+              }
+            ],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "TEXT_05_EDIT_AND_BLOCK",
+      "prompt": "Headline появляется сверху из-за кадра построчно через фейд.",
+      "fixture": "native-text",
+      "seed": "none",
+      "target": "headline",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "textBlockTracks"
+      ],
+      "expectedFailure": false,
+      "expectations": [],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Headline появляется сверху из-за кадра построчно через фейд."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "text",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "Headline"
+            ],
+            "techniques": [
+              "slideDown",
+              "fadeIn"
+            ],
+            "parameters": [
+              {
+                "key": "text",
+                "value": {
+                  "segmentation": "line",
+                  "timing": "staggered",
+                  "staggerFrames": 1,
+                  "reverse": false,
+                  "origin": "outsideViewport"
+                }
+              },
+              {
+                "key": "durationSeconds",
+                "value": 3
+              }
+            ],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      },
+      "turns": [
+        {
+          "prompt": "Headline появляется сверху из-за кадра построчно через фейд.",
+          "referenceOutput": {
+            "schemaVersion": "semantic-graph/1.0",
+            "clauses": [
+              {
+                "clauseId": "source",
+                "text": "Headline появляется сверху из-за кадра построчно через фейд."
+              }
+            ],
+            "actions": [
+              {
+                "actionId": "text",
+                "clauseId": "source",
+                "kind": "objectAnimation",
+                "scene": "s0",
+                "targets": [
+                  "Headline"
+                ],
+                "techniques": [
+                  "slideDown",
+                  "fadeIn"
+                ],
+                "parameters": [
+                  {
+                    "key": "text",
+                    "value": {
+                      "segmentation": "line",
+                      "timing": "staggered",
+                      "staggerFrames": 1,
+                      "reverse": false,
+                      "origin": "outsideViewport"
+                    }
+                  },
+                  {
+                    "key": "durationSeconds",
+                    "value": 3
+                  }
+                ],
+                "constraints": [],
+                "unresolvedReason": null
+              }
+            ],
+            "assumptions": []
+          }
+        },
+        {
+          "prompt": "Сделай появление строк Headline быстрее.",
+          "referenceOutput": {
+            "schemaVersion": "semantic-graph/1.0",
+            "clauses": [
+              {
+                "clauseId": "source",
+                "text": "Сделай появление строк Headline быстрее."
+              }
+            ],
+            "actions": [
+              {
+                "actionId": "edit_text",
+                "clauseId": "source",
+                "kind": "editAnimation",
+                "scene": "s0",
+                "targets": [
+                  "Headline"
+                ],
+                "techniques": [
+                  "slideDown",
+                  "fadeIn"
+                ],
+                "parameters": [
+                  {
+                    "key": "durationFactor",
+                    "value": 0.8
+                  }
+                ],
+                "relation": "unchanged",
+                "effectOperation": {
+                  "storage": "animation",
+                  "action": "update"
+                },
+                "constraints": [],
+                "unresolvedReason": null
+              }
+            ],
+            "assumptions": []
+          }
+        },
+        {
+          "prompt": "Убери построчную анимацию Headline, оставь появление всего блока.",
+          "referenceOutput": {
+            "schemaVersion": "semantic-graph/1.0",
+            "clauses": [
+              {
+                "clauseId": "source",
+                "text": "Убери построчную анимацию Headline, оставь появление всего блока."
+              }
+            ],
+            "actions": [
+              {
+                "actionId": "edit_text",
+                "clauseId": "source",
+                "kind": "editAnimation",
+                "scene": "s0",
+                "targets": [
+                  "Headline"
+                ],
+                "techniques": [
+                  "slideDown",
+                  "fadeIn"
+                ],
+                "parameters": [
+                  {
+                    "key": "text",
+                    "value": {
+                      "segmentation": "block",
+                      "timing": "simultaneous",
+                      "staggerFrames": 0,
+                      "reverse": false,
+                      "origin": "local"
+                    }
+                  }
+                ],
+                "relation": "unchanged",
+                "effectOperation": {
+                  "storage": "animation",
+                  "action": "update"
+                },
+                "constraints": [],
+                "unresolvedReason": null
+              }
+            ],
+            "assumptions": []
+          }
         }
       ]
     }

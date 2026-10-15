@@ -3,6 +3,29 @@ import { intentFixture } from "./intent-fixture.js";
 import type { AgentEval } from "../src/harness/evals.js";
 import { readMotion, changeMotion } from "../src/motion/store.js";
 export async function evalFixture(c: AgentEval) {
+  if (c.fixture === "native-text")
+    return identityFixture(1, (scenes) => {
+      const t = node("headline", "Headline", 20, 20, 150, 100);
+      t.type = "TEXT";
+      const characters = "Абонемент\nна любую еду\nи напитки";
+      t.text = {
+        characters,
+        fontName: { family: "Arial", style: "Regular" },
+        fontSize: 20,
+        lineHeight: { unit: "PIXELS", value: 24 },
+        segments: [
+          {
+            start: 0,
+            end: characters.length,
+            fontName: { family: "Arial", style: "Regular" },
+            fontSize: 20,
+            lineHeight: { unit: "PIXELS", value: 24 },
+            fills: [{ type: "SOLID", color: { r: 1, g: 1, b: 1 } }],
+          },
+        ],
+      };
+      scenes[0].children = [t];
+    });
   if (c.fixture === "composite") return intentFixture();
   if (c.fixture === "six-inertia") {
     const f = await identityFixture(2, (scenes) => {

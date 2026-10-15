@@ -1,3 +1,4 @@
+import type { SourceNode } from "../registry.js";
 import { resolveTemporalReference } from "./references.js";
 import { offscreenDistance } from "./entrance.js";
 import {
@@ -298,6 +299,46 @@ export function compileRequirement(
     );
 
     if (
+      r.kind === "objectAnimation" &&
+      r.parameters.text &&
+      r.parameters.text.segmentation !== "block" &&
+      r.parameters.durationSeconds === null
+    ) {
+      const scene = project.inspection.document.scenes.find(
+        (s) => s.sceneId === r.sceneId,
+      );
+      const pending: SourceNode[] = scene
+        ? [scene as unknown as SourceNode]
+        : [];
+      let target: SourceNode | undefined;
+      while (pending.length) {
+        const current = pending.pop()!;
+        if (current.figmaNodeId === r.target.sourceNodeId) {
+          target = current;
+          break;
+        }
+        pending.push(...(current.children ?? []));
+      }
+      const metadata = target?.text as { characters?: unknown } | undefined;
+      const characters = String(
+        metadata?.characters ?? target?.properties.characters ?? "",
+      );
+      // A safe layout-independent upper bound. Explicit durations remain strict and are checked against actual layout in QA.
+      const count = Math.max(
+        1,
+        [
+          ...new Intl.Segmenter("und", { granularity: "grapheme" }).segment(
+            characters,
+          ),
+        ].filter((s) => !/^\s+$/u.test(s.segment)).length,
+      );
+      const text = r.parameters.text;
+      if (text.timing === "staggered")
+        duration += text.staggerFrames * (count - 1);
+      else if (text.timing === "sequential") duration *= count;
+    }
+
+    if (
       r.effectOperation?.action === "updateTiming" &&
       !r.timing.reference &&
       !r.timing.anchorRequirementId &&
@@ -435,6 +476,7 @@ export function compileRequirement(
         );
       for (const a of targets) {
         const next = structuredClone(a);
+        if (r.parameters.text) next.text = r.parameters.text;
         if (
           r.timing.reference ||
           r.timing.anchorRequirementId ||
@@ -663,6 +705,7 @@ export function compileRequirement(
           old?.animationId ??
           "intent_" + stable([r.sceneId, r.target.sourceNodeId, effect]);
         const common = {
+          ...(r.parameters.text ? { text: r.parameters.text } : {}),
           animationId,
           sceneId: r.sceneId!,
           targetId: r.target.sourceNodeId!,
@@ -704,7 +747,8 @@ export function compileRequirement(
             parameters: {
               distance:
                 r.parameters.distance ??
-                (r.parameters.entrance === "offscreen" ||
+                (r.parameters.text?.origin === "outsideViewport" ||
+                r.parameters.entrance === "offscreen" ||
                 /из[- ]за\s+кадра|offscreen|за\s+пределами\s+кадра/iu.test(
                   r.sourceText,
                 )

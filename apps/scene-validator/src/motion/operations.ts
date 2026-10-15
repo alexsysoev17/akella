@@ -49,6 +49,21 @@ export function validateMotion(
     const o = target(a.sceneId, a.targetId);
     if (a.effect === "maskReveal" && o.type !== "TEXT")
       throw new Error("Mask Reveal currently supports TEXT only");
+    if (a.text) {
+      if (o.type !== "TEXT") throw new Error("TEXT_NATIVE_LAYOUT_REQUIRED");
+      if (
+        a.text.segmentation !== "block" &&
+        ![
+          "slideUp",
+          "slideDown",
+          "slideLeft",
+          "slideRight",
+          "fadeIn",
+          "fadeOut",
+        ].includes(a.effect)
+      )
+        throw new Error("TEXT_SEGMENT_EFFECT_UNSUPPORTED: " + a.effect);
+    }
     if (o.mask) throw new Error("Анимация масок пока не поддерживается.");
     if (a.startFrame + a.durationFrames > state.settings.durationFrames)
       throw new Error(
@@ -92,6 +107,26 @@ export function validateMotion(
     }
   }
   const enabled = state.animations.filter((a) => a.enabled);
+  for (const a of enabled.filter(
+    (a) => a.text && a.text.segmentation !== "block",
+  )) {
+    const other = enabled.find(
+      (b) =>
+        b.animationId !== a.animationId &&
+        b.targetId === a.targetId &&
+        b.sceneId === a.sceneId &&
+        b.text &&
+        b.text.segmentation !== "block" &&
+        JSON.stringify(a.text) !== JSON.stringify(b.text),
+    );
+    if (other)
+      throw new Error(
+        "TEXT_SEGMENT_SETTINGS_CONFLICT: " +
+          a.animationId +
+          " / " +
+          other.animationId,
+      );
+  }
   for (let i = 0; i < enabled.length; i++)
     for (let j = i + 1; j < enabled.length; j++) {
       const a = enabled[i],
@@ -99,6 +134,8 @@ export function validateMotion(
       if (
         a.sceneId === b.sceneId &&
         a.targetId === b.targetId &&
+        ((a.text?.segmentation ?? "block") === "block") ===
+          ((b.text?.segmentation ?? "block") === "block") &&
         channels(a)
           .flatMap((c) => (c === "scale" ? ["scaleX", "scaleY"] : [c]))
           .some((c) =>

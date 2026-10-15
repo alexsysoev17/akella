@@ -217,6 +217,22 @@ export function requirementChecks(
     r.unresolvedReason
   )
     return checks;
+  if (r.parameters.text) {
+    const tracks = requirementAnimations(state, r).filter((a) =>
+      r.techniques.includes(
+        a.effect as IntentRequirement["techniques"][number],
+      ),
+    );
+    checks.push({
+      name: "textSegmentationContract",
+      requirementId: r.requirementId,
+      status:
+        tracks.length > 0 &&
+        tracks.every((a) => isDeepStrictEqual(a.text, r.parameters.text))
+          ? "PASSED"
+          : "FAILED",
+    });
+  }
   if (r.kind === "editAnimation" && previous) {
     const ownEdit = (a: { sceneId: string; targetId: string }) =>
       a.sceneId === r.sceneId && a.targetId === r.target.sourceNodeId;

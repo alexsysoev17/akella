@@ -1,3 +1,4 @@
+import { applyTextAnimation } from "./text-animation.js";
 import {
   valueAtTime as sampleValue,
   velocityAtTime as sampleVelocity,
@@ -119,7 +120,9 @@ export function evaluateMotion(state: MotionState, frame: number) {
   const tracks = new Map<string, Animation[]>();
   // Non-overlapping effects on one property form a track: first initial value holds before entry;
   // latest started effect wins thereafter and holds its end value. Never depend on previous frames.
-  for (const a of state.animations.filter((a) => a.enabled)) {
+  for (const a of state.animations.filter(
+    (a) => a.enabled && (!a.text || a.text.segmentation === "block"),
+  )) {
     const values = evaluateAnimation(a, frame);
     for (const property of [
       ...new Set(
@@ -151,7 +154,23 @@ export function evaluateMotion(state: MotionState, frame: number) {
         evaluateAnimation(chosen, frame).scale,
     });
   }
-  composeExpressions(state, frame, nodes, evaluateAnimation);
+  const segmented = new Set(
+    state.animations
+      .filter((a) => a.text && a.text.segmentation !== "block")
+      .map((a) => a.animationId),
+  );
+  composeExpressions(
+    {
+      ...state,
+      expressions: (state.expressions ?? []).filter(
+        (e) =>
+          !("sourceAnimationId" in e) || !segmented.has(e.sourceAnimationId),
+      ),
+    },
+    frame,
+    nodes,
+    evaluateAnimation,
+  );
   const blocks = [...state.blocks].sort((a, b) => a.startFrame - b.startFrame);
   const visible: Record<string, number> = {};
   for (let i = 0; i < blocks.length; i++) {
@@ -207,6 +226,7 @@ export function applyFrame(
       (visibility?.visible ?? node.dataset.baseVisible !== "false")
         ? ""
         : "none";
+    applyTextAnimation(node, state, result.frame, evaluateMotion);
     const reveals = state.animations
       .filter(
         (a) =>

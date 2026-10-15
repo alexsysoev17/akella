@@ -123,6 +123,85 @@ export async function motionQA(
     await page.evaluate(async () => {
       await window.motionReady;
     });
+    const missingFonts = await page.evaluate(
+      () => document.body.dataset.motionMissingFonts,
+    );
+    if (missingFonts)
+      checks.push({
+        name: "TEXT_FONT_AVAILABILITY",
+        status: "WARNING",
+        reason:
+          "Local fonts unavailable; browser fallback recorded: " + missingFonts,
+      });
+    const segmentTargets = state.animations.filter(
+      (a) =>
+        a.enabled &&
+        a.text &&
+        a.text.segmentation !== "block" &&
+        (!targetScope ||
+          (a.targetId === targetScope.targetId &&
+            a.sceneId === targetScope.sceneId)),
+    );
+    for (const a of segmentTargets.filter(
+      (a, i, all) =>
+        all.findIndex(
+          (b) => b.targetId === a.targetId && b.sceneId === a.sceneId,
+        ) === i,
+    )) {
+      const selector = `[data-motion-scene="${a.sceneId}"] [data-motion-target="${a.targetId}"]`;
+      const sample = Math.min(
+        state.settings.durationFrames - 1,
+        a.startFrame + Math.floor(a.durationFrames / 2),
+      );
+      const inspect = () =>
+        page
+          .locator(selector)
+          .first()
+          .evaluate((el) => ({
+            layout: el.getAttribute("data-text-layout"),
+            units: [...el.querySelectorAll("[data-text-unit-bounds]")].map(
+              (n) => [n.getAttribute("transform"), n.getAttribute("opacity")],
+            ),
+          }));
+      await page.evaluate((f) => window.motionFrame(f), sample);
+      const before = await inspect();
+      await page.evaluate((f) => window.motionFrame(f), a.startFrame);
+      await page.evaluate((f) => window.motionFrame(f), sample);
+      const after = await inspect();
+      checks.push({
+        name: "TEXT_LAYOUT_AND_SEEK",
+        target: a.targetId,
+        metrics: before.layout
+          ? (() => {
+              const layout = JSON.parse(before.layout);
+              return {
+                preparationMs: layout.preparationMs,
+                lines: layout.lines.length,
+                words: layout.words.length,
+                graphemes: layout.characters.length,
+                animatedUnits: before.units.length,
+                lineBoxes: layout.lines,
+              };
+            })()
+          : undefined,
+        status:
+          before.layout &&
+          before.units.length > 0 &&
+          JSON.stringify(before) === JSON.stringify(after)
+            ? "PASSED"
+            : "FAILED",
+        reason:
+          "Actual shaped layout snapshot and local transforms checked after nonsequential seek; does not prove Figma font parity.",
+      });
+      if (a.text?.segmentation === "character")
+        checks.push({
+          name: "TEXT_SHAPING_LIMIT",
+          target: a.targetId,
+          status: "WARNING",
+          reason:
+            "Grapheme slices retain source shaping, but independent ligature/complex-script glyph animation is not guaranteed.",
+        });
+    }
     const changed = (item: unknown, old: unknown[]) =>
       !previous || !old.some((v) => JSON.stringify(v) === JSON.stringify(item));
     const effects = [

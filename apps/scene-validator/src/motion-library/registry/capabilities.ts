@@ -2,6 +2,7 @@ import { semanticBindings } from "../techniques/registry.js";
 import { z } from "zod";
 import {
   animationSchema,
+  textAnimationSchema,
   objectTransitionSchema,
 } from "../../motion/schema.js";
 import { evaluateAnimation } from "../../motion/engine.js";
@@ -14,6 +15,25 @@ export const capabilityRegistry = [
     id: s.shape.effect.value,
     kind: "animation",
     parameterSchema: z.toJSONSchema(s.shape.parameters),
+    textContract: {
+      schema: z.toJSONSchema(textAnimationSchema),
+      supportedEffects: [
+        "slideUp",
+        "slideDown",
+        "slideLeft",
+        "slideRight",
+        "fadeIn",
+        "fadeOut",
+      ],
+      constraints: [
+        "native TEXT only",
+        "max 512 visible slices",
+        "loaded fonts",
+        "total duration includes stagger",
+        "matching segmentation settings for compound tracks",
+      ],
+      implementationReference: "motion/text-animation.ts",
+    },
     evaluator: evaluateAnimation,
     supportedProperties:
       s.shape.effect.value === "maskReveal"

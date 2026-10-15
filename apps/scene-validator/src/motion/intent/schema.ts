@@ -1,3 +1,4 @@
+import { textAnimationSchema } from "../schema.js";
 import { z } from "zod";
 import { easingSchema } from "../../motion-library/easings/registry.js";
 export const intentTechnique = z.enum([
@@ -131,6 +132,7 @@ export const intentRequirementSchema = z
     parameters: z
       .object({
         entrance: z.enum(["offscreen"]).nullable().optional(),
+        text: textAnimationSchema.nullable().optional(),
         property: z
           .enum(["x", "y", "rotation", "scaleX", "scaleY", "opacity"])
           .nullable()

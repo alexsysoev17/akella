@@ -514,7 +514,15 @@ export function evalChecks(
           (a) => a.targetId === "logo" && a.effect === "trimPath",
         ),
       );
-    } else if (name === "twoTrimTracks")
+    } else if (name === "textBlockTracks")
+      add(
+        name,
+        after.animations.filter((a) => a.targetId === c.target).length === 2 &&
+          after.animations
+            .filter((a) => a.targetId === c.target)
+            .every((a) => a.text?.segmentation === "block"),
+      );
+    else if (name === "twoTrimTracks")
       add(
         name,
         after.animations.filter((a) => a.effect === "trimPath").length === 2,

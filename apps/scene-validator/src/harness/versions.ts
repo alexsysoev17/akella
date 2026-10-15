@@ -10,6 +10,8 @@ const components = [
   "motion-library/easings/cubic-bezier",
   "motion/path-reveal",
   "motion/text-reveal",
+  "motion/text-layout",
+  "motion/text-animation",
   "renderer",
   "motion/presentation",
   "motion/qa/geometry",

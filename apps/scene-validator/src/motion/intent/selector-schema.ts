@@ -28,6 +28,7 @@ export const selectorEditSchema = z.object({
           .enum(["sceneStart", "sceneEnd", "unchanged"])
           .optional(),
         parameters: z.object({
+          text: parameters.text,
           amplitudeFactor: parameters.amplitudeFactor.optional(),
           relativeIntensity: parameters.relativeIntensity,
           amplitude: parameters.amplitude.optional(),
