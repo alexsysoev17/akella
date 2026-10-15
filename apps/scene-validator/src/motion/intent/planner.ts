@@ -1,3 +1,7 @@
+import {
+  resolveTemporalReference,
+  referenceDiagnostics,
+} from "./references.js";
 import { semanticBindings } from "../../motion-library/techniques/registry.js";
 import { targetedRepairSchema, mergeTargetedRepair } from "./repair.js";
 import {
@@ -247,7 +251,17 @@ export class SemanticProvider implements IntentProvider {
         return normalizeSemanticGraph(output, context, request);
       const compact = selectorEditSchema.safeParse(output);
       return compact.success
-        ? normalizeSelectorPlan(compact.data)
+        ? normalizeSelectorPlan(
+            compact.data,
+            (
+              context as {
+                project?: { fps?: number };
+                motion?: { settings?: { fps?: number } };
+              }
+            ).project?.fps ??
+              (context as { motion?: { settings?: { fps?: number } } }).motion
+                ?.settings?.fps,
+          )
         : intentPlanSchema.parse(output);
     }
     return normalizeSemanticGraph(
@@ -702,7 +716,8 @@ export function validateIntentPlan(
         throw new Error("Unknown requirement dependency: " + id);
     if (
       r.timing.relation.endsWith("Requirement") &&
-      !r.timing.anchorRequirementId
+      !r.timing.anchorRequirementId &&
+      !r.timing.reference
     )
       throw new Error("Temporal dependency missing anchor");
     const chain = new Set<string>();
@@ -730,6 +745,43 @@ export function validateIntentPlan(
   }
   plan.requirements.forEach((r) => checkTemporal(r.requirementId));
   // Only safe structural provenance/inheritance fixes; never invent techniques/targets.
+  const referenceStarted = performance.now();
+  for (const r of plan.requirements)
+    if (r.timing.reference) {
+      if (r.timing.startSeconds !== null)
+        throw new Error("CONFLICTING_TEMPORAL_CONSTRAINTS");
+      if (
+        r.timing.reference.sourceClauseId &&
+        !sourceClauses.has(r.timing.reference.sourceClauseId)
+      )
+        throw new Error("INVALID_REFERENCE_PROVENANCE");
+      delete r.timing.reference.resolvedAnimationId;
+      delete r.timing.reference.resolvedFromActionId;
+      try {
+        resolveTemporalReference(
+          project,
+          currentState,
+          r,
+          resolutionContext?.recentActions,
+        );
+      } catch (error) {
+        resolutionContext?.onResolution?.({
+          event: "TEMPORAL_REFERENCE_FAILURE",
+          status: "FAILED",
+          reference: r.timing.reference,
+          writeSet: r.animationIds ?? [],
+          failureReason: String(error),
+          durationMs: performance.now() - referenceStarted,
+        });
+        throw error;
+      }
+    }
+  const referenceDurationMs = performance.now() - referenceStarted;
+  resolutionContext?.onResolution?.({
+    event: "TEMPORAL_REFERENCE_RESOLUTION",
+    references: referenceDiagnostics(plan, currentState),
+    durationMs: referenceDurationMs,
+  });
   const preliminary = inspectSemanticCoverage(project, request, plan, fps);
   for (const issue of preliminary.issues) {
     if (
@@ -797,7 +849,8 @@ export function validateIntentPlan(
       r.kind !== "sceneTiming" &&
       r.kind !== "unsupported" &&
       !r.techniques.length &&
-      !r.inheritFromRequirementId
+      !r.inheritFromRequirementId &&
+      r.effectOperation?.action !== "updateTiming"
     )
       throw new Error("Object requirement missing techniques");
   return plan;
@@ -871,7 +924,7 @@ export async function semanticPlan(
   const compactTier =
     (context as { contextualEditHint?: boolean })?.contextualEditHint === true;
   await trace("reference-context", {
-    payloadTier: compactTier ? "contextual-expression-edit" : "standard",
+    payloadTier: compactTier ? "contextual-effect-edit" : "standard",
     projectRevision: options.projectRevision,
     recentSuccessfulActions: options.recentActions ?? [],
     selectedObjectIds:
@@ -1014,7 +1067,7 @@ export async function semanticPlan(
         correctionUsed ||
         repeated ||
         calls >= maxCalls ||
-        /BUDGET|CANCELLED|UNSUPPORTED_TOOL_CALL|UNSUPPORTED_CAPABILITY|timeout|aborted|authentication|401|403|login|TRANSPORT|UNAVAILABLE/i.test(
+        /MISSING_TEMPORAL|AMBIGUOUS_TEMPORAL|TEMPORAL_ANCHOR_KIND_UNSUPPORTED|TEMPORAL_RECENT|BUDGET|CANCELLED|UNSUPPORTED_TOOL_CALL|UNSUPPORTED_CAPABILITY|timeout|aborted|authentication|401|403|login|TRANSPORT|UNAVAILABLE/i.test(
           failure,
         )
       )

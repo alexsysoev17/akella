@@ -1,3 +1,4 @@
+import { resolveTemporalReference } from "./references.js";
 import { offscreenDistance } from "./entrance.js";
 import {
   semanticBindings,
@@ -147,6 +148,8 @@ export function requirementAnimations(
       a.sceneId === r.sceneId &&
       a.targetId === r.target.sourceNodeId,
   );
+  if (r.effectOperation?.action === "updateTiming" && r.animationIds?.length)
+    return own;
   const effects = r.techniques.filter(
     (t) => semanticBindings[t] === "animation",
   );
@@ -268,19 +271,23 @@ export function compileRequirement(
     const anchorReq = plan.requirements.find(
       (x) => x.requirementId === r.timing.anchorRequirementId,
     );
-    const anchor = requirementAnchor(state, anchorReq);
+    const anchor = r.timing.reference
+      ? resolveTemporalReference(project, state, r)
+      : requirementAnchor(state, anchorReq);
     if (r.timing.anchorRequirementId && !anchor)
       throw new Error("Anchor requirement has no persisted base action");
     const fps = state.settings.fps;
-    let start =
-      r.timing.startSeconds !== null
+    let start = r.timing.reference
+      ? anchor!.startFrame +
+        (r.timing.reference.endpoint === "end" ? anchor!.durationFrames : 0)
+      : r.timing.startSeconds !== null
         ? Math.round(r.timing.startSeconds * fps)
         : r.timing.relation === "afterRequirement"
           ? anchor!.startFrame + anchor!.durationFrames
           : r.timing.relation === "withRequirement"
             ? anchor!.startFrame
             : block.startFrame;
-    start += Math.round(r.timing.delaySeconds * fps);
+    start += r.timing.offsetFrames ?? Math.round(r.timing.delaySeconds * fps);
     let duration = Math.max(
       1,
       Math.round(
@@ -290,6 +297,22 @@ export function compileRequirement(
       ),
     );
 
+    if (
+      r.effectOperation?.action === "updateTiming" &&
+      !r.timing.reference &&
+      !r.timing.anchorRequirementId &&
+      r.timing.startSeconds === null &&
+      !["sceneStart", "sceneEnd"].includes(r.timing.relation)
+    )
+      throw new Error("TIMING_RELATION_MISSING");
+    if (r.timing.relation === "sceneEnd")
+      start =
+        block.startFrame +
+        block.durationFrames -
+        (r.kind === "editAnimation"
+          ? (requirementAnimations(state, r)[0]?.durationFrames ?? duration)
+          : duration) +
+        (r.timing.offsetFrames ?? Math.round(r.timing.delaySeconds * fps));
     // An additional entrance Fade follows the actual base movement, not inertia.
     if (
       r.kind === "objectAnimation" &&
@@ -308,7 +331,11 @@ export function compileRequirement(
       );
       if (entrances.length > 1) throw new Error("AMBIGUOUS_ENTRANCE_TIMING");
       if (entrances[0]) {
-        if (r.timing.startSeconds === null)
+        if (
+          r.timing.startSeconds === null &&
+          !r.timing.reference &&
+          !r.timing.anchorRequirementId
+        )
           start =
             entrances[0].startFrame + Math.round(r.timing.delaySeconds * fps);
         if (r.parameters.durationSeconds === null)
@@ -408,6 +435,42 @@ export function compileRequirement(
         );
       for (const a of targets) {
         const next = structuredClone(a);
+        if (
+          r.timing.reference ||
+          r.timing.anchorRequirementId ||
+          r.timing.startSeconds !== null ||
+          r.effectOperation?.action === "updateTiming"
+        ) {
+          next.startFrame = start;
+          if (anchor)
+            operations.push({
+              type: "setTimingDependency",
+              dependency: {
+                dependencyId: "dependency_" + stable(a.animationId),
+                animationId: a.animationId,
+                anchorAnimationId: anchor.animationId,
+                relation: r.timing.reference
+                  ? r.timing.reference.endpoint === "end"
+                    ? "after"
+                    : "with"
+                  : r.timing.relation === "afterRequirement"
+                    ? "after"
+                    : r.timing.relation === "beforeRequirement"
+                      ? "before"
+                      : "with",
+                offsetFrames:
+                  r.timing.offsetFrames ??
+                  Math.round(r.timing.delaySeconds * fps),
+              },
+            });
+          else
+            for (const dep of state.timingDependencies ?? [])
+              if (dep.animationId === a.animationId)
+                operations.push({
+                  type: "removeTimingDependency",
+                  dependencyId: dep.dependencyId,
+                });
+        }
         if (requirementEasing(r)) next.easing = requirementEasing(r)!;
         if (
           (next.effect === "trimPath" || next.effect === "maskReveal") &&
@@ -765,7 +828,10 @@ export function compileRequirement(
             });
           }
         operations.push({ type: "addAnimation", animation: a });
-        if (anchor && r.timing.relation.endsWith("Requirement"))
+        if (
+          anchor &&
+          (r.timing.reference || r.timing.relation.endsWith("Requirement"))
+        )
           operations.push({
             type: "setTimingDependency",
             dependency: {
@@ -773,12 +839,15 @@ export function compileRequirement(
                 "dependency_" + stable([a.animationId, anchor.animationId]),
               animationId: a.animationId,
               anchorAnimationId: anchor.animationId,
-              relation:
-                r.timing.relation === "afterRequirement"
-                  ? "after"
-                  : r.timing.relation === "beforeRequirement"
-                    ? "before"
-                    : "with",
+              relation: (
+                r.timing.reference
+                  ? r.timing.reference.endpoint === "end"
+                  : r.timing.relation === "afterRequirement"
+              )
+                ? "after"
+                : r.timing.relation === "beforeRequirement"
+                  ? "before"
+                  : "with",
               offsetFrames: Math.round(r.timing.delaySeconds * fps),
             },
           });

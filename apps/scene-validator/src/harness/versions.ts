@@ -29,6 +29,7 @@ const components = [
   "motion/intent/selector-schema",
   "motion-library/registry/capabilities",
   "motion/intent/graph",
+  "motion/intent/references",
   "motion/intent/provenance",
   "motion/intent/entrance",
   "motion/intent/repair",

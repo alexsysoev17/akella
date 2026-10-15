@@ -253,6 +253,11 @@ export async function inspectorRun(root: string, id: string, raw = false) {
               animationIds: r.animationIds ?? [],
               expressionIds: r.expressionIds ?? [],
               timing: r.timing,
+              readSet: ((r.timing as Data)?.reference as Data)
+                ?.resolvedAnimationId
+                ? [((r.timing as Data).reference as Data).resolvedAnimationId]
+                : [],
+              writeSet: r.animationIds ?? [],
               inheritFromRequirementId: r.inheritFromRequirementId,
             })),
         })),
@@ -560,6 +565,10 @@ export async function projectDiagnosticBundle(root: string, id: string) {
   for (const row of Array.isArray(resolution) ? resolution : [])
     for (const id of Array.isArray(row.animationIds) ? row.animationIds : [])
       animationIds.add(id);
+  for (const row of Array.isArray(resolution) ? resolution : [])
+    for (const ref of Array.isArray(row.references) ? row.references : [])
+      for (const id of Array.isArray(ref.readSet) ? ref.readSet : [])
+        animationIds.add(id);
   const ids = new Set<string>();
   for (const row of Array.isArray(resolution) ? resolution : [])
     for (const member of Array.isArray(row.members) ? row.members : [])
@@ -582,6 +591,27 @@ export async function projectDiagnosticBundle(root: string, id: string) {
       ? await saved(root, `motion/ai/${z.uuid().parse(id)}/context.json`)
       : {}
   ) as Data;
+  const requestText = ((data.request as Data)?.request as Data)?.request ?? "";
+  const { objectMentionRanges } = await import("../motion/object-aliases.js");
+  const explicitTargets = new Set<string>();
+  for (const o of Array.isArray(context.objectIndex) ? context.objectIndex : [])
+    if (
+      typeof o.name === "string" &&
+      objectMentionRanges(o.name, String(requestText)).length
+    )
+      explicitTargets.add(o.sourceNodeId);
+  const planningAnimations = (
+    Array.isArray((context.motion as Data)?.animations)
+      ? ((context.motion as Data).animations as Data[])
+      : []
+  ).filter(
+    (a: Data) =>
+      sourceIds.has(String(a.animationId)) ||
+      explicitTargets.has(String(a.targetId)),
+  );
+  for (const a of planningAnimations) sourceIds.add(String(a.animationId));
+  for (const a of doc.state.animations)
+    if (explicitTargets.has(a.targetId)) sourceIds.add(a.animationId);
   const recordedReference = Array.isArray(data.trace)
     ? data.trace.find(
         (e: Data) =>
@@ -646,8 +676,19 @@ export async function projectDiagnosticBundle(root: string, id: string) {
       animationCount: doc.state.animations.length,
       expressionCount: doc.state.expressions?.length ?? 0,
     },
+    "planning-state": full
+      ? {
+          revision: context.projectRevision ?? "NOT_AVAILABLE",
+          projectionLabel:
+            "ARCHIVED_PROVIDER_CONTEXT_FILTERED; omission is not absence",
+          animations: planningAnimations,
+          currentRevision: doc.revision,
+        }
+      : "NOT_AVAILABLE_PRIVACY",
     "relevant-state": full
       ? {
+          revision: doc.revision,
+          projectionLabel: "CURRENT_AUTHORITATIVE_STATE_FILTERED",
           settings: doc.state.settings,
           blocks: doc.state.blocks.filter(
             (b) =>

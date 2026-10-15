@@ -80,6 +80,35 @@ const unregister = live
         const reference =
           current.turns?.find((t) => t.prompt === payload.userRequest)
             ?.referenceOutput ?? current.referenceOutput;
+        const normalized = normalizeSemanticGraph(
+          reference,
+          payload.context,
+          payload.userRequest,
+        );
+        const compact = {
+          ...normalized,
+          requirements: normalized.requirements.map((r) => ({
+            ...r,
+            temporalReference: r.timing.reference ?? null,
+            delayFrames:
+              r.timing.offsetFrames ??
+              Math.round(
+                r.timing.delaySeconds * (payload.context.project?.fps ?? 30),
+              ),
+            startFrame:
+              r.timing.startSeconds === null
+                ? null
+                : Math.round(
+                    r.timing.startSeconds *
+                      (payload.context.project?.fps ?? 30),
+                  ),
+            timingRelation: ["sceneStart", "sceneEnd", "unchanged"].includes(
+              r.timing.relation,
+            )
+              ? r.timing.relation
+              : null,
+          })),
+        };
         return {
           output: nativeWire(
             (
@@ -87,11 +116,7 @@ const unregister = live
                 properties?: { schemaVersion?: { const?: string } };
               }
             ).properties?.schemaVersion?.const === "1.0.0"
-              ? normalizeSemanticGraph(
-                  reference,
-                  JSON.parse(request.messages[1].content).context,
-                  payload.userRequest,
-                )
+              ? compact
               : reference,
             request.responseSchema,
           ),

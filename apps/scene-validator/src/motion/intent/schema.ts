@@ -19,6 +19,30 @@ export const intentTechnique = z.enum([
   "customCurve",
   "objectStateTransition",
 ]);
+export const temporalReferenceSchema = z
+  .object({
+    kind: z.enum([
+      "existingAnimation",
+      "existingExpression",
+      "sceneBoundary",
+      "recentCommittedAnimation",
+    ]),
+    target: z
+      .object({
+        sourceNodeId: z.string().optional(),
+        name: z.string().optional(),
+        sceneId: z.string().optional(),
+      })
+      .strict(),
+    effect: z.string().optional(),
+    animationId: z.string().optional(),
+    endpoint: z.enum(["start", "end"]),
+    resolvedAnimationId: z.string().optional(),
+    recentActionId: z.string().optional(),
+    resolvedFromActionId: z.string().optional(),
+    sourceClauseId: z.string().optional(),
+  })
+  .strict();
 export const intentRequirementSchema = z
   .object({
     semanticActionId: z.string().optional(),
@@ -92,7 +116,7 @@ export const intentRequirementSchema = z
         z
           .object({
             storage: z.literal("animation"),
-            action: z.enum(["update", "remove"]),
+            action: z.enum(["update", "remove", "updateTiming"]),
           })
           .strict(),
         z
@@ -159,6 +183,8 @@ export const intentRequirementSchema = z
           "unchanged",
         ]),
         anchorRequirementId: z.string().nullable(),
+        reference: temporalReferenceSchema.optional(),
+        offsetFrames: z.number().int().optional(),
         delaySeconds: z.number().min(-3600).max(3600),
       })
       .strict(),

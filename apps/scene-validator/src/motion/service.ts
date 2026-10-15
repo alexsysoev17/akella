@@ -233,9 +233,18 @@ export async function proposeMotion(
       ) &&
       /trim|прорис|fade|фейд|slide|инерц|колеб/iu.test(request.request) &&
       !/появ|добав|создай/iu.test(request.request);
+    const timingEditHint =
+      doc.state.animations.length > 0 &&
+      /начина|начн|после|законч|start|after|before|одновременно|кадр/iu.test(
+        request.request,
+      ) &&
+      !/создай|добав|появ|зааним|анимируй|animate|прорис/iu.test(
+        request.request,
+      );
     const contextualEditHint =
       !sceneTimingHint &&
-      (lifecycleEditHint ||
+      (timingEditHint ||
+        lifecycleEditHint ||
         ((/колеб|инерц|амплитуд/iu.test(request.request) ||
           (recentSuccessfulActions(doc).length > 0 &&
             request.request.length < 120)) &&

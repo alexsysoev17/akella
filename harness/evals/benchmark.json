@@ -1,6 +1,6 @@
 {
   "schemaVersion": "1.0.0",
-  "version": "2026-10-14.effect-lifecycle.1",
+  "version": "2026-10-14.temporal-reference.1",
   "cases": [
     {
       "evalId": "NEW_01",
@@ -3098,6 +3098,481 @@
             ],
             "assumptions": []
           }
+        }
+      ]
+    },
+    {
+      "evalId": "TEMPORAL_01_EXISTING",
+      "prompt": "Анимация Vector Line 2 начинается когда заканчивается Vector Line.",
+      "fixture": "two-paths",
+      "seed": "trim-detached",
+      "target": "line2",
+      "scene": "s0",
+      "checks": [
+        "qa",
+        "timingAt21"
+      ],
+      "expectedCapabilities": [],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Анимация Vector Line 2 начинается когда заканчивается Vector Line."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "mutation",
+            "clauseId": "source",
+            "kind": "editAnimation",
+            "scene": "s0",
+            "targets": [
+              "Vector Line 2"
+            ],
+            "techniques": [
+              "trimPath"
+            ],
+            "parameters": [],
+            "relation": "unchanged",
+            "effectOperation": {
+              "storage": "animation",
+              "action": "updateTiming"
+            },
+            "temporalReference": {
+              "kind": "existingAnimation",
+              "target": {
+                "name": "Vector Line",
+                "sceneId": "s0"
+              },
+              "effect": "trimPath",
+              "endpoint": "end"
+            },
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      },
+      "expectedFailure": false
+    },
+    {
+      "evalId": "TEMPORAL_02_CROSS_EFFECT",
+      "prompt": "Fade Phone начинается когда заканчивается Slide QR.",
+      "fixture": "motion",
+      "seed": "fade-after-slide",
+      "target": "line2",
+      "scene": "s0",
+      "checks": [
+        "qa",
+        "fadeAfterPosition"
+      ],
+      "expectedCapabilities": [],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Fade Phone начинается когда заканчивается Slide QR."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "mutation",
+            "clauseId": "source",
+            "kind": "editAnimation",
+            "scene": "s0",
+            "targets": [
+              "Phone"
+            ],
+            "techniques": [
+              "fadeIn"
+            ],
+            "parameters": [],
+            "relation": "unchanged",
+            "effectOperation": {
+              "storage": "animation",
+              "action": "updateTiming"
+            },
+            "temporalReference": {
+              "kind": "existingAnimation",
+              "target": {
+                "name": "QR",
+                "sceneId": "s0"
+              },
+              "effect": "slideUp",
+              "endpoint": "end"
+            },
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      },
+      "expectedFailure": false
+    },
+    {
+      "evalId": "TEMPORAL_03_MISSING_ANCHOR",
+      "prompt": "Анимация Vector Line 2 начинается после анимации Vector Line.",
+      "fixture": "two-paths",
+      "seed": "trim-only-second",
+      "target": "line2",
+      "scene": "s0",
+      "checks": [],
+      "expectedCapabilities": [],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Анимация Vector Line 2 начинается после анимации Vector Line."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "mutation",
+            "clauseId": "source",
+            "kind": "editAnimation",
+            "scene": "s0",
+            "targets": [
+              "Vector Line 2"
+            ],
+            "techniques": [
+              "trimPath"
+            ],
+            "parameters": [],
+            "relation": "unchanged",
+            "effectOperation": {
+              "storage": "animation",
+              "action": "updateTiming"
+            },
+            "temporalReference": {
+              "kind": "existingAnimation",
+              "target": {
+                "name": "Vector Line",
+                "sceneId": "s0"
+              },
+              "effect": "trimPath",
+              "endpoint": "end"
+            },
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      },
+      "expectedFailure": true
+    },
+    {
+      "evalId": "TEMPORAL_04_MULTI_TURN",
+      "prompt": "Vector Line и Vector Line 2 прорисовываются через Trim Paths.",
+      "fixture": "two-paths",
+      "seed": "none",
+      "target": "line2",
+      "scene": "s0",
+      "checks": [
+        "qa",
+        "twoTrimTracks",
+        "noTimingDependencies"
+      ],
+      "expectedCapabilities": [],
+      "referenceOutput": {
+        "schemaVersion": "semantic-graph/1.0",
+        "clauses": [
+          {
+            "clauseId": "source",
+            "text": "Vector Line и Vector Line 2 прорисовываются через Trim Paths."
+          }
+        ],
+        "actions": [
+          {
+            "actionId": "mutation",
+            "clauseId": "source",
+            "kind": "objectAnimation",
+            "scene": "s0",
+            "targets": [
+              "Vector Line",
+              "Vector Line 2"
+            ],
+            "techniques": [
+              "trimPath"
+            ],
+            "parameters": [],
+            "constraints": [],
+            "unresolvedReason": null
+          }
+        ],
+        "assumptions": []
+      },
+      "expectedFailure": false,
+      "turns": [
+        {
+          "prompt": "Vector Line и Vector Line 2 прорисовываются через Trim Paths.",
+          "referenceOutput": {
+            "schemaVersion": "semantic-graph/1.0",
+            "clauses": [
+              {
+                "clauseId": "source",
+                "text": "Vector Line и Vector Line 2 прорисовываются через Trim Paths."
+              }
+            ],
+            "actions": [
+              {
+                "actionId": "mutation",
+                "clauseId": "source",
+                "kind": "objectAnimation",
+                "scene": "s0",
+                "targets": [
+                  "Vector Line",
+                  "Vector Line 2"
+                ],
+                "techniques": [
+                  "trimPath"
+                ],
+                "parameters": [],
+                "constraints": [],
+                "unresolvedReason": null
+              }
+            ],
+            "assumptions": []
+          }
+        },
+        {
+          "prompt": "У Vector Line 2 разверни Trim Paths от конца к началу.",
+          "referenceOutput": {
+            "schemaVersion": "semantic-graph/1.0",
+            "clauses": [
+              {
+                "clauseId": "source",
+                "text": "У Vector Line 2 разверни Trim Paths от конца к началу."
+              }
+            ],
+            "actions": [
+              {
+                "actionId": "mutation",
+                "clauseId": "source",
+                "kind": "editAnimation",
+                "scene": "s0",
+                "targets": [
+                  "Vector Line 2"
+                ],
+                "techniques": [
+                  "trimPath"
+                ],
+                "parameters": [
+                  {
+                    "key": "direction",
+                    "value": "reverse"
+                  }
+                ],
+                "relation": "unchanged",
+                "effectOperation": {
+                  "storage": "animation",
+                  "action": "update"
+                },
+                "constraints": [],
+                "unresolvedReason": null
+              }
+            ],
+            "assumptions": []
+          }
+        },
+        {
+          "prompt": "Анимация Vector Line 2 начинается после анимации Vector Line.",
+          "referenceOutput": {
+            "schemaVersion": "semantic-graph/1.0",
+            "clauses": [
+              {
+                "clauseId": "source",
+                "text": "Анимация Vector Line 2 начинается после анимации Vector Line."
+              }
+            ],
+            "actions": [
+              {
+                "actionId": "mutation",
+                "clauseId": "source",
+                "kind": "editAnimation",
+                "scene": "s0",
+                "targets": [
+                  "Vector Line 2"
+                ],
+                "techniques": [
+                  "trimPath"
+                ],
+                "parameters": [],
+                "relation": "unchanged",
+                "effectOperation": {
+                  "storage": "animation",
+                  "action": "updateTiming"
+                },
+                "temporalReference": {
+                  "kind": "existingAnimation",
+                  "target": {
+                    "name": "Vector Line",
+                    "sceneId": "s0"
+                  },
+                  "effect": "trimPath",
+                  "endpoint": "end"
+                },
+                "constraints": [],
+                "unresolvedReason": null
+              }
+            ],
+            "assumptions": []
+          }
+        },
+        {
+          "prompt": "У Vector Line длительность Trim Paths одна секунда.",
+          "referenceOutput": {
+            "schemaVersion": "semantic-graph/1.0",
+            "clauses": [
+              {
+                "clauseId": "source",
+                "text": "У Vector Line длительность Trim Paths одна секунда."
+              }
+            ],
+            "actions": [
+              {
+                "actionId": "mutation",
+                "clauseId": "source",
+                "kind": "editAnimation",
+                "scene": "s0",
+                "targets": [
+                  "Vector Line"
+                ],
+                "techniques": [
+                  "trimPath"
+                ],
+                "parameters": [
+                  {
+                    "key": "durationSeconds",
+                    "value": 1
+                  }
+                ],
+                "relation": "unchanged",
+                "effectOperation": {
+                  "storage": "animation",
+                  "action": "update"
+                },
+                "constraints": [],
+                "unresolvedReason": null
+              }
+            ],
+            "assumptions": []
+          }
+        },
+        {
+          "prompt": "У Vector Line убери Trim Paths.",
+          "referenceOutput": {
+            "schemaVersion": "semantic-graph/1.0",
+            "clauses": [
+              {
+                "clauseId": "source",
+                "text": "У Vector Line убери Trim Paths."
+              }
+            ],
+            "actions": [
+              {
+                "actionId": "mutation",
+                "clauseId": "source",
+                "kind": "editAnimation",
+                "scene": "s0",
+                "targets": [
+                  "Vector Line"
+                ],
+                "techniques": [
+                  "trimPath"
+                ],
+                "parameters": [],
+                "relation": "unchanged",
+                "effectOperation": {
+                  "storage": "animation",
+                  "action": "remove"
+                },
+                "constraints": [],
+                "unresolvedReason": null
+              }
+            ],
+            "assumptions": []
+          }
+        },
+        {
+          "prompt": "Vector Line прорисовывается через Trim Paths.",
+          "referenceOutput": {
+            "schemaVersion": "semantic-graph/1.0",
+            "clauses": [
+              {
+                "clauseId": "source",
+                "text": "Vector Line прорисовывается через Trim Paths."
+              }
+            ],
+            "actions": [
+              {
+                "actionId": "mutation",
+                "clauseId": "source",
+                "kind": "objectAnimation",
+                "scene": "s0",
+                "targets": [
+                  "Vector Line"
+                ],
+                "techniques": [
+                  "trimPath"
+                ],
+                "parameters": [],
+                "constraints": [],
+                "unresolvedReason": null
+              }
+            ],
+            "assumptions": []
+          }
+        },
+        {
+          "prompt": "Анимация Vector Line 2 начинается после анимации Vector Line.",
+          "referenceOutput": {
+            "schemaVersion": "semantic-graph/1.0",
+            "clauses": [
+              {
+                "clauseId": "source",
+                "text": "Анимация Vector Line 2 начинается после анимации Vector Line."
+              }
+            ],
+            "actions": [
+              {
+                "actionId": "mutation",
+                "clauseId": "source",
+                "kind": "editAnimation",
+                "scene": "s0",
+                "targets": [
+                  "Vector Line 2"
+                ],
+                "techniques": [
+                  "trimPath"
+                ],
+                "parameters": [],
+                "relation": "unchanged",
+                "effectOperation": {
+                  "storage": "animation",
+                  "action": "updateTiming"
+                },
+                "temporalReference": {
+                  "kind": "existingAnimation",
+                  "target": {
+                    "name": "Vector Line",
+                    "sceneId": "s0"
+                  },
+                  "effect": "trimPath",
+                  "endpoint": "end"
+                },
+                "constraints": [],
+                "unresolvedReason": null
+              }
+            ],
+            "assumptions": []
+          }
+        },
+        {
+          "prompt": "Undo последнего изменения через существующий редактор",
+          "editorAction": "undo"
         }
       ]
     }

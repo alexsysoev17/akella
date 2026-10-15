@@ -228,7 +228,14 @@ export function requirementChecks(
     checks.push({
       name: "editHasEffect",
       requirementId: r.requirementId,
-      status: changed ? "PASSED" : "FAILED",
+      status:
+        changed ||
+        r.timing.reference ||
+        r.timing.anchorRequirementId ||
+        r.timing.startSeconds !== null ||
+        r.effectOperation?.action === "updateTiming"
+          ? "PASSED"
+          : "FAILED",
     });
     const prior = requirementAnimations(previous, r);
     for (const old of prior) {
@@ -240,7 +247,11 @@ export function requirementChecks(
         requirementId: r.requirementId,
         status:
           now &&
-          now.startFrame === old.startFrame &&
+          (r.timing.reference ||
+            r.timing.anchorRequirementId ||
+            r.timing.startSeconds !== null ||
+            r.effectOperation?.action === "updateTiming" ||
+            now.startFrame === old.startFrame) &&
           (r.parameters.durationFactor === null ||
             now.durationFrames ===
               Math.max(
@@ -388,14 +399,31 @@ export function requirementChecks(
   const primary =
       related.find((a) => !a.effect.startsWith("fade")) ?? related[0],
     block = state.blocks.find((b) => b.sceneId === r.sceneId);
-  if (primary && block && r.kind !== "editAnimation") {
+  if (
+    primary &&
+    block &&
+    (r.kind !== "editAnimation" ||
+      r.timing.reference ||
+      r.timing.anchorRequirementId ||
+      r.timing.startSeconds !== null ||
+      r.effectOperation?.action === "updateTiming")
+  ) {
     const anchorReq = plan.requirements.find(
       (x) => x.requirementId === r.timing.anchorRequirementId,
     );
-    const anchor = requirementAnchor(state, anchorReq);
-    const delay = Math.round(r.timing.delaySeconds * state.settings.fps);
-    const expected =
-      r.timing.startSeconds !== null
+    const anchor = r.timing.reference
+      ? state.animations.find(
+          (a) => a.animationId === r.timing.reference!.resolvedAnimationId,
+        )
+      : requirementAnchor(state, anchorReq);
+    const delay =
+      r.timing.offsetFrames ??
+      Math.round(r.timing.delaySeconds * state.settings.fps);
+    const expected = r.timing.reference
+      ? anchor!.startFrame +
+        (r.timing.reference.endpoint === "end" ? anchor!.durationFrames : 0) +
+        delay
+      : r.timing.startSeconds !== null
         ? Math.round(r.timing.startSeconds * state.settings.fps) + delay
         : r.timing.relation === "sceneStart"
           ? block.startFrame + delay
@@ -421,7 +449,7 @@ export function requirementChecks(
           ? "PASSED"
           : "FAILED",
       });
-    if (r.timing.anchorRequirementId)
+    if (r.timing.anchorRequirementId || r.timing.reference)
       checks.push({
         name: "persistedTemporalDependency",
         requirementId: r.requirementId,
@@ -526,6 +554,7 @@ export async function runIntentTasks(
     maxAttempts?: number;
   },
 ) {
+  const preflightStarted = performance.now();
   const plan = expandInheritance(input),
     tasks = compileTasks(project, plan),
     pending = tasks.filter((t) => t.status === "PENDING"),
@@ -911,6 +940,7 @@ export function preflightIntentPlan(
   state: MotionState,
   input: IntentPlan,
 ) {
+  const preflightStarted = performance.now();
   const plan = expandInheritance(input),
     tasks = compileTasks(project, plan),
     done = new Set<string>();
@@ -928,6 +958,7 @@ export function preflightIntentPlan(
     try {
       if (task.status === "BLOCKED")
         throw new Error(task.error ?? "UNSUPPORTED_REQUIREMENT");
+      const compilationStarted = performance.now();
       const compiled = compileRequirement(project, candidate, plan, task),
         next = applyOperations(candidate, compiled.operations, project);
       assertIntentScope(project, candidate, next, plan, task);
@@ -939,6 +970,14 @@ export function preflightIntentPlan(
           checks,
         });
       reports.push({
+        compilationAndValidationMs: performance.now() - compilationStarted,
+        readSet: plan.requirements
+          .filter((r) => task.requirementIds.includes(r.requirementId))
+          .flatMap((r) =>
+            r.timing.reference?.resolvedAnimationId
+              ? [r.timing.reference.resolvedAnimationId]
+              : [],
+          ),
         taskId: task.taskId,
         requirementIds: task.requirementIds,
         operations: compiled.operations,
@@ -966,6 +1005,11 @@ export function preflightIntentPlan(
   }
   return {
     status: "PASSED",
+    durationMs: performance.now() - preflightStarted,
+    graphDiff: {
+      before: state.timingDependencies ?? [],
+      after: candidate.timingDependencies ?? [],
+    },
     tasks: reports,
     operationCount: reports.reduce<number>(
       (n, r) => n + (r as { operations: unknown[] }).operations.length,

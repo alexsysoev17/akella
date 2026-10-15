@@ -1,5 +1,7 @@
 import { cp, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import type { MotionState } from "../apps/scene-validator/src/motion/schema.ts";
+import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { loadProject } from "../apps/scene-validator/src/project.ts";
 import { readMotion } from "../apps/scene-validator/src/motion/store.ts";
@@ -32,6 +34,66 @@ await cp(original, root, {
       /\/(?:history|validation|renders)(?:\/|$)/,
     ].some((pattern) => pattern.test(src)),
 });
+if (args.includes("--recorded-state")) {
+  const context = JSON.parse(
+    await readFile(path.join(saved, "context.json"), "utf8"),
+  );
+  const doc = JSON.parse(
+    await readFile(path.join(root, "motion/motion.json"), "utf8"),
+  );
+  const scenes = new Set(
+    context.scenes?.map((s: { sceneId: string }) => s.sceneId),
+  );
+  if (!scenes.size || !context.motion)
+    throw new Error("RECORDED_STATE_PROJECTION_UNAVAILABLE");
+  const targets = new Set(
+    context.scenes.flatMap((s: { objects: { targetId: string }[] }) =>
+      s.objects.map((o) => o.targetId),
+    ),
+  );
+  const projectState = (state: MotionState) =>
+    JSON.parse(
+      JSON.stringify({
+        ...state,
+        animations: state.animations.filter(
+          (a) => scenes.has(a.sceneId) && targets.has(a.targetId),
+        ),
+        expressions: state.expressions?.filter(
+          (e) => scenes.has(e.sceneId) && targets.has(e.targetId),
+        ),
+        visibility: state.visibility.filter((v) => scenes.has(v.sceneId)),
+      }),
+    );
+  const states = [
+    doc.state,
+    ...doc.history.flatMap((e: { before: unknown; after: unknown }) => [
+      e.before,
+      e.after,
+    ]),
+  ].filter((s) => isDeepStrictEqual(projectState(s), context.motion));
+  const unique = states.filter(
+    (s, i) => states.findIndex((other) => isDeepStrictEqual(other, s)) === i,
+  );
+  if (unique.length !== 1)
+    throw new Error(
+      "RECORDED_STATE_NOT_UNIQUELY_VERIFIED_IN_HISTORY: " + unique.length,
+    );
+  doc.state = unique[0];
+  doc.revision = context.projectRevision ?? request.revision;
+  doc.history = [];
+  doc.cursor = 0;
+  await writeFile(
+    path.join(root, "motion/motion.json"),
+    JSON.stringify(doc, null, 2),
+  );
+  console.log(
+    JSON.stringify({
+      verifiedRecordedRevision: doc.revision,
+      projectionScenes: [...scenes],
+      authoritativeHistoricalMatches: states.length,
+    }),
+  );
+}
 const project = await loadProject(root),
   before = await readMotion(project);
 let calls = 0;

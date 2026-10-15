@@ -572,7 +572,27 @@ function resolveTrackLifecycle(
   let targets = project.inspection.document.scenes
     .flatMap(objectsIn)
     .filter((o) => o.parentId);
-  const selector = r.selector;
+  let selector = r.selector;
+  if (selector?.targetIds?.length && (r.target.name || r.target.sourceNodeId)) {
+    const resolved = resolveObjectReference(project, state, {
+      name: r.target.name,
+      sourceNodeId: r.target.sourceNodeId,
+      sceneId: r.sceneId,
+      referenceText: r.sourceText,
+      techniques: r.techniques,
+      preferExisting: true,
+    });
+    if (
+      resolved.target &&
+      selector.targetIds.includes(resolved.target.sourceNodeId)
+    )
+      selector = {
+        type: "explicitObject",
+        targetIds: [resolved.target.sourceNodeId],
+        sceneId: resolved.target.sceneId,
+        effect: selector.effect,
+      };
+  }
   let recentIds: Set<string> | undefined;
   if (
     selector?.effect &&
@@ -668,7 +688,7 @@ function resolveTrackLifecycle(
           a.targetId === o.targetId,
       ),
     );
-  if (kinds.size !== 1 || !kinds.has("animation"))
+  if (r.techniques.length && (kinds.size !== 1 || !kinds.has("animation")))
     return fail("UNSUPPORTED_EFFECT_OPERATION");
   if (!targets.length) return fail("OBJECT_NOT_FOUND");
   if (targets.length > 200) return fail("SELECTOR_UNSUPPORTED_BATCH_LIMIT");
@@ -678,9 +698,10 @@ function resolveTrackLifecycle(
       (a) =>
         a.sceneId === target.sceneId &&
         a.targetId === target.targetId &&
-        r.techniques.includes(
-          a.effect as IntentRequirement["techniques"][number],
-        ),
+        (!r.techniques.length ||
+          r.techniques.includes(
+            a.effect as IntentRequirement["techniques"][number],
+          )),
     );
     if (r.techniques.some((t) => !tracks.some((a) => a.effect === t)))
       return fail("ANIMATION_TRACK_NOT_FOUND");
@@ -689,7 +710,19 @@ function resolveTrackLifecycle(
       r.techniques.some((t) => tracks.filter((a) => a.effect === t).length > 1)
     )
       return fail("AMBIGUOUS_EFFECT_MATCH");
+    if (!r.techniques.length) {
+      if (tracks.length !== 1) return fail("AMBIGUOUS_EFFECT_MATCH");
+      if (
+        !(tracks[0].effect in semanticBindings) &&
+        r.effectOperation?.action !== "updateTiming"
+      )
+        return fail("UNSUPPORTED_EFFECT_OPERATION");
+    }
     const member = structuredClone(r);
+    if (!member.techniques.length && tracks[0].effect in semanticBindings)
+      member.techniques = [
+        tracks[0].effect as IntentRequirement["techniques"][number],
+      ];
     member.kind = "editAnimation";
     member.unresolvedReason = null;
     member.sceneId = target.sceneId;

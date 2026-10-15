@@ -92,7 +92,14 @@ export function inspectSemanticCoverage(
     const clause = r.sourceClauseId
       ? sourceClauses.get(r.sourceClauseId)
       : undefined;
-    return !clause || (clause.start < end && clause.end > start);
+    const ref = r.timing.reference?.sourceClauseId
+      ? sourceClauses.get(r.timing.reference.sourceClauseId)
+      : undefined;
+    return (
+      !clause ||
+      (clause.start < end && clause.end > start) ||
+      Boolean(ref && ref.start < end && ref.end > start)
+    );
   };
   const boundaries = new Set<number>([0, request.length]);
   for (const m of request.matchAll(
@@ -241,13 +248,38 @@ export function inspectSemanticCoverage(
           ? m.object.sceneId === sceneId
           : !inferredScenes.size || inferredScenes.has(m.object.sceneId)),
     );
+    const maximal = here.filter(
+      (m) =>
+        !here.some(
+          (other) =>
+            other.start <= m.start &&
+            other.end >= m.end &&
+            (other.start < m.start || other.end > m.end),
+        ),
+    );
     const ids = [
-      ...new Set(here.map((m) => m.object.sceneId + "/" + m.object.targetId)),
+      ...new Set(
+        maximal.map((m) => m.object.sceneId + "/" + m.object.targetId),
+      ),
     ];
     const techs = explicitTechniques(text),
       inherit = inheritance.test(text);
-    const targetIds = ids.length
-      ? [...new Set([...pendingIds, ...ids])]
+    const readTargets = new Set(
+      plan.requirements
+        .filter((r) => r.timing.reference)
+        .map(
+          (r) =>
+            r.timing.reference!.target.sceneId +
+            "/" +
+            r.timing.reference!.target.sourceNodeId,
+        ),
+    );
+    const writes = new Set(
+      plan.requirements.map((r) => r.sceneId + "/" + r.target.sourceNodeId),
+    );
+    const writeIds = ids.filter((id) => !readTargets.has(id) || writes.has(id));
+    const targetIds = writeIds.length
+      ? [...new Set([...pendingIds, ...writeIds])]
       : pendingIds.length
         ? pendingIds
         : activeIds;
@@ -353,7 +385,12 @@ export function inspectSemanticCoverage(
         issue("MISSING_INHERITANCE_LINK", text, [r], previous.requirementId);
       const have = effective(r);
       if (!negated)
-        for (const technique of techs)
+        for (const technique of techs.filter(
+          (t) =>
+            !r.timing.reference ||
+            r.timing.reference.effect !== t ||
+            r.techniques.includes(t as (typeof r.techniques)[number]),
+        ))
           if (!have.has(technique))
             issue("MISSING_EXPLICIT_TECHNIQUE", text, [r], technique, [
               ...have,
@@ -363,6 +400,7 @@ export function inspectSemanticCoverage(
           if (!have.has(technique))
             issue("INCOMPLETE_INHERITANCE", text, [r], technique, [...have]);
       if (
+        !r.timing.reference &&
         pendingAfter &&
         pendingAfter !== r.requirementId &&
         (r.timing.relation !== "afterRequirement" ||

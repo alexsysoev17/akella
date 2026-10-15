@@ -6,7 +6,7 @@ import path from "node:path";
 import type { LoadedProject } from "../types.js";
 import type { MotionState } from "../motion/schema.js";
 import { executeMotion } from "../motion/service.js";
-import { readMotion } from "../motion/store.js";
+import { readMotion, changeMotion } from "../motion/store.js";
 import { evaluateMotion } from "../motion/engine.js";
 import { readRuns } from "./runtime.js";
 import { harnessMetrics } from "./metrics.js";
@@ -28,7 +28,13 @@ const evalCaseSchema = z
     referenceOutput: z.unknown().optional(),
     turns: z
       .array(
-        z.object({ prompt: z.string(), referenceOutput: z.unknown() }).strict(),
+        z
+          .object({
+            prompt: z.string(),
+            referenceOutput: z.unknown().optional(),
+            editorAction: z.enum(["undo", "redo"]).optional(),
+          })
+          .strict(),
       )
       .min(1)
       .max(10)
@@ -93,6 +99,26 @@ export async function runAgentEvals(options: {
       try {
         for (const turn of c.turns ?? [{ prompt: c.prompt }]) {
           const turnBefore = await readMotion(fixture.project);
+          if ("editorAction" in turn && turn.editorAction) {
+            const expected =
+              turn.editorAction === "undo"
+                ? turnBefore.history[turnBefore.cursor - 1]?.before
+                : turnBefore.history[turnBefore.cursor]?.after;
+            const changed = await changeMotion(fixture.project.root, {
+              expectedRevision: turnBefore.revision,
+              request: turn.prompt,
+              action: turn.editorAction,
+            });
+            turnChecks.push({
+              name: "editor " + turn.editorAction,
+              status:
+                expected && digest(changed.document.state) === digest(expected)
+                  ? "PASSED"
+                  : "FAILED",
+            });
+            continue;
+          }
+
           response = await executeMotion(
             fixture.project,
             {
@@ -488,7 +514,27 @@ export function evalChecks(
           (a) => a.targetId === "logo" && a.effect === "trimPath",
         ),
       );
-    } else if (name === "noTrimTracks")
+    } else if (name === "twoTrimTracks")
+      add(
+        name,
+        after.animations.filter((a) => a.effect === "trimPath").length === 2,
+      );
+    else if (name === "noTimingDependencies")
+      add(name, !after.timingDependencies?.length);
+    else if (name === "timingAt21")
+      add(
+        name,
+        after.animations.find((a) => a.targetId === "line2")?.startFrame ===
+          21 && after.timingDependencies?.length === 1,
+      );
+    else if (name === "fadeAfterPosition")
+      add(
+        name,
+        after.animations.find(
+          (a) => a.targetId === "phone" && a.effect === "fadeIn",
+        )?.startFrame === 15 && after.timingDependencies?.length === 1,
+      );
+    else if (name === "noTrimTracks")
       add(name, !after.animations.some((a) => a.effect === "trimPath"));
     else if (name === "dependencyIntegrity")
       add(

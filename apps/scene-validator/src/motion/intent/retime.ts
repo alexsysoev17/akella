@@ -79,6 +79,24 @@ export function retimeScenes(
   }
 }
 export function resolveTimingDependencies(state: MotionState) {
+  const edges = state.timingDependencies ?? [],
+    byTarget = new Map(edges.map((d) => [d.animationId, d.anchorAnimationId]));
+  const visited = new Set<string>(),
+    stack: string[] = [];
+  const visit = (id: string) => {
+    const index = stack.indexOf(id);
+    if (index >= 0)
+      throw new Error(
+        "Timing dependency cycle: " + [...stack.slice(index), id].join(" -> "),
+      );
+    if (visited.has(id)) return;
+    stack.push(id);
+    const next = byTarget.get(id);
+    if (next) visit(next);
+    stack.pop();
+    visited.add(id);
+  };
+  for (const id of byTarget.keys()) visit(id);
   const pending = [...(state.timingDependencies ?? [])],
     completed = new Set<string>();
   while (pending.length) {

@@ -115,7 +115,11 @@ export async function selectorContext(
     inventory.set(key, v);
   }
   const value: Record<string, unknown> = {
-    project: { projectId: project.config.projectId, name: project.config.name },
+    project: {
+      projectId: project.config.projectId,
+      name: project.config.name,
+      fps: doc.state.settings.fps,
+    },
     projectRevision: doc.revision,
     sceneIndex: project.inspection.document.scenes.map((s) => ({
       sceneId: s.sceneId,

@@ -4,14 +4,14 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-14 (Europe/Moscow) — partial unified effect lifecycle / track removal / direction edit update |
+| Last Updated | 2026-10-15 (Europe/Moscow) — partial temporal-reference and dependency reliability update |
 | Last Full Audit | 2026-10-13 — структурный аудит исходников перечисленных подсистем; не полный production E2E и не формальная верификация каждой ветви |
-| Git Commit | Pre-change checkpoint `d08182f` on top of `915fa2e`; reviewed lifecycle source/tests/docs committed after verification under `Repair unified motion effect lifecycle and track removal`. No uncommitted source is attributed to the checkpoint. |
+| Git Commit | Pre-change checkpoint `99b4752` on top of `088e92a`; temporal-reference source/tests/docs reviewed for a subsequent local commit. Checkpoint does not contain the uncommitted implementation. |
 | Git Branch | `main`; локальный репозиторий создан после первоначального аудита |
 | Working Tree Status | Reviewed P0 source/tests/docs changes; ignored user projects/assets remain outside history. Final status checked after local commit. |
-| Documentation Version | 1.0.11 |
-| Scope of Last Update | Verified saved test11 track deletion/reversal failures and exact revision; capability storage/lifecycle, typed effect intent, object/effect lookup, safe dependency deletion, compact existing-effect profile, Inspector, actual SVG/MP4 checks and46-case benchmark. No new full audit or new live provider test. |
-| Code snapshot SHA-256 | `63fa7fdf45acea8061c8722ec7db116729bc7a00b6e264e0adc13154348c2142` (post lifecycle source/build verification) |
+| Documentation Version | 1.0.12 |
+| Scope of Last Update | Verified saved test12 temporal-reference failures; read/write intent separation, actual-state anchor resolution, existing scheduler/compiler integration, strict canonical cycles, compact timing context, Inspector state provenance and 50-case benchmark. No new full audit or live-provider test. |
+| Code snapshot SHA-256 | `f8d253c337f2d5ce7c2dfcc6b6a4d003768f505453a8480ea577190a220a7120` (post temporal-reference source verification; formatting included) |
 
 Git 2.54.0 (Apple Git-157): локальная история на main, без remote/network/push. В P0 update изменены context, semantic compiler/checks и coverage; математический Engine/Renderer не изменены. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
 
@@ -916,7 +916,43 @@ Update incrementally: code/function and dependencies → affected interfaces/flo
 
 External AI can review **this complete Markdown file alone**. It explains data models, supported paths, exceptions and evidence without requiring prior chat history. For a deeper code review send requested source excerpts or an explicitly generated redacted Debug Bundle; no secrets/auth files are included here. Download/copy `docs/architecture-handoff.md` directly; no export service required.
 
+## Temporal-reference reliability update — 2026-10-15
+
+**IMPLEMENTED, targeted audit.** Production path remains service → existing semantic planner → canonical IntentPlan → existing compiler/execution → existing timing dependency scheduler → QA → revision-checked persistence. No second planner, registry, renderer or Motion Engine was introduced.
+
+### Verified failures
+
+Saved Run `88fb3c0c-9764-40e1-bd8b-8a226b9a4340` requested Ribbon 2 after Ribbon 1. Both actual tracks existed at recorded revision `e977a545-ef4f-426b-b05e-c7b61e0225fd`. The model emitted a fake empty edit for the read-only anchor. Expression-oriented selector resolution rejected that anchor; the dependent's explicit singleton effect selector was misclassified as unauthorized broad selection. Independently, the existing-track compiler branch ignored timing changes, and identity checks prohibited start-frame updates. These are verified code defects; absence from a scoped prompt projection is not evidence of missing persisted state.
+
+Historical Run `18b5b177-2afc-47a8-9691-afc5628425bc` had only Ribbon 1 at its recorded revision. Coverage treated its fake anchor requirement as a mutation and demanded an inverse sequential relation. The saved coverage-audit response added A-after-B while B already depended on A. Thus the repaired graph really was cyclic; the original requested dependency was not. Strict cycle validation remains enabled.
+
+### Contracts and execution
+
+- `motion/intent/schema.ts`, `graph.ts`, `selector-schema.ts`: optional `timing.reference` separates an existing animation read from mutations; endpoint start/end, actual object/effect/animation reference, source clause and signed offset are explicit. Compact wire supports `temporalReference`, `delayFrames`, `startFrame`, `timingRelation`; actual project FPS performs conversion. Old canonical plans remain accepted. Persisted Motion State/dependency schema is unchanged.
+- `motion/intent/references.ts`: deterministic resolution against authoritative state; unique actual animation required. Missing/ambiguous anchors produce precise terminal errors, without semantic retry to invent data. Recent committed references use real action membership intersected with live state. Deleted tracks are not recreated. `existingExpression` and `sceneBoundary` reference kinds are explicitly unsupported; existing scene timing relations remain available.
+- Compatibility normalization removes only structurally empty, single-target anchor edits used exclusively as references. Real edits, parameters, dependencies and inheritance remain mutations. Provenance and temporal dependencies are distinct edges. Coverage still rejects genuine missing effects/targets; maximal contained-name matching avoids counting a shorter alias twice.
+- `contextual-resolution.ts`: explicit target IDs/names constrain effect selection rather than expanding globally. Unique-track timing edits also support generic keyframes via actual animation IDs, without advertising unsupported creation techniques.
+- `compiler.ts`, `execution.ts`, `retime.ts`: existing-track timing updates preserve ID, duration, direction, parameters and geometry. Existing `setTimingDependency` upsert is reused; after/end and with/start edges carry signed offsets. Absolute timing removes the incoming edge. Actual canonical cycles/self-cycles report their path and reject. Duration edits propagate through the live graph. Existing removal freezes dependents and clears dangling edges; existing Undo/Redo restores state.
+- Full-plan preflight validates compilation/scope before writes. Commit remains per task with explicit partial-success reconciliation, not a new whole-run atomic transaction. Revision guards remain authoritative.
+
+### Context and diagnostics
+
+`service.ts` chooses the existing compact context profile for likely existing timing edits; this is context routing, not a keyword semantic planner. LLM still interprets the instruction. `harness/inspector.ts` records readSet/writeSet, actual canonical anchors, reference failures, compilation/preflight duration and proposed dependency graph diff. Diagnostic bundles distinguish archived filtered planning state at its recorded revision from a current authoritative filtered snapshot; include actual candidate tracks for failed references. They do not imply that omitted tracks are absent.
+
+`scripts/replay-agent-run.ts --recorded-state` verifies a saved scoped projection against full current/history states and requires one unique matching full state. Replay uses a disposable copy; it never replaces original project state. Saved provider output is not a live LLM test.
+
+### Verification and limits
+
+TypeScript passes. Full local suite: **200/200**, including real Chromium QA and existing integration checks. Six dedicated tests include 32 seeded acyclic graph metamorphisms, 24/30/60 FPS, start/end/signed offsets, cross-scene timing, generic keyframes, committed-action lookup, ambiguity, actual/self cycles, duration propagation, edge replacement/removal, Undo/Redo and stale revisions. Final deterministic benchmark: **50/50 PASS**, including expected safe rejections; results are recorded separately in `artifacts/harness/temporal-final-50.json`; reference-provider semantics/artistic quality are NOT TESTED.
+
+Both saved failures replayed successfully through production execution on isolated copies, one saved-response adapter call each. Primary replay: one mutation, two operations; A stays frames90–111, B moves150→111 and ends132. Actual Chromium SVG Preview samples B progress: frame110=0,111=0,112=0.047619,120=0.428571,132=1. Reverse direction retained. This demonstrates actual path-reveal timing, not equivalence to Figma pixels. A fresh MP4 comparison for this particular saved case was NOT RUN; existing video tests do not substitute for that claim.
+
+No new external provider call, live token reduction, live latency improvement or arbitrary-language completeness was measured. Saved-response local execution (~3.086s) is not provider latency. Unsupported reference kinds, genuinely ambiguous tracks and task-level partial commits remain explicit limitations. Original client projects/source assets were not modified by these replays.
+
 ## ARCHITECTURE CHANGE HISTORY
+
+- 2026-10-15 — v1.0.12: temporal read references, scoped existing-track scheduling, canonical dependency diagnostics, archived/current state distinction, historical replay and 50-case benchmark. Verified 200 tests and actual saved-case Chromium path progress; no new live-provider test.
+
 
 | Date | Component / change | Files / contracts | Documentation / verification |
 |---|---|---|---|

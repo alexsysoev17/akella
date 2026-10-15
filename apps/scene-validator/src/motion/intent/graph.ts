@@ -5,6 +5,7 @@ import {
   intentPlanSchema,
   intentRequirementSchema,
   intentTechnique,
+  temporalReferenceSchema,
   type IntentPlan,
 } from "./schema.js";
 const parameterKeys = Object.keys(
@@ -67,6 +68,8 @@ export const semanticGraphSchema = z
             relation:
               intentRequirementSchema.shape.timing.shape.relation.optional(),
             dependsOn: z.string().optional(),
+            temporalReference: temporalReferenceSchema.optional(),
+            delayFrames: z.number().int().optional(),
             inheritFrom: z.string().optional(),
             delaySeconds: z.number().optional(),
             selector: intentRequirementSchema.shape.selector,
@@ -115,6 +118,44 @@ export function normalizeSemanticGraph(
       objectIndex?: { sourceNodeId: string; name: string; sceneId: string }[];
     };
   const fps = c.motion?.settings?.fps ?? c.project?.fps;
+  const readOnly = graph.actions.filter(
+    (a) =>
+      a.kind === "editAnimation" &&
+      !a.effectOperation &&
+      !a.expressionAction &&
+      !a.parameters.length &&
+      !a.start &&
+      (!a.relation || a.relation === "unchanged") &&
+      !a.dependsOn &&
+      !a.inheritFrom &&
+      !a.temporalReference &&
+      graph.actions.some((b) => b.dependsOn === a.actionId),
+  );
+  for (const anchor of readOnly) {
+    if (anchor.targets.length !== 1 || anchor.techniques.length > 1)
+      throw new Error("AMBIGUOUS_TEMPORAL_ANCHOR");
+    for (const action of graph.actions.filter(
+      (a) => a.dependsOn === anchor.actionId,
+    )) {
+      const target = anchor.targets[0],
+        node = c.objectIndex?.find((o) => o.sourceNodeId === target);
+      action.temporalReference = {
+        kind: "existingAnimation",
+        target: {
+          ...(node ? { sourceNodeId: node.sourceNodeId } : { name: target }),
+          ...(typeof anchor.scene === "string"
+            ? { sceneId: anchor.scene }
+            : {}),
+        },
+        ...(anchor.techniques.length ? { effect: anchor.techniques[0] } : {}),
+        endpoint: action.relation === "withRequirement" ? "start" : "end",
+        sourceClauseId: anchor.clauseId,
+      };
+      action.dependsOn = undefined;
+    }
+  }
+  graph.actions = graph.actions.filter((a) => !readOnly.includes(a));
+
   const actionIds = new Set<string>(),
     clauses = new Map<string, { text: string; start: number; end: number }>();
   for (const clause of graph.clauses) {
@@ -235,7 +276,11 @@ export function normalizeSemanticGraph(
                 ? "unchanged"
                 : "sceneStart"),
           anchorRequirementId: anchor(action.dependsOn, false, action.actionId),
-          delaySeconds: action.delaySeconds ?? 0,
+          delaySeconds:
+            (action.delaySeconds ?? 0) + (action.delayFrames ?? 0) / (fps ?? 1),
+          ...(action.temporalReference
+            ? { reference: action.temporalReference }
+            : {}),
         },
         inheritFromRequirementId: anchor(
           action.inheritFrom,
@@ -247,8 +292,7 @@ export function normalizeSemanticGraph(
           : null,
         constraints: action.constraints,
         unresolvedReason: action.unresolvedReason,
-        ...(action.selector &&
-        !(action.selector.type === "explicitObject" && action.targets.length)
+        ...(action.selector && !action.targets.length
           ? { selector: action.selector }
           : {}),
         ...(action.effectOperation
@@ -267,9 +311,17 @@ export function normalizeSemanticGraph(
     coverage: graph.clauses.map((clause) => ({
       sourceText: clauses.get(clause.clauseId)!.text,
       requirementIds: graph.actions
-        .filter((a) => a.clauseId === clause.clauseId)
+        .filter(
+          (a) =>
+            a.clauseId === clause.clauseId ||
+            a.temporalReference?.sourceClauseId === clause.clauseId,
+        )
         .flatMap((a) => memberships.get(a.actionId)!),
-      classification: graph.actions.some((a) => a.clauseId === clause.clauseId)
+      classification: graph.actions.some(
+        (a) =>
+          a.clauseId === clause.clauseId ||
+          a.temporalReference?.sourceClauseId === clause.clauseId,
+      )
         ? "executable"
         : "context",
       explanation: "Source clause " + clause.clauseId,
@@ -277,7 +329,7 @@ export function normalizeSemanticGraph(
     assumptions: graph.assumptions,
   });
 }
-export const graphInstructions = `Existing effect lifecycle: classify using the supplied capability storage kinds. Existing animation edits/removals use kind=editAnimation and effectOperation={storage:"animation",action:"update"|"remove"}; expressions use storage="expression". Creation remains objectAnimation. Never use expressionAction to remove animation tracks, never mark a supported removal unsupported. trimPath is an animation, not an expression. Reverse path direction updates direction="reverse"; progress stays from=0 to=1. Preserve IDs, geometry, unspecified timing/easing/dependencies. Interpret the entire user request semantically. Return the compact semantic graph. Clauses must quote exact contiguous original text and cover every instruction (including scene headers and connecting words); no paraphrases. Harmless whitespace differences are restored to exact original spans. If the same quote appears repeatedly, provide its zero-based occurrence; never guess an ambiguous source span. One action can target multiple named objects with the same behavior. Use object names or canonical source IDs from objectIndex; never invent identifiers. Scene is a canonical sceneId or 1-based scene number. Action IDs are stable references, not array positions. Source clause IDs describe provenance ONLY; dependsOn and inheritFrom are independent action references. For "when it finishes, second ribbon similarly" inheritFrom=first ribbon and dependsOn=first ribbon; text following that clause is a separate action. Temporal anchors must refer to a single-target action. Behavior inheritance may reference a grouped action: only shared techniques/parameters are inherited, never another target's coordinates.
+export const graphInstructions = `Timing-only edits use effectOperation={storage:"animation",action:"updateTiming"}. Use temporalReference for a READ-ONLY existing anchor (target object/name/scene and optionally exact effect/animationId, endpoint start/end). Never create an edit/no-op action for an existing anchor. dependsOn is only for a real mutation planned in the SAME request. Reference identity/frame arithmetic is resolved deterministically from current state. delayFrames is signed: after end+5, overlap end-10. Existing expression/scene boundary anchor kinds must be diagnosed if scheduler does not support them. Existing effect lifecycle: classify using the supplied capability storage kinds. Existing animation edits/removals use kind=editAnimation and effectOperation={storage:"animation",action:"update"|"remove"}; expressions use storage="expression". Creation remains objectAnimation. Never use expressionAction to remove animation tracks, never mark a supported removal unsupported. trimPath is an animation, not an expression. Reverse path direction updates direction="reverse"; progress stays from=0 to=1. Preserve IDs, geometry, unspecified timing/easing/dependencies. Interpret the entire user request semantically. Return the compact semantic graph. Clauses must quote exact contiguous original text and cover every instruction (including scene headers and connecting words); no paraphrases. Harmless whitespace differences are restored to exact original spans. If the same quote appears repeatedly, provide its zero-based occurrence; never guess an ambiguous source span. One action can target multiple named objects with the same behavior. Use object names or canonical source IDs from objectIndex; never invent identifiers. Scene is a canonical sceneId or 1-based scene number. Action IDs are stable references, not array positions. Source clause IDs describe provenance ONLY; dependsOn and inheritFrom are independent action references. For "when it finishes, second ribbon similarly" inheritFrom=first ribbon and dependsOn=first ribbon; text following that clause is a separate action. Temporal anchors must refer to a single-target action. Behavior inheritance may reference a grouped action: only shared techniques/parameters are inherited, never another target's coordinates.
 Use current request, not previous conversation, to choose action/technique. Default timing/duration/easing are computed by the compiler: omit unspecified parameters (empty parameters array). Explicit starts keep original units frames/seconds. Parameter values must match supported typed contracts. Unsupported identity is retained with unresolvedReason, never silently broaden targets. A standalone additional fade is objectAnimation/fadeIn preserving base movement. Existing parameter edits are editAnimation. Compound movement/fade/inertia requires all three techniques. Below=slideUp, above=slideDown; offscreen entrances use parameter entrance=offscreen. Damped inertia starts after the base endpoint; no fabricated keyframes. True Trim Paths=trimPath, never scale. Explicit easing/scene changes/dependencies must be preserved. AE Easy Ease=aeEasyEase. All technical constraints and engine limits remain enforced by deterministic execution.`;
 
 // Lifecycle interpretation belongs to the same semantic graph and compiler.

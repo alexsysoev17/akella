@@ -131,33 +131,79 @@ export async function evalFixture(c: AgentEval) {
       node("phoneNext", "Phone", 10, 20, 30, 70),
     ];
   });
-  if (c.seed === "trim-sequence") {
+  if (["trim-sequence", "trim-detached", "trim-only-second"].includes(c.seed)) {
     await changeMotion(f.project.root, {
       expectedRevision: "initial",
       request: "synthetic Trim Paths lifecycle seed",
       operations: [
-        ...["line", "line2"].map((targetId, i) => ({
-          type: "addAnimation" as const,
-          animation: {
-            animationId: "seed_trim_" + targetId,
-            targetId,
-            sceneId: "s0",
-            effect: "trimPath" as const,
-            startFrame: i * 21,
-            durationFrames: 21,
-            easing: "linear" as const,
-            enabled: true,
-            parameters: { from: 0, to: 1, direction: "forward" as const },
-          },
-        })),
+        ...(c.seed === "trim-only-second" ? ["line2"] : ["line", "line2"]).map(
+          (targetId, i) => ({
+            type: "addAnimation" as const,
+            animation: {
+              animationId: "seed_trim_" + targetId,
+              targetId,
+              sceneId: "s0",
+              effect: "trimPath" as const,
+              startFrame:
+                targetId === "line2" && c.seed !== "trim-sequence"
+                  ? 35
+                  : i * 21,
+              durationFrames: 21,
+              easing: "linear" as const,
+              enabled: true,
+              parameters: { from: 0, to: 1, direction: "forward" as const },
+            },
+          }),
+        ),
+        ...(c.seed !== "trim-sequence"
+          ? []
+          : [
+              {
+                type: "setTimingDependency" as const,
+                dependency: {
+                  dependencyId: "seed_ribbon_sequence",
+                  animationId: "seed_trim_line2",
+                  anchorAnimationId: "seed_trim_line",
+                  relation: "after" as const,
+                  offsetFrames: 0,
+                },
+              },
+            ]),
+      ],
+    });
+    return f;
+  }
+  if (c.seed === "fade-after-slide") {
+    await changeMotion(f.project.root, {
+      expectedRevision: "initial",
+      request: "synthetic cross-effect timing seed",
+      operations: [
         {
-          type: "setTimingDependency" as const,
-          dependency: {
-            dependencyId: "seed_ribbon_sequence",
-            animationId: "seed_trim_line2",
-            anchorAnimationId: "seed_trim_line",
-            relation: "after" as const,
-            offsetFrames: 0,
+          type: "addAnimation",
+          animation: {
+            animationId: "A",
+            sceneId: "s0",
+            targetId: "qr",
+            effect: "slideUp",
+            startFrame: 0,
+            durationFrames: 15,
+            easing: "linear",
+            enabled: true,
+            parameters: { distance: 40, mode: "in" },
+          },
+        },
+        {
+          type: "addAnimation",
+          animation: {
+            animationId: "B",
+            sceneId: "s0",
+            targetId: "phone",
+            effect: "fadeIn",
+            startFrame: 35,
+            durationFrames: 15,
+            easing: "linear",
+            enabled: true,
+            parameters: { from: 0, to: 1 },
           },
         },
       ],
