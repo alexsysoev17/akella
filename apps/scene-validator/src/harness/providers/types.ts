@@ -1,6 +1,9 @@
 import { PROVIDER_ID_PATTERN } from "../../provider-contract.js";
 export interface ProviderCapabilities {
+  /** Adapter can return parsed JSON; native enforcement is not required. */
   structuredOutput: boolean;
+  /** Omission preserves historical Codex-compatible wire schemas. */
+  schemaDialect?: "strict-json-schema" | "json-schema";
   nativeToolCalling: boolean;
   cancellation: boolean;
   usage: boolean;

@@ -24,8 +24,12 @@ export const providerSettingsSchema = z
       ),
     model: z
       .string()
-      .max(100)
-      .regex(/^[a-zA-Z0-9._-]*$/)
+      .max(200)
+      .regex(/^(?:[a-zA-Z0-9][a-zA-Z0-9._:/+-]*)?$/)
+      .refine(
+        (value) => !value.includes("://"),
+        "Model IDs are not endpoint URLs",
+      )
       .refine(
         (value) => redactSecrets(value) === value,
         "Credentials are not model IDs",
@@ -70,7 +74,8 @@ export function parseProviderSettings(
   const key = issue.path[0] === undefined ? null : String(issue.path[0]);
   throw new ProviderSettingsError({
     errorCode:
-      issue.code === "custom" && key === "provider" &&
+      issue.code === "custom" &&
+      key === "provider" &&
       typeof raw.provider === "string" &&
       PROVIDER_ID_PATTERN.test(raw.provider)
         ? "PROVIDER_NOT_REGISTERED"
@@ -81,9 +86,11 @@ export function parseProviderSettings(
     ],
     actualValue: key ? safeValue(raw[key]) : "INVALID_SETTINGS_OBJECT",
     expectedFormat:
-      key === null ? "strict object: provider/model" : key === "provider"
-        ? `${PROVIDER_ID_PATTERN}; registered: ${providerIds().join(", ")}; ${MANUAL_PROVIDER_ID} is manual compatibility`
-        : "model: letters, digits, dot, underscore, hyphen; max100",
+      key === null
+        ? "strict object: provider/model"
+        : key === "provider"
+          ? `${PROVIDER_ID_PATTERN}; registered: ${providerIds().join(", ")}; ${MANUAL_PROVIDER_ID} is manual compatibility`
+          : "model: identifier (namespace/tag supported); no URLs/credentials/whitespace; max200",
     source,
     providerInitializationStatus: "NOT_INITIALIZED",
   });

@@ -46,6 +46,7 @@ export class CodexAdapter implements ProviderAdapter {
   capabilities() {
     return {
       structuredOutput: true,
+      schemaDialect: "strict-json-schema" as const,
       nativeToolCalling: false,
       cancellation: true,
       usage: true,

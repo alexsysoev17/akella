@@ -4,13 +4,13 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-19 (Europe/Moscow) — targeted system-wide reliability hardening; not a full re-audit |
+| Last Updated | 2026-10-19 (Europe/Moscow) — AI-native/provider portability review; not a full re-audit |
 | Last Full Audit | 2026-10-13 — структурный аудит исходников перечисленных подсистем; не полный production E2E и не формальная верификация каждой ветви |
-| Git Commit | Checkpoint `df3a4e5` on top of `efcd2f2`; hardening changes are the reviewed working-tree changes following that checkpoint, not contained in it. |
+| Git Commit | Checkpoint `48baa93` after reliability commit `e4aee55`; provider-portability source/tests/docs are the subsequent working-tree change set at documentation update. |
 | Git Branch | `main`; локальный репозиторий создан после первоначального аудита |
-| Working Tree Status | main; source/tests/docs hardening change set uncommitted at this documentation update. User projects/assets and test artifacts are ignored. |
-| Documentation Version | 1.0.15 |
-| Scope of Last Update | Candidate commit boundary, crash recovery, shared QA admission, context identities, nested center coordinates, endpoint retiming, diagnostics and actual deterministic/mock/live/video evidence. |
+| Working Tree Status | main; reviewed provider-portability source/tests/docs uncommitted at this update. No project data changed. |
+| Documentation Version | 1.0.16 |
+| Scope of Last Update | Targeted AI-native/product and provider-portability audit; model identifiers, explicit output schema dialect, capability admission and adapter contract tests. No new full audit or live provider integration. |
 | Code snapshot SHA-256 | NOT RECALCULATED for this update; use component version digests in actual run artifacts and subsequent Git commit. |
 
 Git 2.54.0 (Apple Git-157): локальная история на main, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
@@ -1105,7 +1105,45 @@ Context bytes for those five cases increased from26094/26994/25506/5852/25054 to
 
 Remaining priorities: compact schema/provider overhead with measured live evidence; bounded retrieval/paging for large identity indexes; history/artifact storage bounds; full source-import crash protocol; broader live and rendered quality coverage. Ordinary offscreen slide through unsupported rotated parents still rejects safely; arbitrary font/complex mask fidelity and AE easing parity remain limited. No guarantee of artistic quality or universal natural-language coverage.
 
+## AI-native product / provider portability review — 2026-10-19
+
+**Scope:** code inspection of ProviderAdapter/registry, AIClient, settings, Harness budgets, existing evaluation/persistence/UI boundaries; no new external provider call, no local LLM execution, no new provider installed. Existing source is technical truth. This does not supersede earlier measured reliability results.
+
+### Confirmed coupling and implemented corrections
+
+- `motion/provider-settings.ts` rejected `/` and `:` in model IDs. Model names now accept bounded namespace/tag identifiers (200 chars), reject whitespace, endpoint URLs, absolute paths and detected credentials. Model IDs are labels passed to adapters, never executable commands or filesystem paths. Provider ID registration remains strict.
+- `motion/provider.ts:AIClient.structured` used Codex strict JSON adaptation for every adapter. ProviderCapabilities now optionally declares `schemaDialect: "strict-json-schema" | "json-schema"`. Omission preserves legacy adapter behavior. Codex declares strict explicitly; plain adapters receive the unexpanded schema and their output is parsed directly by the same runtime Zod contract. Optional-null normalization only applies to strict wire. Native tool calling is not required for motion planning.
+- `structuredOutput` capability is now checked before calling the adapter. An adapter without native schema enforcement can still implement JSON prompting/parsing and declare structured output, but it must return parsed data; downstream validation remains mandatory. Unsupported output fails before generation. Unsolicited tool calls are rejected even in AIClient paths without a Harness runtime; primary Harness already rejected them.
+- These changes do not implement OpenAI/Claude HTTP clients, local model serving or automatic model routing. Existing adapters, project states, compiler and QA remain shared. No provider-specific Motion Knowledge added.
+
+### Verified weaknesses / recommended order
+
+| Priority | Evidence | Product consequence / next step |
+|---|---|---|
+| P1 | `motion/provider.ts:plannerInstructions` legacy instructions permit nearest-effect substitutions and say line text is unsupported, while current text compiler supports it | Capability/instruction drift in legacy/manual or repair paths; consolidate instruction generation around versioned capability contracts, retain strict prohibition of silent technique substitution. Primary semantic graph path differs; no claim every request uses old instructions. |
+| P1 | `harness/runtime.ts:invoke` bounds message bytes, records schema bytes separately; no model-specific context-window profile | Smaller local model can overflow even when common budget passes. Add model profile with total prompt+schema/token budget and explicit refusal/compression policy; do not silently drop objects or constraints. |
+| P1 | `motion/provider.ts:providerStatus`, API provider action and settings UI explicitly check/display Codex | A new registered adapter can generate without rewriting the engine, but health UI would be misleading. Before adding a live adapter introduce optional adapter-owned health status, truthful UNKNOWN/auth-needed states; connection success is not task-quality proof. |
+| P1 | Live evidence from prior task ~18k input tokens/command; schema/runtime overhead substantial | Compare API/local transport on identical benchmark and actual quality; smaller model is not inherently cheaper once failures/repairs are included. No new token/latency measurement this review. |
+| P1 | Reference benchmark supplies prepared semantic answers; four prior live commands are not broad model evaluation | Require same dataset/schema versions and independent live suites per model; report semantic, state, render and artistic quality separately. Do not enable a model simply because JSON validates. |
+| P2 | ProviderError lacks explicit auth/rate-limit/context-exhausted/overload classification; capabilities have no context-window/cancellation-strength profiles | API/local failures need typed actionable diagnostics and bounded retries specific to cause. Cancellation must stop generation at adapter transport where possible, not only reject a waiting Promise. |
+| P2 | Model provider.json lives in project; connection secret/profile mechanism not implemented | Keep provider/model preference portable. Future endpoint/auth/inference settings belong to machine configuration or environment/secret references, never project exports/traces. No credential collection added here. |
+| P2 | Full source inventory hashing, full before/after history snapshots, finite Inspector read cap and retained crash artifacts | Larger customer projects can be expensive/opaque. Measure large-project workloads before incremental inventory/history compaction; never delete user history silently. |
+| P2 | ~1205-line compiler,1108-line planner,1081-line execution plus legacy paths | New capability requires synchronized schema/compiler/check/instruction changes. Add per-capability contract conformance tests; split by responsibility only when covered, not a replacement planner. |
+
+### Future adapter integration boundary
+
+Machine configuration/credentials → registered ProviderAdapter → messages + schema + model + signal/budgets → parsed structured response + real usage/errors → existing Semantic IR → deterministic compiler → candidate/scope/QA → canonical commit → renderer.
+
+To add an adapter: implement generate/capabilities, register a stable ID at startup, own HTTP/local transport/auth/schema mapping inside that adapter, preserve timeout/cancellation and nullable real usage/cost. Do not place provider logic in compiler/renderer or store model-generated IDs as authoritative state. Tool responses are intentionally unsupported by this motion execution contract; typed intent is the interoperability surface. There is no automatic production fallback to another provider, avoiding unannounced data disclosure or different artistic behavior. If fallback is later added it needs an explicit configured policy and its own trace/evals.
+
+### Verification
+
+Four new adapter-contract tests cover namespaced/tagged model IDs, raw JSON-schema optional fields, strict/default backward compatibility, runtime rejection of malformed output, unsupported structured capability with zero calls and forbidden tools without Harness runtime. They use mock adapters; they do not verify a real API/local model. Actual verification: TypeScript typecheck/build and UI bundling PASS; full suite **219/219**, no failed/skipped tests,18.250 s; five reference-provider production-path benchmark cases **5/5** (`artifacts/harness/provider-portability-reference.json`). No live provider calls in this update.
+
 ## ARCHITECTURE CHANGE HISTORY
+
+- 2026-10-19 — v1.0.16: targeted provider-portability review; optional schema dialect, model namespace/tag support and capability/tool admission tests. Existing Codex wire default retained. No API/local-model E2E claim.
+
 
 - 2026-10-18 — v1.0.15: candidate-level reconciliation and one durable run commit/receipt, owner-aware recovery, shared QA admission, all-scene compact references, nested center and endpoint-inertia fixes. Verified reference/live/Chromium/MP4 and SIGKILL evidence above. Targeted update, not full audit.
 

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { redactSecrets } from "../harness/security.js";
 import {
   createProvider,
+  ProviderError,
   type ProviderRequest,
   type ProviderResponse,
 } from "../harness/providers/index.js";
@@ -215,11 +216,22 @@ export class AIClient implements AIProvider {
       io: "output",
       reused: "ref",
     });
-    const responseSchema = compatibleSchema(
-      nativeSchema
-        ? z.toJSONSchema(nativeSchema, { io: "output", reused: "ref" })
-        : runtimeSchema,
-    );
+    if (this.settings.provider === "manual-response")
+      throw new Error("Manual response required");
+    const adapter = createProvider(this.settings.provider, this.directory);
+    const capabilities = adapter.capabilities();
+    if (!capabilities.structuredOutput)
+      throw new ProviderError(
+        "UNSUPPORTED_CAPABILITY",
+        "Motion planning requires parsed structured output from the adapter",
+      );
+    const strictWire = capabilities.schemaDialect !== "json-schema";
+    const logicalSchema = nativeSchema
+      ? z.toJSONSchema(nativeSchema, { io: "output", reused: "ref" })
+      : runtimeSchema;
+    const responseSchema = strictWire
+      ? compatibleSchema(logicalSchema)
+      : logicalSchema;
     await writeFile(
       path.join(this.directory, "request.txt"),
       redactSecrets(prompt),
@@ -228,9 +240,6 @@ export class AIClient implements AIProvider {
       path.join(this.directory, "output-schema.json"),
       JSON.stringify(responseSchema, null, 2),
     );
-    if (this.settings.provider === "manual-response")
-      throw new Error("Manual response required");
-    const adapter = createProvider(this.settings.provider, this.directory);
     const input: ProviderRequest = {
       purpose:
         mode === "semantic" || mode === "semantic-planning"
@@ -251,7 +260,14 @@ export class AIClient implements AIProvider {
     const response = this.runtime
       ? await this.runtime.invoke(adapter, input)
       : await adapter.generate(input);
-    const normalized = normalizeProviderOutput(response.output, runtimeSchema);
+    if (response.toolCalls.length)
+      throw new ProviderError(
+        "UNSUPPORTED_CAPABILITY",
+        "Motion planning accepts structured intent, not provider tool execution",
+      );
+    const normalized = strictWire
+      ? normalizeProviderOutput(response.output, runtimeSchema)
+      : response.output;
     const parsed = schema.safeParse(normalized);
     const fullDiagnostics = (this.runtime?.privacy ?? "full") === "full";
     const issues = parsed.success
@@ -282,6 +298,7 @@ export class AIClient implements AIProvider {
         JSON.stringify(
           {
             version: "optional-null-v1",
+            schemaDialect: strictWire ? "strict-json-schema" : "json-schema",
             callIndex: response.callIndex ?? null,
             projectRevision:
               (context as { projectRevision?: string })?.projectRevision ??
