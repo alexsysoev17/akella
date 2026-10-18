@@ -52,46 +52,40 @@ export async function selectorContext(
   )
     for (const a of actions)
       for (const t of a.targets.slice(0, 5)) ids.add(t.targetId);
-  const objectIndex = registry.objects
-    .filter(
-      (o) =>
-        objectMentionRanges(o.name, input.request).length ||
-        o.sourceInstances.some((i) => ids.has(i.sourceNodeId)),
-    )
-    .flatMap((o) =>
-      o.sourceInstances
-        .filter((i) => !roots.has(i.sourceNodeId))
-        .map((i) => ({
-          sceneId: i.sceneId,
-          sourceNodeId: i.sourceNodeId,
-          logicalObjectId: o.logicalObjectId,
-          name: o.name,
-          aliases: objectAliases(o.name),
-          existingAnimations: doc.state.animations
-            .filter(
-              (a) => a.sceneId === i.sceneId && a.targetId === i.sourceNodeId,
-            )
-            .map((a) => ({
-              animationId: a.animationId,
-              effect: a.effect,
-              enabled: a.enabled,
-              startFrame: a.startFrame,
-              durationFrames: a.durationFrames,
-            })),
-          existingExpressions: (doc.state.expressions ?? [])
-            .filter(
-              (e) =>
-                e.enabled &&
-                e.sceneId === i.sceneId &&
-                e.targetId === i.sourceNodeId,
-            )
-            .map((e) => ({
-              expressionId: e.expressionId,
-              type: e.type,
-              property: e.property,
-            })),
-        })),
-    );
+  const objectIndex = registry.objects.flatMap((o) =>
+    o.sourceInstances
+      .filter((i) => !roots.has(i.sourceNodeId))
+      .map((i) => ({
+        sceneId: i.sceneId,
+        sourceNodeId: i.sourceNodeId,
+        logicalObjectId: o.logicalObjectId,
+        name: o.name,
+        aliases: objectAliases(o.name),
+        existingAnimations: doc.state.animations
+          .filter(
+            (a) => a.sceneId === i.sceneId && a.targetId === i.sourceNodeId,
+          )
+          .map((a) => ({
+            animationId: a.animationId,
+            effect: a.effect,
+            enabled: a.enabled,
+            startFrame: a.startFrame,
+            durationFrames: a.durationFrames,
+          })),
+        existingExpressions: (doc.state.expressions ?? [])
+          .filter(
+            (e) =>
+              e.enabled &&
+              e.sceneId === i.sceneId &&
+              e.targetId === i.sourceNodeId,
+          )
+          .map((e) => ({
+            expressionId: e.expressionId,
+            type: e.type,
+            property: e.property,
+          })),
+      })),
+  );
   const inventory = new Map<
     string,
     {

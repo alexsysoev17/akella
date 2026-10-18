@@ -242,12 +242,16 @@ test("morphological retrieval selects actual Scene3, not numeric root Frame2; co
       {
         animationId: "trim2",
         effect: "trimPath",
+        enabled: true,
         channels: ["trim"],
         startFrame: 28,
         endFrame: 32,
       },
     ]);
     assert.ok(c.motion.animations.some((a) => a.animationId === "trim2"));
+    assert.ok(c.objectIndex.some((o) => o.sourceNodeId === "qr"));
+    assert.equal(c.projection.selectionIsWriteAuthorization, false);
+    assert.deepEqual(c.projection.detailScope, ["s2"]);
   } finally {
     await f.cleanup();
   }

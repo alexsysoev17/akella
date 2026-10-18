@@ -96,8 +96,12 @@ export async function runAgentEvals(options: {
       let response: Awaited<ReturnType<typeof executeMotion>> | undefined,
         error: string | undefined;
       const turnChecks: { name: string; status: string }[] = [];
+      const interpreted: ReturnType<typeof expandInheritance>["requirements"] =
+        [];
+      let turnNumber = 0;
       try {
         for (const turn of c.turns ?? [{ prompt: c.prompt }]) {
+          turnNumber++;
           const turnBefore = await readMotion(fixture.project);
           if ("editorAction" in turn && turn.editorAction) {
             const expected =
@@ -139,8 +143,21 @@ export async function runAgentEvals(options: {
               evalContext: { evalId: c.evalId, datasetVersion },
             },
           );
+          if (response.intentContract)
+            interpreted.push(
+              ...expandInheritance(response.intentContract).requirements,
+            );
           if (response.reconciliation?.status !== "SUCCESS") break;
           const turnAfter = await readMotion(fixture.project);
+          turnChecks.push({
+            name: "one durable run commit and matching receipt",
+            status:
+              turnAfter.lastCommit?.transactionId === response.id &&
+              turnAfter.lastCommit?.revision === turnAfter.revision &&
+              turnAfter.history.length === turnBefore.cursor + 1
+                ? "PASSED"
+                : "FAILED",
+          });
           turnChecks.push(
             ...evalChecks(
               {
@@ -154,7 +171,7 @@ export async function runAgentEvals(options: {
               response,
             ).map((check) => ({
               ...check,
-              name: `turn ${turnChecks.length + 1}: ${check.name}`,
+              name: `turn ${turnNumber}: ${check.name}`,
             })),
           );
         }
@@ -195,9 +212,7 @@ export async function runAgentEvals(options: {
         videoQA.status !== "FAILED"
           ? "PASSED"
           : "FAILED";
-      const interpreted = response?.intentContract
-        ? expandInheritance(response.intentContract).requirements
-        : [];
+
       const semanticChecks = c.expectations?.length
         ? c.expectations.every((expected) =>
             interpreted.some(

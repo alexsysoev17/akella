@@ -17,6 +17,11 @@ async function saved(root: string, relative: string): Promise<unknown> {
     return JSON.parse(await readFile(file, "utf8")) as unknown;
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return "NOT_AVAILABLE";
+    if (e instanceof SyntaxError)
+      return {
+        status: "CORRUPT_DIAGNOSTIC",
+        reason: "Invalid JSON; authoritative Motion State is separate",
+      };
     throw e;
   }
 }
@@ -312,6 +317,18 @@ export async function inspectorRun(root: string, id: string, raw = false) {
     semanticTaskGraph,
     compilationPreflight: preflight,
     stateChanges: changes,
+    commitEvidence:
+      doc.lastCommit && (doc.lastCommit as Data).transactionId === id
+        ? { status: "COMMITTED", receipt: doc.lastCommit }
+        : history.length
+          ? {
+              status: "COMMITTED_HISTORY",
+              entries: history.map((h: Data) => h.editId),
+            }
+          : { status: "NOT_CONFIRMED" },
+    candidateCommit: full
+      ? await saved(root, `motion/ai/${id}/candidate-commit.json`)
+      : "NOT_AVAILABLE",
     stateChangeAvailability:
       typeof doc === "object" && Array.isArray(doc.history)
         ? "AVAILABLE"
@@ -399,19 +416,21 @@ export function qaCategories(report: unknown): Record<string, unknown> {
   };
   for (const check of checks) {
     const name = String(check.name);
-    if (/artistic/i.test(name)) continue;
+    if (check.category === "artistic" || /artistic/i.test(name)) continue;
     const group =
-      name === "TEXT_RENDERED_SUBPIXEL_TRANSPORT"
-        ? "visual"
-        : /render|MASK|GLYPH|CLIP|FINAL_STATE|GRADIENT|PATH_REVEAL|TRANSFORM_INTEGRITY/i.test(
-              name,
-            )
-          ? "render"
-          : /oscillation|frequency|decay|sampling|continuous|velocity|finite|revealParameters/i.test(
+      typeof check.category === "string" && check.category in groups
+        ? check.category
+        : name === "TEXT_RENDERED_SUBPIXEL_TRANSPORT"
+          ? "visual"
+          : /render|MASK|GLYPH|CLIP|FINAL_STATE|GRADIENT|PATH_REVEAL|TRANSFORM_INTEGRITY/i.test(
                 name,
               )
-            ? "mathematics"
-            : "technical";
+            ? "render"
+            : /oscillation|frequency|decay|sampling|continuous|velocity|finite|revealParameters/i.test(
+                  name,
+                )
+              ? "mathematics"
+              : "technical";
     groups[group].push(check);
   }
   return {

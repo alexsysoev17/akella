@@ -432,7 +432,13 @@ export function applyOperations(
     if (
       !old ||
       old.type !== "inertialOvershoot" ||
-      e.startFrame !== old.startFrame
+      old.sourceAnimationId !== e.sourceAnimationId ||
+      ops.some(
+        (op) =>
+          op.type === "setExpression" &&
+          op.expression.expressionId === e.expressionId &&
+          op.expression.startFrame !== old.startFrame,
+      )
     )
       continue;
     const before = previous.animations.find(
@@ -446,7 +452,8 @@ export function applyOperations(
       after &&
       old.startFrame >= before.startFrame + before.durationFrames
     )
-      e.startFrame +=
+      e.startFrame =
+        old.startFrame +
         after.startFrame +
         after.durationFrames -
         (before.startFrame + before.durationFrames);

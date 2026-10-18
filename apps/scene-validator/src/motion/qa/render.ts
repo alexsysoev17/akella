@@ -1,3 +1,4 @@
+import { qaAdmission } from "./policy.js";
 import { textRasterQA } from "./text.js";
 import { chromium, type Page, type Browser } from "playwright";
 import type { LoadedProject } from "../../types.js";
@@ -130,6 +131,7 @@ export async function motionQA(
     if (missingFonts)
       checks.push({
         name: "TEXT_FONT_AVAILABILITY",
+        category: "render",
         status: "WARNING",
         reason:
           "Local fonts unavailable; browser fallback recorded: " + missingFonts,
@@ -253,6 +255,7 @@ export async function motionQA(
         );
       checks.push({
         name: "TEXT_SEGMENT_FRAME_CONTINUITY",
+        category: "render",
         target: a.targetId,
         status: !temporal.length
           ? "NOT_TESTED"
@@ -318,6 +321,7 @@ export async function motionQA(
           );
           checks.push({
             name: "TEXT_RENDERED_SUBPIXEL_TRANSPORT",
+            category: "render",
             target: a.targetId + ":" + index,
             ...raster,
           });
@@ -767,6 +771,7 @@ export async function motionQA(
             : undefined;
         checks.push({
           name: "FINAL_STATE_MATCH",
+          category: "render",
           target: e.id,
           status:
             finalProgress === 1 && final && final.contribution > 0
@@ -827,6 +832,8 @@ export async function motionQA(
           });
           checks.push({
             name: "renderedPathReveal",
+            category: "render",
+            required: true,
             target: e.id,
             status: !parametersValid
               ? "FAILED"
@@ -847,6 +854,8 @@ export async function motionQA(
           a = state.animations.find((a) => a.animationId === e.id)!;
         checks.push({
           name: "TEXT_MASK_REVEAL",
+          category: "render",
+          required: true,
           target: e.id,
           status: rows.some((r) => r.effectPixels > 0) ? "PASSED" : "WARNING",
           reason:
@@ -854,6 +863,7 @@ export async function motionQA(
         });
         checks.push({
           name: "FINAL_STATE_MATCH",
+          category: "render",
           target: e.id,
           status:
             final &&
@@ -889,6 +899,7 @@ export async function motionQA(
           await page.evaluate((s) => window.motionUpdate(s), state);
           checks.push({
             name: "renderedOscillation",
+            category: "render",
             target: e.id,
             status:
               Math.max(pixels, ...rows.map((r) => r.effectPixels)) > 0
@@ -904,6 +915,7 @@ export async function motionQA(
       } else
         checks.push({
           name: "renderedVisibility",
+          category: "render",
           target: e.id,
           status: rows.some((r) => r.contribution > 0) ? "PASSED" : "WARNING",
           reason: rows.every((r) => r.contribution === 0)
@@ -1008,11 +1020,14 @@ export async function motionQA(
     });
     checks.push({
       name: "renderedFrames",
+      category: "render",
+      required: true,
       status: "PASSED",
       metrics: { count: images.length },
     });
     checks.push({
       name: "artisticQualityReview",
+      category: "artistic",
       status: "NOT_TESTED",
       reason:
         "No vision model; geometry and pixel checks do not establish subjective quality or text semantics",
@@ -1033,6 +1048,7 @@ export async function motionQA(
     : checks.some((c) => c.status === "WARNING")
       ? "WARNING"
       : "PASSED";
+  if (!qaAdmission(report).accepted) report.status = "FAILED";
   await atomicJson(path.join(directory, "report.json"), report);
   return report;
 }

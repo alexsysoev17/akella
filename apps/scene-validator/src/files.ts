@@ -1,3 +1,4 @@
+import { hostname } from "node:os";
 import { createHash, randomUUID } from "node:crypto";
 import {
   lstat,
@@ -8,6 +9,7 @@ import {
   writeFile,
   rm,
   mkdir,
+  open,
 } from "node:fs/promises";
 import path from "node:path";
 import type { FileDigest } from "./types.js";
@@ -91,28 +93,122 @@ export async function readJson(file: string): Promise<unknown> {
     throw new Error(`Cannot read valid JSON ${file}: ${String(error)}`);
   }
 }
-export async function atomicJson(file: string, value: unknown): Promise<void> {
+export async function atomicJson(
+  file: string,
+  value: unknown,
+  options: { durable?: boolean } = {},
+): Promise<void> {
   const temp = `${file}.${randomUUID()}.tmp`;
-  await writeFile(temp, JSON.stringify(value, null, 2) + "\n", { flag: "wx" });
+  const handle = await open(temp, "wx");
   try {
+    await handle.writeFile(JSON.stringify(value, null, 2) + "\n");
+    if (options.durable) await handle.sync();
+    await handle.close();
     await rename(temp, file);
+    // Rename is the commit point. Sync the containing directory for durable publication.
+    if (options.durable) {
+      const directory = await open(path.dirname(file), "r");
+      try {
+        await directory.sync();
+      } finally {
+        await directory.close();
+      }
+    }
   } finally {
+    await handle.close().catch(() => {});
     await rm(temp, { force: true });
   }
 }
-export async function lockProject(root: string): Promise<() => Promise<void>> {
-  const { rm } = await import("node:fs/promises");
-  const lock = path.join(root, ".project-lock");
+type LockOwner = {
+  token: string;
+  pid: number;
+  host: string;
+  createdAt: string;
+};
+async function lockOwner(lock: string): Promise<LockOwner | null> {
   try {
-    await mkdir(lock);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EEXIST")
-      throw new Error(
-        `Project is busy, or a previous process stopped unexpectedly. Lock: ${lock}`,
-      );
-    throw error;
+    const value = JSON.parse(
+      await readFile(path.join(lock, "owner.json"), "utf8"),
+    );
+    return typeof value.token === "string" &&
+      /^[a-f0-9-]{36}$/.test(value.token) &&
+      Number.isSafeInteger(value.pid) &&
+      value.pid > 0 &&
+      typeof value.host === "string"
+      ? value
+      : null;
+  } catch {
+    return null;
   }
-  return () => rm(lock, { recursive: true, force: true });
+}
+export async function lockProject(root: string): Promise<() => Promise<void>> {
+  const lock = path.join(root, ".project-lock");
+  const owner: LockOwner = {
+    token: randomUUID(),
+    pid: process.pid,
+    host: hostname(),
+    createdAt: new Date().toISOString(),
+  };
+  const prepared = path.join(root, `.project-lock-prepared-${owner.token}`);
+  await mkdir(prepared);
+  try {
+    await writeFile(path.join(prepared, "owner.json"), JSON.stringify(owner), {
+      flag: "wx",
+    });
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (await exists(lock)) {
+        await noSymlinkPath(root, lock);
+        const old = await lockOwner(lock);
+        if (!old || old.host !== owner.host)
+          throw new Error(
+            "Project is busy; PROJECT_LOCK_OWNER_UNKNOWN: legacy or foreign lock requires inspection",
+          );
+        let dead = false;
+        try {
+          process.kill(old.pid, 0);
+        } catch (error) {
+          dead = (error as NodeJS.ErrnoException).code === "ESRCH";
+        }
+        if (!dead)
+          throw new Error("PROJECT_BUSY: owner process is still running");
+        // A retained nonempty tombstone makes a second stale reclaimer's rename fail
+        // instead of moving a newly acquired lock. Never age-expire a live owner.
+        try {
+          await rename(
+            lock,
+            path.join(root, `.project-lock-recovered-${old.token}`),
+          );
+        } catch (error) {
+          if (
+            ["ENOENT", "EEXIST", "ENOTEMPTY"].includes(
+              (error as NodeJS.ErrnoException).code ?? "",
+            )
+          )
+            continue;
+          throw error;
+        }
+      }
+      try {
+        await rename(prepared, lock);
+      } catch (error) {
+        if (
+          ["EEXIST", "ENOTEMPTY"].includes(
+            (error as NodeJS.ErrnoException).code ?? "",
+          )
+        )
+          continue;
+        throw error;
+      }
+      return async () => {
+        if ((await lockOwner(lock))?.token !== owner.token)
+          throw new Error("PROJECT_LOCK_OWNERSHIP_CHANGED");
+        await rm(lock, { recursive: true });
+      };
+    }
+    throw new Error("PROJECT_BUSY: concurrent acquisition or recovery");
+  } finally {
+    await rm(prepared, { recursive: true, force: true });
+  }
 }
 export function record(value: unknown, label: string): Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value))

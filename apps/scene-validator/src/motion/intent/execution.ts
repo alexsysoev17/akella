@@ -1,3 +1,4 @@
+import { qaAdmission } from "../qa/policy.js";
 import { resolveTextSettings } from "../../motion-library/techniques/text.js";
 import { isDeepStrictEqual } from "node:util";
 import { inertiaIntensityDefaults } from "../../motion-library/expressions/registry.js";
@@ -760,8 +761,7 @@ export async function runIntentTasks(
           validation: task.validationResult,
           qa,
         });
-        if (!["PASSED", "WARNING"].includes(qa.status))
-          throw new Error("MOTION_QA_FAILED");
+        if (!qaAdmission(qa).accepted) throw new Error("MOTION_QA_FAILED");
         hooks.checkpoint?.();
         current = await hooks.commit(task, generated, next);
         task.status = "PASSED";
@@ -917,6 +917,36 @@ export async function runIntentTasks(
     selectedExpressionCount: new Set(
       plan.requirements.flatMap((r) => r.expressionIds ?? []),
     ).size,
+    validationLevels: {
+      semantic: {
+        status: "PASSED",
+        basis: "validated structured intent contract",
+        humanIntentCompleteness: "NOT_PROVEN",
+      },
+      execution:
+        completed === requirements.length
+          ? "PASSED"
+          : completed
+            ? "PARTIAL"
+            : "FAILED",
+      render: tasks.some(
+        (t) =>
+          t.qaResult && qaAdmission(t.qaResult).renderValidation === "FAILED",
+      )
+        ? "FAILED"
+        : tasks.some(
+              (t) =>
+                !t.qaResult ||
+                qaAdmission(t.qaResult).renderValidation === "NOT_TESTED",
+            )
+          ? "NOT_TESTED"
+          : tasks.some(
+                (t) => qaAdmission(t.qaResult).renderValidation === "WARNING",
+              )
+            ? "WARNING"
+            : "PASSED",
+      artistic: "NOT_TESTED",
+    },
     requested: requirements.length,
     completed,
     qaPassed: requirements.filter(
@@ -945,6 +975,7 @@ export async function runIntentTasks(
     requirements,
     reconciliation,
     next: current,
+    operationBatches: plans.map((p) => p.operations),
     plan: {
       status: completed ? "ready" : "unsupported",
       summary: plan.requirements.some((r) => r.semanticActionId)

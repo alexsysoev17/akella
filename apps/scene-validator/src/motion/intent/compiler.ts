@@ -1,3 +1,4 @@
+import { parentLocalDelta, unit } from "../geometry.js";
 import {
   resolveTextSettings,
   textMotionDefaults,
@@ -896,6 +897,21 @@ export function compileRequirement(
               ((m[1][0] * geometry.width) / 2 +
                 (m[1][1] * geometry.height) / 2 +
                 m[1][2]);
+          }
+          if (r.parameters.moveToCenter) {
+            const source = textSource(
+              project,
+              r.sceneId,
+              r.target.sourceNodeId,
+            );
+            const scene = project.inspection.document.scenes.find(
+              (s) => s.sceneId === r.sceneId,
+            )!;
+            const parent =
+              source?.parentId && source.parentId !== scene.figmaNodeId
+                ? textSource(project, r.sceneId, source.parentId)
+                : undefined;
+            ({ x, y } = parentLocalDelta(parent?.sceneTransform ?? unit, x, y));
           }
           a = {
             ...common,

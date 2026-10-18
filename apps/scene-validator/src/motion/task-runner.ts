@@ -1,3 +1,4 @@
+import { qaAdmission } from "./qa/policy.js";
 import type { LoadedProject } from "../types.js";
 import type { MotionState, Plan } from "./schema.js";
 import { planMotionTasks, type MotionTask } from "./tasks.js";
@@ -110,12 +111,7 @@ export async function runMotionTasks(
         requirements: result.requirements,
       };
       task.qaResult = { ...(result.qa as object), taskId: task.taskId };
-      if (
-        !["PASSED", "WARNING"].includes(
-          (result.qa as { status: string }).status,
-        )
-      )
-        throw new Error("QA_NOT_COMPLETED");
+      if (!qaAdmission(result.qa).accepted) throw new Error("QA_NOT_COMPLETED");
       await hooks.commit(task, result.plan, before, result.next);
       current = result.next;
       task.status = "PASSED";

@@ -4,6 +4,8 @@ import { expressionValue } from "../expressions.js";
 export type Status = "PASSED" | "FAILED" | "WARNING" | "NOT_TESTED";
 export interface Check {
   name: string;
+  category?: "technical" | "mathematics" | "render" | "visual" | "artistic";
+  required?: boolean;
   status: Status;
   target?: string;
   reason?: string;

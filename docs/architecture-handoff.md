@@ -4,14 +4,14 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-15 (Europe/Moscow) — exact saved multiline quality failure: rendered raster transport / segment clocks / technical QA |
+| Last Updated | 2026-10-19 (Europe/Moscow) — targeted system-wide reliability hardening; not a full re-audit |
 | Last Full Audit | 2026-10-13 — структурный аудит исходников перечисленных подсистем; не полный production E2E и не формальная верификация каждой ветви |
-| Git Commit | Pre-change checkpoint `194882b` on top of `8f3bb64`; multiline quality source/tests/docs belong to the subsequent repair commit (this change set). Checkpoint does not contain the repair implementation or ignored user data. |
+| Git Commit | Checkpoint `df3a4e5` on top of `efcd2f2`; hardening changes are the reviewed working-tree changes following that checkpoint, not contained in it. |
 | Git Branch | `main`; локальный репозиторий создан после первоначального аудита |
-| Working Tree Status | Reviewed P0 source/tests/docs change set at documentation update; ignored user projects/assets remain outside history. This is not a full audit. |
-| Documentation Version | 1.0.14 |
-| Scope of Last Update | Verified Run86608df3 on actual test14 typography; four every-frame ablations, glyph centroid transport, persistent native HTML compositing, deterministic text rhythm, segment traces/QA/Inspector export, saved-response production replay and56 reference benchmark cases. No new full audit or live-provider call. |
-| Code snapshot SHA-256 | `2be19e43cb1f761418f1299f9204d8f05c6fe10923c025939719ae0b698f40d8` (post multiline quality verification) |
+| Working Tree Status | main; source/tests/docs hardening change set uncommitted at this documentation update. User projects/assets and test artifacts are ignored. |
+| Documentation Version | 1.0.15 |
+| Scope of Last Update | Candidate commit boundary, crash recovery, shared QA admission, context identities, nested center coordinates, endpoint retiming, diagnostics and actual deterministic/mock/live/video evidence. |
+| Code snapshot SHA-256 | NOT RECALCULATED for this update; use component version digests in actual run artifacts and subsequent Git commit. |
 
 Git 2.54.0 (Apple Git-157): локальная история на main, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
 
@@ -25,7 +25,7 @@ Snapshot вычислен над отсортированными файлами
 
 Motion Platform — локальное файловое приложение для импорта Figma storyboard, реконструкции статических сцен и создания/редактирования анимаций по текстовому запросу. Исходный экспорт хранится отдельно от Motion State. Пользователь выбирает проект, видит сцены/объекты, пишет prompt, получает автоматически применённые изменения, Preview и возможность Undo/Redo и MP4 export.
 
-Реальный основной путь: **vanilla web UI → локальный Node HTTP job → semantic LLM call → validated IntentPlan → deterministic compiler → task-level scope/requirement checks → local Chromium QA → revision-checked commit → reconciliation → autoplay**. В удачном сценарии модель строит intent; первичные Motion Operations строит TypeScript. Модель получает операции для исправления только при repair. Это не открытый агент с произвольным исполнением tools/JavaScript.
+Реальный основной путь: **vanilla web UI → локальный Node HTTP job → semantic LLM call → validated IntentPlan → deterministic compiler → task-level scope/requirement checks → local Chromium QA → final candidate reconciliation → revision-checked run commit → autoplay**. В удачном сценарии модель строит intent; первичные Motion Operations строит TypeScript. Модель получает операции для исправления только при repair. Это не открытый агент с произвольным исполнением tools/JavaScript.
 
 Что существует:
 
@@ -40,10 +40,10 @@ Motion Platform — локальное файловое приложение д�
 
 1. **A01 FIXED:** semanticBindings разделяет animation/expression/easing/transition. Wiggle, spring и customCurve проходят create/edit, scope, requirement validation и реальный локальный QA.
 2. **A02 TARGETED FIX:** clause guards отклоняют потерянные явные эффекты/тайминг/зависимости даже при full-text coverage; подозрительный план проходит selective semantic audit. Произвольная естественная речь не имеет формального доказательства полноты.
-3. **A03 FIXED FOR RELEVANT SCENES:** полный компактный Object Index сохраняет IDs/names/types всех потомков выбранных сцен; детали выборочные, QR/куар aliases разрешаются только однозначно. Tool-based paging всё ещё отсутствует.
-4. **High / LIKELY ISSUE:** moveToCenter вычисляет scene-space displacement, обычный renderer применяет его внутри parent-space wrapper. Для rotated/scaled parents это разные координаты.
+3. **A03 EXTENDED 2026-10-18:** полный компактный Object Index сохраняет IDs/names/types всех потомков всех сцен; детали выборочные, QR/куар aliases разрешаются только однозначно. Tool-based paging всё ещё отсутствует.
+4. **A04 FIXED 2026-10-18:** реальный Chromium regression подтвердил смешение координат moveToCenter; compiler теперь переводит scene displacement через inverse parent linear transform.
 5. Точное AE Easy Ease parity не достигнуто: сохранённая/пересчитанная ошибка ~0.652 px против допуска 0.15. Формула с предоставленной velocity проходит (~0.105 px).
-6. SUCCESS означает выполненный **сформированный** контракт и допускает QA WARNING; это не доказательство полноты человеческого запроса, художественного качества или наблюдаемости каждого эффекта.
+6. SUCCESS означает выполненный **сформированный** контракт. Обязательный невидимый reveal и объективный FAILED блокируют admission; необязательные WARNING допускаются. Semantic/execution/render/artistic статусы разделены; полнота произвольной человеческой инструкции не доказана.
 
 Critical confirmed defect с доказанным разрушением данных в этом аудите не установлен. Не следует путать отсутствие такого доказательства с гарантией безопасности при любом crash. Код приложения при исходном аудите не исправлялся; P0 update исправляет только A01–A03.
 
@@ -97,7 +97,7 @@ flowchart TD
   LOG --> EV[offline evals / metrics / improvement candidates]
 ```
 
-Важен порядок: основной task сначала проверяется на рабочем snapshot и проходит QA, затем сохраняется. Исполнение нескольких задач — не одна глобальная transaction: ранее успешные независимые задачи остаются сохранёнными, даже если следующая задача неудачна.
+Важен порядок: задачи проверяются на рабочем candidate и проходят QA, затем итог повторно сверяется с контрактом. Принятые независимые задачи публикуются одной revision-checked транзакцией в конце run. PARTIAL_SUCCESS сохраняет только явно принятые независимые задачи; crash до публикации не сохраняет их. Legacy direct callers используют тот же store/QA admission, но не этот semantic orchestration.
 
 ## 3. Repository Structure, Stack and Launch
 
@@ -182,16 +182,16 @@ Actual normal UI path (`apps/scene-validator/src/web/motion.js:388`, `apps/scene
 2. `motionApi` creates an in-memory job and AbortController; responds 202/jobId; updates stage; UI polls job and can cancel. These jobs are not persisted; Harness runs are. **IMPLEMENTED.**
 3. `executeMotion` calls `proposeMotion(..., execute=true)`. `requestSchema` checks fields; readMotion validates persisted document and source-reference diagnostics; stale revision rejects. **IMPLEMENTED.**
 4. Nonmanual execution creates `HarnessRun.start`: UUID, config, timeout, memory sampling, received trace. Full privacy uses project-local AI directory; metadata/off use scratch. **IMPLEMENTED.**
-5. `validateMentions`; recent context comes from applied, non-undone Undo history. `agentContext` collects scoped source nodes, current motion, registry summaries, scene index, techniques/capabilities/skills, up to three experience cases, version refs and byte budget. **IMPLEMENTED with complete relevant-scene identities, morphological retrieval, selective details and an enforced byte budget; arbitrary language/paging remain limited.**
+5. `validateMentions`; recent context comes from applied, non-undone Undo history. `agentContext` collects scoped source nodes, current motion, registry summaries, scene index, techniques/capabilities/skills, up to three experience cases, version refs and byte budget. **IMPLEMENTED with complete all-scene compact identities, selective detailed state, projection fingerprints and an enforced byte budget; arbitrary language/paging remain limited.**
 6. `SemanticProvider.interpret` wraps `AIClient.structured` via the selected adapter. Whole human message is in compact user payload. Standard native response is **semantic-graph/1.0** (grouped actions and exact source clauses), normalized into the existing **IntentPlan1.0.0**; simple existing-expression edits retain the compact selector wire schema. The runtime parser accepts historical IntentPlan outputs. **IMPLEMENTED; no second planner/compiler.**
 7. Production passes `auditAlways:false`. `validateIntentPlan` checks schemas/source excerpts, then uses shared canonical reference resolution against the full current state passed by service (not only the model projection), validates IDs/name consistency and inheritance, recovers eligible existing edits before coverage/compilation. Semantic planning permits at most one correction call (two semantic calls total, also bounded by global budget). Structural failure receives precise feedback; failed selective audit terminates without a third full interpretation. Provider/timeout failures do not re-enter semantic planning. Clause guards now validate explicit techniques, scene starts, inheritance and ordering. Suspicious coverage invokes the existing semantic audit selectively; a valid normal plan uses no audit call. **General natural-language completeness remains PARTIAL.**
 8. `expandInheritance` unions techniques and copies null parameters from parent except absolute x/y and from/to scene IDs. `compileTasks` groups scene timing requirements into one task, creates object tasks, preflights masks/geometry, and builds requirement/task dependencies. **IMPLEMENTED.**
 9. For native graph-derived plans or typed lifecycle requirements, `preflightIntentPlan` first compiles and validates the full candidate in topological order without committing or rendering. Failed compilation/coverage commits nothing. Legacy canonical plans retain their previous execution path. `runIntentTasks` then runs pending tasks topologically with real selective QA. `compileRequirement` creates deterministic operations using FPS, source geometry/defaults, current animations, timingDependencies. All17 declared Intent techniques have representation-aware compiler/check coverage; source geometry/identity/interval constraints may still block execution. Engine-only Operations/presets are not all separate semantic techniques. **IMPLEMENTED within these limits.**
 10. `applyOperations` creates a cloned candidate, resolves dependencies, validates schema/targets/intervals/channels/expressions/transitions. `assertIntentScope` prevents unrelated changes; `requirementChecks` compares requested techniques/timing/relative edits. **IMPLEMENTED, with gaps §18.**
 11. `RunQA.verify` selects scope, can reuse same-fingerprint/version/state QA, otherwise invokes local Chromium/numeric QA with frame budget. **IMPLEMENTED.** No default Vision LLM or MP4 generation.
-12. QA PASSED **or WARNING** admits commit. `changeMotion` rechecks source fingerprint and revision under filesystem lock, applies operations again, appends before/after Undo entry, writes motion.json atomically. **IMPLEMENTED per-task transaction.**
+12. `qaAdmission` allows PASSED/WARNING only when no objective FAILED check and no required non-PASSED check exists. Task acceptance changes only the candidate. `changeMotion` finally replays ordered operation batches under an owner lock, rechecks source/revision and expected candidate, validates the document envelope, and publishes one Undo entry plus commit receipt with durable atomic JSON. **IMPLEMENTED run-level publication for semantic execution.**
 13. On failure, feedback carries task/target/expected/actual techniques, failed checks, capabilities, permitted repair actions and previous candidate. The next attempt calls LLM for Operations. Repeated signature/budget/auth/cancel failure stops. **IMPLEMENTED bounded task repair; generic deterministic pre-LLM repair PARTIAL.**
-14. After all tasks, `requirementChecks` reruns against final in-memory committed state. Reconciliation counts requirements separately from tasks/operations. Result is SUCCESS/PARTIAL_SUCCESS/FAILED. **IMPLEMENTED relative to the generated contract, not independently proved human intent.**
+14. After all tasks, `requirementChecks` reruns against final in-memory candidate state before publication. Reconciliation counts requirements separately from tasks/operations. Result is SUCCESS/PARTIAL_SUCCESS/FAILED. **IMPLEMENTED relative to the generated contract, not independently proved human intent.**
 15. Proposal/execution/tasks/Run/Trace/experience are persisted. UI reloads current document; if any requirements completed, refreshes Preview and autoplays from earliest relevant animation/retime frame. Wholly failed run does not autoplay as success. **IMPLEMENTED.** Actual first browser paint timestamp is **NOT IMPLEMENTED**; timeToFirstPreviewMs is null.
 
 Technical stages do not each call LLM. Selection of relevant skills happens before interpretation, lexically, not as a model tool call. Preset definitions are available, but primary compiler does not automatically choose/instantiate every preset. No full task-resume execution after process restart: RUNNING records are marked INTERRUPTED.
@@ -252,7 +252,7 @@ Permanent existing benchmark expanded39→46 (`harness/evals/benchmark.json`, ve
 
 `entrance.ts` computes true offscreen displacement from transformed object corners, scene dimensions and conservative stroke/effect padding. Position/Fade run together; inertia attaches after the base endpoint through the existing evaluator. Axis-aligned positive-scale parents are supported; rotated/skewed/flipped parent entrances fail OFFSCREEN_PARENT_TRANSFORM_UNSUPPORTED. Ordinary entrances keep established defaults. No renderer, object registry, Motion Engine or Library was duplicated.
 
-For graph-derived plans `execution.preflightIntentPlan` compiles the full expanded DAG into a cloned candidate, applies normal operation/scope/requirement checks and commits nothing on failure. Actual execution still performs per-task numerical/render QA and revision/source-guarded commits. Later QA can yield explicitly reported partial success with independent earlier commits; this is not a whole-run distributed transaction. Reconciliation separates semantic actions, requirements, targets, tasks and operations; grouped success requires all member requirements to pass. Inspector/bundle expose derived semanticTaskGraph, source links, resolved targets and compilationPreflight through existing lazy diagnostic trees.
+For graph-derived plans `execution.preflightIntentPlan` compiles the full expanded DAG into a cloned candidate, applies normal operation/scope/requirement checks and commits nothing on failure. Actual execution performs per-task numerical/render QA on a candidate, then one revision/source-guarded commit. Later QA can yield explicitly reported partial success with accepted independent operations in the final commit; this is not a distributed transaction with diagnostic files. Reconciliation separates semantic actions, requirements, targets, tasks and operations; grouped success requires all member requirements to pass. Inspector/bundle expose derived semanticTaskGraph, source links, resolved targets and compilationPreflight through existing lazy diagnostic trees.
 
 **Context:** `semanticContext` now whitelists scene/object identity, current motion, bounded recent3 actions/recent2 conversations, compact relevant technique/capability descriptions, skill IDs and easing IDs. It omits engine source excerpts, complete SVG, duplicated geometry/full experience bodies and full Library docs from the semantic request. Full appropriate data remains available to deterministic compilation/QA. Existing expression-edit context remains compact; a request that also specifies a scene start does not incorrectly take the expression-only route. Version references include graph/provenance/entrance/repair/evals/video-eval and the actual graph/selector instructions.
 
@@ -722,19 +722,23 @@ Original cause: one exact match removed other targets from detailed context, wit
 
 Verification: Image exact match plus QR alias retains all selected-scene IDs; multiple explicit scenes supported; duplicate aliases produce AMBIGUOUS_TARGET. The original byte budget remains enforced (no silent truncation). Huge selected-scene indexes can still exceed budget; paging is not implemented.
 
-### A04 — High — LIKELY ISSUE: scene-space movement applied in parent space
+### A04 — FIXED 2026-10-18: scene-space center movement applied in parent space
+
+Current: `parentLocalDelta` inverse-linear conversion in compiler; actual Chromium nested rotation/nonuniform-scale test passes. Historical audit evidence follows; ordinary rotated offscreen slide remains a separate supported-geometry limitation.
 
 **Symptom:** moveToCenter or scene-vertical Slide on a node nested in rotated/scaled group can move in wrong direction/distance.
 
 **Root cause:** compiler calculates desired center offset from sceneTransform; applyFrame writes ordinary translate inside nested renderer parent wrapper. Parent rotation/scale acts on that vector. ObjectTransition has separate world-space machinery; ordinary movement does not use it.
 
-**Evidence:** `apps/scene-validator/src/motion/intent/compiler.ts:414-453`; `apps/scene-validator/src/renderer.ts:400-405,456,503-506`; `apps/scene-validator/src/motion/engine.ts:194-206`; `apps/scene-validator/src/motion/geometry.ts:2-30`. Parent rotation R90 maps requested local Δ=(0,−100) to scene Δ=(100,0), not scene upward. This matrix implication is confirmed; a full rendered center-request reproduction is **NOT RUN** in audit.
+**Evidence:** `apps/scene-validator/src/motion/intent/compiler.ts:414-453`; `apps/scene-validator/src/renderer.ts:400-405,456,503-506`; `apps/scene-validator/src/motion/engine.ts:194-206`; `apps/scene-validator/src/motion/geometry.ts:2-30`. Parent rotation R90 maps requested local Δ=(0,−100) to scene Δ=(100,0), not scene upward. This matrix implication is confirmed; a full rendered center-request reproduction was **NOT RUN** in original audit; it is reproduced and corrected in the 2026-10-18 reliability test.
 
 **Impact:** correctness may hold for unrotated parent but fail after reparenting/rotation.
 
 **Recommendation:** explicit coordinate-space contract and inverse parent linear transform for scene-space offsets; add nested rotated/scaled ordinary-animation tests distinct from existing transition tests.
 
-### A05 — Medium — CONFIRMED RETIMING EDGE: before dependency shifts inertia start when endpoint stays fixed
+### A05 — FIXED 2026-10-18: before dependency shifts inertia start when endpoint stays fixed
+
+Current `applyOperations` recomputes endpoint-attached modern inertia from the original base-end delta even when scheduler already moved expression start. Explicit authored start overrides remain authoritative. Apply-level regression and repeated dependency idempotence pass. Historical diagnosis follows.
 
 **Symptom:** modern inertia window starts too early and ends early after lengthening an animation that ends “before” a fixed anchor.
 
@@ -752,13 +756,17 @@ Verification: Image exact match plus QR alias retains all selected-scene IDs; mu
 
 **Impact:** cannot promise exact AE output or perfectly settled finite duration for every frequency/decay. **Recommendation:** keep truthful versioned algorithm contract, capture actual AE reference handles if exact parity later required; do not fit a hidden velocity multiplier.
 
-### A07 — High — ARCHITECTURAL RISK: operation-success can coexist with unobserved requested effect
+### A07 — TARGETED FIX 2026-10-18: required reveal visibility now blocks success
+
+Shared `qaAdmission` rejects required non-PASSED reveal and objective FAILED checks in semantic/manual/legacy application paths. Invisible actual-render Trim Paths regression passes (correct rejection). Universal artistic/visibility proof remains unavailable. Historical diagnosis follows.
 
 **Evidence:** `qa/render.ts:554-577` gives WARNING when reveal produces no sampled visible contribution; `intent/execution.ts:473-478` accepts WARNING, final checks mostly state/parameters. qaPassed count separates actual PASSED but SUCCESS can still result.
 
 **Impact:** user says “появляется”, state is technically correct but whole effect may be offscreen/occluded. No universal proof of visibility. **Recommendation:** explicit expectation-dependent visibility policy; preserve warning coverage and distinguish technical completion from visible intent success. Never fabricate artistic PASS.
 
-### A08 — Medium — CONFIRMED LIMITATION / CRASH RISK: filesystem persistence is not full run transaction
+### A08 — TARGETED FIX 2026-10-18: durable semantic run publication and owner recovery
+
+Motion State/Undo/receipt now share one atomic durable publication; SIGKILL and stale revision checks pass. Source import directory swaps, arbitrary power failure, legacy empty locks and historical diagnostics are not a distributed transaction. Historical diagnosis follows.
 
 **Evidence:** `apps/scene-validator/src/files.ts:94-121`; `apps/scene-validator/src/motion/store.ts:91-151`; `apps/scene-validator/src/importer.ts:328-405`; `apps/scene-validator/src/motion/service.ts:307-382`. Individual JSON atomic rename, directory lock without owner/lease, multiple writes/renames with caught-error rollback only.
 
@@ -770,7 +778,9 @@ Verification: Image exact match plus QR alias retains all selected-scene IDs; mu
 
 **Impact:** hashing/copying/serialization scales with project/history; large motion.json can make Inspector lose state diffs; disk can grow despite retention config. **Recommendation:** measure real large projects, content-addressed QA artifacts/inventory caching, snapshot compaction and coherent retention/pagination. No invented load benchmarks.
 
-### A10 — Medium — CONFIRMED OBSERVABILITY GAP: Inspector QA categories inferred by check name
+### A10 — TARGETED FIX 2026-10-18: explicit categories and commit evidence
+
+New render/artistic checks carry typed categories (legacy names retain fallback); Inspector exposes candidateCommit and commitEvidence. Corrupt diagnostic JSON is marked CORRUPT_DIAGNOSTIC. Size/paging/history retention limits remain. Historical diagnosis follows.
 
 **Evidence:** `apps/scene-validator/src/harness/inspector.ts:277-307` regex classifies names; generic artisticIntentAndTextClipping can appear under render even if NOT_TESTED. Before/after extracted only from retained Undo entries matching `[runId/task]`; redo-branch deletion can remove historical applied diff evidence (`apps/scene-validator/src/motion/store.ts:129`).
 
@@ -1045,7 +1055,60 @@ At this update: TypeScript and builds pass; **206/206 tests**, including a negat
 
 Remaining limits: native browser Range does not expose true baselines/complex glyph clusters; text effects beyond supported sliced slide/fade+attached expressions still reject; fixed-height/mixed-font duration hints can be conservative; probes are local/limited and do not prove arbitrary occlusion/complex clipping quality; H264 is lossy; GPU/browser-dependent raster transport requires continued regression testing. Source typography/geometry is retained, but grayscale antialiasing may differ from the former integer-hinted native raster. Regression tests explicitly assert immutable source layout, final offsets/opacity and repeatable resting raster rather than requiring a swap to byte-identical native-source pixels, which reintroduced the measured jump. No claim of complete Figma raster parity is made.
 
+## Reliability hardening — 2026-10-18
+
+This is a targeted cross-layer update, not a declaration of production readiness or a full architecture audit.
+
+### Root-cause map and boundaries
+
+| Broken boundary | Verified cause | Correction / remaining boundary |
+|---|---|---|
+| Context → references | selectedScenes filtered compact identities; selector context hid unmentioned identities | all-scene compact identity/effect index, selected details, source/state digest. Read visibility never grants mutation scope; full authoritative state still resolves IDs. No additional provider call. |
+| Candidate → saved state | semantic service committed each accepted task before final reconciliation | tasks advance one in-memory candidate; ordered batches replay and match expectedCandidate under one final revision/source guard. Accepted independent partial work is explicit, not SUCCESS. |
+| QA → admission | top-level PASSED/WARNING could hide failed or unobserved required checks | shared qaAdmission, required renderedFrames/path/text reveal; rendering/artistic categories and four reconciliation levels. |
+| Scene → parent coordinates | center offset composed in parent frame | inverse parent linear mapping; 200 seeded affine invariants and actual browser regression. |
+| Scheduler → expression interval | before relation changes base start but not end; guard skipped endpoint correction | final modern inertia interval follows actual endpoint delta; explicit expression timing stays authoritative. |
+| Process → ownership | ownerless lock never recovered; different PID incorrectly treated as dead | host/PID/nonce ownership; ESRCH-only recovery, retained nonempty tombstone prevents concurrent stale reclaimers stealing a fresh lock. |
+| Commit → diagnostics | diagnostic failure could report failure despite saved motion | canonical receipt wins; diagnostics failure returned separately, no automatic replay. |
+
+Existing Semantic Graph, IntentPlan, canonical resolver, lifecycle compiler, scheduler, Engine, renderer and QA are reused. Their existing scope/technique/dependency checks remain active. There is no new planner, second state model or second engine. Regex/lexical retrieval remains for detailed context/skills; arbitrary language completeness remains PARTIAL. No schema-level guarantee can prove all human intent understood.
+
+### Contracts, persistence and recovery
+
+`motion/store.ts` accepts ordered operationBatches, expectedCandidate and optional transactionId. The MotionDocument 1.0.0 envelope adds optional lastCommit `{transactionId, previousRevision, revision, operationsDigest, createdAt}`. Existing documents load without it; older application versions with strict schemas may not accept newly written documents. Individual batches retain the normal Operations schema; aggregated history still has a 500-operation limit and rejects before publication if exceeded. Each semantic run becomes one Undo entry; Undo/Redo restores exact state snapshots. Last-receipt replay is idempotent only for the same transaction/digest before another edit; subsequent edits remove/replace the receipt. It is not an unlimited deduplication journal.
+
+Authoritative `motion/motion.json` is written to a unique temporary file, file fsync, atomic rename, then directory fsync. Diagnostic JSON retains atomic rename without fsync overhead. A post-rename durability error is reported separately after verifying the actual saved document; this is not proof against every OS/storage/power failure. Unknown/foreign/legacy locks fail closed for inspection. PID reuse may conservatively keep a lock busy. Crash-recovery tombstones and abandoned prepared/temp files are not automatically garbage-collected.
+
+`motion/ai/<runId>/candidate-commit.json` is PREPARED evidence, never proof of commit. Canonical lastCommit and effective history establish commitEvidence. Run/Trace/proposal are separate diagnostic writes; they are not an atomic multi-file transaction. Recovery checks process liveness and marks genuinely orphaned runs INTERRUPTED, reports CONFIRMED/NOT_CONFIRMED commit evidence, never reruns the model automatically. UI HTTP jobs remain in-memory. Source import directory-swap crash recovery is NOT VERIFIED by this update.
+
+### Truthful status and diagnostics
+
+`validationLevels.semantic` means validated structured contract with humanIntentCompleteness=NOT_PROVEN; execution represents requirement completion; render is PASSED/WARNING/FAILED/NOT_TESTED; artistic is NOT_TESTED. Required reveal without observed viewport effect is rejected even if its parameters are mathematically correct. Other warnings remain visible without vetoing subjective artistic decisions. Legacy/manual/task-runner paths use the same admission helper; their orchestration is not otherwise unified. Full preflight remains graph/lifecycle-dependent for compatibility.
+
+Inspector exposes explicit QA categories, candidate preparation and actual commit evidence; corrupted diagnostic JSON does not invalidate Motion State. The 4 MiB diagnostic read cap and historical Undo-derived diffs remain limited. A discovered benchmark reporting defect compared final edit intent against initial creation expectations in multi-turn cases; it now collects interpreted requirements across turns and labels turn numbers independently of check count. Historical live report retains the original erroneous semantic stage rather than silently rewriting evidence.
+
+### Actual verification
+
+- Baseline before edits: 206/206 tests, 17.543 s. Full post-change tests: 214/214, 17.437 s before the final invisible-render test; final suite: **215/215**, zero failed/skipped,18.587 s. TypeScript typecheck/build and UI bundling passed. These different test counts are not a speed benchmark.
+- Nine new reliability tests: actual Chromium nested-center positioning; before+duration inertia; seeded affine properties; real SIGKILL lock owner, post-commit receipt recovery/replay/Undo/Redo, interruption at atomic publication entry; invalid/mismatched candidate no mutation; contradictory QA rejection; real invisible Trim Paths rejection. Killing at publication entry does not guarantee termination precisely inside fsync/rename; power-loss testing NOT PERFORMED.
+- Existing 56-case reference-provider benchmark: final **56/56**, zero regressions against the preceding same-dataset reference run. Production parser/compiler/executor, local Chromium QA and multi-turn state persistence are real; model semantic understanding is NOT_TESTED for reference responses. Multi-turn receipt assertions now require one commit/history entry per successful run.
+- Actual MP4: WORKFLOW_04_EIGHT_OBJECTS and WORKFLOW_05_PATH_SEQUENCE both passed; seven decoded H264/Preview samples, mean absolute pixel differences 0.903–2.628 under tolerance3. Not an exhaustive every-frame/artistic verification.
+- Live Codex SDK synthetic multi-turn: creation of Slide+Fade+inertia for QR+Phone, then two contextual reductions; all final-state/QA/receipt checks passed, three actual calls, zero repairs, input53527/output772 tokens. Per-run latency12.080/9.594/10.392 s. Historical report stage.semantic incorrectly FAILED due last-turn-only comparison, corrected in evaluator code after this run; no claim that the uncorrected stage was PASSED.
+- Separate final live compound case NEW_09_COMPOUND: semantic/compilation/execution/visual PASSED, one actual call, zero repairs, input17987/output198 tokens, total10.767 s, QA0.953 s, preview-ready10.765 s. Actual browser first paint NOT_MEASURED; artistic NOT_TESTED. Four live commands in two cases are a smoke test, not a production success-rate estimate.
+- Artifacts: ignored `artifacts/harness/hardening-reference.json`, `hardening-final-reference.json`, `hardening-live.json`, `hardening-live-compound.json`, `hardening-video.json`, `hardening-comparison.json`. Synthetic fixtures are removed after evaluation; reports persist. No client project was mutated for these tests.
+
+### Measured performance and remaining priorities
+
+Same five reference-provider cases, same Node/Chromium, baseline isolated git archive df3a4e5 versus current sources: baseline median556.40 ms / nearest-rank p95(max of5)1520.21 ms; after436.20 /1557.22 ms. All five pass on both; five reference adapter calls each, no real token metric. Small one-shot sample, not a statistically established speedup. Baseline archive benchmark completed cases but its final git-status metadata command failed because archive lacks .git; per-run measurements persisted before that error. Original baseline result preserved in `/tmp/hardening-baseline-benchmark.json`.
+
+Context bytes for those five cases increased from26094/26994/25506/5852/25054 to26946/27846/26388/6292/25906 to retain cross-scene identities. This is an explicit completeness tradeoff, not token optimization. Detailed geometry remains selective; budget unchanged; large indexes can exceed it. Live token cost remains high (~18k input per command) despite much smaller state payload; adapter instructions/output schema/runtime overhead remain relevant. No comparable live before/after run was performed, no monetary cost available.
+
+Remaining priorities: compact schema/provider overhead with measured live evidence; bounded retrieval/paging for large identity indexes; history/artifact storage bounds; full source-import crash protocol; broader live and rendered quality coverage. Ordinary offscreen slide through unsupported rotated parents still rejects safely; arbitrary font/complex mask fidelity and AE easing parity remain limited. No guarantee of artistic quality or universal natural-language coverage.
+
 ## ARCHITECTURE CHANGE HISTORY
+
+- 2026-10-18 — v1.0.15: candidate-level reconciliation and one durable run commit/receipt, owner-aware recovery, shared QA admission, all-scene compact references, nested center and endpoint-inertia fixes. Verified reference/live/Chromium/MP4 and SIGKILL evidence above. Targeted update, not full audit.
+
 
 - 2026-10-15 — v1.0.14: exact Run86608df3 raster snapping reproduced via A–D every-frame ablations; persistent native HTML transport, text-rhythm defaults, unit clocks/alpha QA, Inspector traces/CLI. Verified206 tests,56 reference cases,10/10 saved-response replay,62 decoded production MP4 frame comparisons; targeted two-track user-state edit preserved source and unrelated state. No live AI call or artistic approval.
 

@@ -1,4 +1,6 @@
 import test from "node:test";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import assert from "node:assert/strict";
 import { readFile, writeFile, readdir, mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -352,7 +354,20 @@ test("Run metadata/off privacy redacts prompts and secrets; restart marks interr
     );
     const raw = JSON.parse(await readFile(file, "utf8"));
     raw.status = "RUNNING";
-    raw.ownerPid = -1;
+    const owner = spawn(process.execPath, ["-e", "setInterval(()=>{},1000)"], {
+      stdio: "ignore",
+    });
+    await once(owner, "spawn");
+    raw.ownerPid = owner.pid;
+    await writeFile(file, JSON.stringify(raw));
+    await recoverInterruptedRuns(f.project.root);
+    assert.equal(
+      (await readRuns(f.project.root)).find((r) => r.runId === run.runId)
+        ?.status,
+      "RUNNING",
+    );
+    owner.kill("SIGKILL");
+    await once(owner, "exit");
     await writeFile(file, JSON.stringify(raw));
     await recoverInterruptedRuns(f.project.root);
     assert.equal(

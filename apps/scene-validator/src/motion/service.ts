@@ -1,3 +1,4 @@
+import { qaAdmission } from "./qa/policy.js";
 import { selectorContext } from "../harness/selector-context.js";
 import {
   loadProviderSettings,
@@ -480,38 +481,13 @@ export async function proposeMotion(
                 );
             return qa;
           },
-          commit: async (task, plan) => {
-            onStage("applying");
-            committed = (
-              await changeMotion(project.root, {
-                expectedRevision: committed.revision,
-                expectedSourceFingerprint: project.inspection.fingerprint,
-                operations: plan.operations,
-                request:
-                  harness && harness.config.privacy !== "full"
-                    ? `[${id}/${task.taskId}] request redacted`
-                    : `[${id}/${task.taskId}] ${redactSecrets(request.request)}`,
-                origin: request.settings.provider,
-                assumptions:
-                  harness && harness.config.privacy !== "full"
-                    ? []
-                    : redact(plan.assumptions),
-                warnings:
-                  harness && harness.config.privacy !== "full"
-                    ? []
-                    : redact(plan.warnings),
-              })
-            ).document;
-            if (harness) {
-              harness.firstPreviewAvailableMs ??=
-                performance.now() - harness.started;
-              await harness.record("tool-execution", {
-                taskId: task.taskId,
-                operations: plan.operations,
-                revision: committed.revision,
-              });
-            }
-            return committed.state;
+          commit: async (task, plan, next) => {
+            await harness?.record("candidate-task-accepted", {
+              taskId: task.taskId,
+              operations: plan.operations,
+              persisted: false,
+            });
+            return next;
           },
           checkpoint: () => harness?.checkpoint(),
           maxAttempts: 1 + (harness?.config.maxRepairAttempts ?? 2),
@@ -535,6 +511,55 @@ export async function proposeMotion(
             });
           },
         });
+        if (
+          generated.requirements.some(
+            (r) =>
+              r.status === "FAILED" &&
+              generated.tasks.find((t) => t.taskId === r.taskId)?.status ===
+                "PASSED",
+          )
+        )
+          throw new Error(
+            "FINAL_RECONCILIATION_FAILED: candidate not committed",
+          );
+        await atomicJson(path.join(directory, "candidate-commit.json"), {
+          runId: id,
+          expectedRevision: doc.revision,
+          sourceFingerprint: project.inspection.fingerprint,
+          operationBatches: generated.operationBatches,
+          reconciliation: generated.reconciliation,
+          status: "PREPARED",
+        });
+        let durabilityWarning: string | undefined;
+        if (generated.reconciliation.completed) {
+          harness?.checkpoint();
+          onStage("applying");
+          const publication = await changeMotion(project.root, {
+            expectedRevision: doc.revision,
+            expectedSourceFingerprint: project.inspection.fingerprint,
+            operationBatches: generated.operationBatches,
+            expectedCandidate: generated.next,
+            transactionId: id,
+            request:
+              harness && harness.config.privacy !== "full"
+                ? `[${id}/run] request redacted`
+                : `[${id}/run] ${redactSecrets(request.request)}`,
+            origin: request.settings.provider,
+            assumptions:
+              harness && harness.config.privacy !== "full"
+                ? []
+                : redact(generated.plan.assumptions),
+            warnings:
+              harness && harness.config.privacy !== "full"
+                ? []
+                : redact(generated.plan.warnings),
+          });
+          committed = publication.document;
+          durabilityWarning = publication.durabilityWarning;
+          if (harness)
+            harness.firstPreviewAvailableMs =
+              performance.now() - harness.started;
+        }
         const starts = generated.plan.operations.flatMap((op) =>
           op.type === "addAnimation" || op.type === "updateAnimation"
             ? [op.animation.startFrame]
@@ -553,21 +578,50 @@ export async function proposeMotion(
           document: committed,
           playbackStart: starts.length ? Math.min(...starts) : 0,
           taskExecution: true,
+          persistence: {
+            status: !generated.reconciliation.completed
+              ? "NOT_COMMITTED"
+              : durabilityWarning
+                ? "DURABILITY_WARNING"
+                : "CONFIRMED",
+            warning: durabilityWarning,
+          },
         };
-        await atomicJson(path.join(directory, "proposal.json"), result);
-        await atomicJson(path.join(directory, "execution.json"), {
-          runId: id,
-          requirements: generated.requirements,
-          reconciliation: generated.reconciliation,
-          revision: committed.revision,
-          appliedAt: new Date().toISOString(),
-        });
-        if (harness)
-          await harness.finish(
-            generated.reconciliation.status,
-            generated,
-            request.request,
-          );
+        try {
+          await harness?.record("commit-result", {
+            persisted: !!generated.reconciliation.completed,
+            receipt: committed.lastCommit ?? null,
+            revision: committed.revision,
+          });
+          await atomicJson(path.join(directory, "proposal.json"), result);
+          await atomicJson(path.join(directory, "execution.json"), {
+            runId: id,
+            requirements: generated.requirements,
+            reconciliation: generated.reconciliation,
+            revision: committed.revision,
+            appliedAt: new Date().toISOString(),
+          });
+          if (harness)
+            await harness.finish(
+              generated.reconciliation.status,
+              generated,
+              request.request,
+            );
+        } catch (error) {
+          // Motion state + commit receipt is authoritative even if diagnostic storage fails.
+          await harness
+            ?.finish(
+              generated.reconciliation.status,
+              generated,
+              request.request,
+            )
+            .catch(() => {});
+          return {
+            ...result,
+            diagnosticPersistence: { status: "FAILED", reason: String(error) },
+            commitReceipt: committed.lastCommit,
+          };
+        }
         return result;
       } catch (error) {
         await atomicJson(path.join(directory, "error.json"), {
@@ -738,7 +792,7 @@ export async function applyProposal(project: LoadedProject, id: string) {
   const candidate = applyOperations(current.state, plan.operations, project);
   if (
     !proposal.qa ||
-    !["PASSED", "WARNING"].includes(proposal.qa.status) ||
+    !qaAdmission(proposal.qa).accepted ||
     proposal.qa.stateDigest !== stateDigest(candidate)
   )
     throw new Error(

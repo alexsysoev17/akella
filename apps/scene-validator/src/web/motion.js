@@ -382,8 +382,24 @@ export async function mountMotion(
     frame = result.playbackStart ?? 0;
     const reconciliation = result.reconciliation;
     executionMessage = reconciliation
-      ? `${reconciliation.status === "SUCCESS" ? "Готово" : reconciliation.status === "PARTIAL_SUCCESS" ? "Выполнено частично" : "Не выполнено"}: ${reconciliation.completed} из ${reconciliation.requested} ${result.intentContract ? "требований" : "задач"}.`
+      ? `${reconciliation.status === "SUCCESS" ? "Применено" : reconciliation.status === "PARTIAL_SUCCESS" ? "Выполнено частично" : "Не выполнено"}: ${reconciliation.completed} из ${reconciliation.requested} ${result.intentContract ? "требований" : "задач"}.`
       : "";
+    if (reconciliation?.validationLevels) {
+      const render =
+        {
+          PASSED: "проверен",
+          WARNING: "есть предупреждения",
+          FAILED: "проверка не пройдена",
+          NOT_TESTED: "проверен не полностью",
+        }[reconciliation.validationLevels.render] ?? "не проверен";
+      executionMessage += ` Рендер: ${render}. Художественная оценка не выполнялась.`;
+    }
+    if (result.persistence?.status === "DURABILITY_WARNING")
+      executionMessage +=
+        " Состояние записано, но подтверждение долговременного сохранения завершилось с предупреждением.";
+    if (result.diagnosticPersistence?.status === "FAILED")
+      executionMessage +=
+        " Изменения сохранены, запись диагностики не завершена.";
     pendingPlayback = !reconciliation || reconciliation.completed > 0;
     refresh(true);
     $("m-job").textContent = executionMessage || "Запускаем preview…";

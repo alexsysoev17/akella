@@ -1,3 +1,4 @@
+import { qaAdmission } from "./qa/policy.js";
 import {
   assertTaskScope,
   validateTaskExecution,
@@ -229,8 +230,7 @@ export async function runAutonomous(
       const qa = verify
         ? await verify(next, attempt)
         : { status: "NOT_TESTED" };
-      if ((qa as { status: string }).status === "FAILED")
-        throw new MotionFailure(qa);
+      if (verify && !qaAdmission(qa).accepted) throw new MotionFailure(qa);
       await log(
         { status: "validated", plan, requirements, technical, qa },
         attempt,

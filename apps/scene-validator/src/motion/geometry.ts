@@ -77,3 +77,9 @@ export function canvasMatrix(
     [0, s, (settings.height - scene.height * s) / 2],
   ];
 }
+
+/** A scene-space displacement is a vector: inverse translation must not participate. */
+export function parentLocalDelta(parent: Matrix, x: number, y: number) {
+  const m = inverse(parent);
+  return { x: m[0][0] * x + m[0][1] * y, y: m[1][0] * x + m[1][1] * y };
+}

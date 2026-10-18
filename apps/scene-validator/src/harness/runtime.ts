@@ -4,7 +4,7 @@ import { retainRuns } from "./retention.js";
 import type { MetricRun } from "./metrics.js";
 import { redact } from "./security.js";
 import { readFile, readdir, rm, mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
 import path from "node:path";
 import type { LoadedProject } from "../types.js";
 import { atomicJson, noSymlinkPath, safeDirectory } from "../files.js";
@@ -331,6 +331,7 @@ export class HarnessRun {
         runId: this.runId,
         projectId: this.project.config.projectId,
         ownerPid: process.pid,
+        ownerHost: hostname(),
         sourceFingerprint: this.project.inspection.fingerprint,
         createdAt: this.createdAt,
         status,
@@ -493,11 +494,20 @@ export async function readRuns(root: string) {
       files.map(async (f) => {
         const file = path.join(dir, f, "run.json");
         await noSymlinkPath(root, file);
-        return JSON.parse(await readFile(file, "utf8")) as Record<
-          string,
-          unknown
-        > &
-          MetricRun;
+        try {
+          return JSON.parse(await readFile(file, "utf8")) as Record<
+            string,
+            unknown
+          > &
+            MetricRun;
+        } catch (error) {
+          if (!(error instanceof SyntaxError)) throw error;
+          return { runId: f, status: "CORRUPT_DIAGNOSTIC" } as Record<
+            string,
+            unknown
+          > &
+            MetricRun;
+        }
       }),
     );
   } catch (e) {
@@ -506,18 +516,40 @@ export async function readRuns(root: string) {
   }
 }
 export async function recoverInterruptedRuns(root: string) {
-  for (const r of await readRuns(root))
-    if (r.status === "RUNNING" && r.ownerPid !== process.pid) {
-      await atomicJson(
-        path.join(root, "motion/harness/runs", String(r.runId), "run.json"),
-        {
-          ...r,
-          status: "INTERRUPTED",
-          recovery:
-            "Last validated Motion State remains persisted; generation is not resumed automatically",
-        },
-      );
+  for (const r of await readRuns(root)) {
+    if (r.status !== "RUNNING" || r.ownerPid === process.pid) continue;
+    if (r.ownerHost && r.ownerHost !== hostname()) continue;
+    if (typeof r.ownerPid !== "number" || r.ownerPid <= 0) continue;
+    try {
+      process.kill(r.ownerPid, 0);
+      continue;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ESRCH") continue;
     }
+    let receipt: unknown = null;
+    try {
+      const motionFile = path.join(root, "motion/motion.json");
+      await noSymlinkPath(root, motionFile);
+      const doc = JSON.parse(await readFile(motionFile, "utf8"));
+      if (doc.lastCommit?.transactionId === r.runId) receipt = doc.lastCommit;
+    } catch {
+      /* Corrupt/missing state is never inferred as committed. */
+    }
+    await atomicJson(
+      path.join(root, "motion/harness/runs", String(r.runId), "run.json"),
+      {
+        ...r,
+        status: "INTERRUPTED",
+        recovery: {
+          commit: receipt ? "CONFIRMED" : "NOT_CONFIRMED",
+          receipt,
+          automaticReplay: false,
+          reason:
+            "Owner process terminated; inspect canonical state and receipt before retry",
+        },
+      },
+    );
+  }
 }
 
 export function abortable<T>(

@@ -1,6 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { digest } from "./context.js";
 const components = [
+  "files",
+  "motion/store",
+  "motion/service",
+  "motion/geometry",
+  "motion/intent/retime",
+  "motion/qa/policy",
   "motion/engine",
   "motion/sampling",
   "motion/expressions",

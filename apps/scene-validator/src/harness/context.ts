@@ -229,7 +229,7 @@ export async function agentContext(
       name,
     })),
     scenes,
-    objectIndex: selectedScenes.flatMap((s) =>
+    objectIndex: catalog.flatMap((s) =>
       s.objects
         .filter((o) => o.parentId && !rootIds.has(o.targetId))
         .map((o) => ({
@@ -240,15 +240,11 @@ export async function agentContext(
           objectType: o.type,
           aliases: objectAliases(o.name),
           existingAnimations: state.animations
-            .filter(
-              (a) =>
-                a.enabled &&
-                a.sceneId === o.sceneId &&
-                a.targetId === o.targetId,
-            )
+            .filter((a) => a.sceneId === o.sceneId && a.targetId === o.targetId)
             .map((a) => ({
               animationId: a.animationId,
               effect: a.effect,
+              enabled: a.enabled,
               channels: channels(a),
               startFrame: a.startFrame,
               endFrame: a.startFrame + a.durationFrames,
@@ -287,6 +283,13 @@ export async function agentContext(
     experience,
     extraGuidance: config.extraGuidance,
     timing: base.timing,
+    projection: {
+      identityScope: "all-scenes",
+      detailScope: [...sceneIds],
+      sourceFingerprint: project.inspection.fingerprint,
+      stateDigest: digest(state),
+      selectionIsWriteAuthorization: false,
+    },
     disclosure: {
       omittedScenes: catalog.length - scenes.length,
       objectsDetailed: detailed,

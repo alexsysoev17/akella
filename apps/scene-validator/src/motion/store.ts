@@ -1,5 +1,6 @@
 import { ensureRegistry } from "./registry.js";
-import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
+import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
@@ -37,6 +38,15 @@ const documentSchema = z
     cursor: z.number().int().min(0),
     history: z.array(entry),
     sourceDiagnostics: z.array(z.string()).optional(),
+    lastCommit: z
+      .object({
+        transactionId: z.string().uuid(),
+        revision: z.string(),
+        previousRevision: z.string(),
+        operationsDigest: z.string(),
+        createdAt: z.string(),
+      })
+      .optional(),
   })
   .strict();
 export type MotionDocument = z.infer<typeof documentSchema>;
@@ -92,6 +102,9 @@ export async function changeMotion(
     expectedRevision: string;
     expectedSourceFingerprint?: string;
     operations?: unknown;
+    operationBatches?: unknown[];
+    expectedCandidate?: MotionState;
+    transactionId?: string;
     action?: "undo" | "redo";
     request: string;
     origin?: z.infer<typeof entry>["origin"];
@@ -108,6 +121,20 @@ export async function changeMotion(
       project.inspection.fingerprint !== input.expectedSourceFingerprint
     )
       throw new Error("Исходный дизайн изменился во время выполнения задачи");
+    const batches = input.operationBatches?.map((b) =>
+      operationsSchema.parse(b),
+    );
+    const operationsDigest = createHash("sha256")
+      .update(JSON.stringify(batches ?? input.operations ?? input.action))
+      .digest("hex");
+    if (
+      input.transactionId &&
+      doc.lastCommit?.transactionId === input.transactionId
+    ) {
+      if (doc.lastCommit.operationsDigest !== operationsDigest)
+        throw new Error("TRANSACTION_ID_REUSED_WITH_DIFFERENT_OPERATIONS");
+      return { document: doc, diff: [], replayed: true };
+    }
     if (input.expectedRevision !== doc.revision)
       throw Object.assign(
         new Error(
@@ -126,9 +153,17 @@ export async function changeMotion(
         doc.state = doc.history[doc.cursor++].after;
       }
     } else {
-      const operations = operationsSchema.parse(input.operations);
+      const operations = batches
+        ? batches.flat()
+        : operationsSchema.parse(input.operations);
       if (!operations.length) throw new Error("Нет операций для применения");
-      doc.state = applyOperations(doc.state, operations, project);
+      for (const batch of batches ?? [operations])
+        doc.state = applyOperations(doc.state, batch, project);
+      if (
+        input.expectedCandidate &&
+        !isDeepStrictEqual(doc.state, input.expectedCandidate)
+      )
+        throw new Error("CANDIDATE_COMMIT_MISMATCH");
       doc.history = doc.history.slice(0, doc.cursor);
       doc.history.push({
         editId: randomUUID(),
@@ -144,11 +179,40 @@ export async function changeMotion(
       doc.cursor = doc.history.length;
     }
     validateMotion(doc.state, project);
+    const previousRevision = doc.revision;
     doc.revision = randomUUID();
+    if (input.transactionId)
+      doc.lastCommit = {
+        transactionId: input.transactionId,
+        previousRevision,
+        revision: doc.revision,
+        operationsDigest,
+        createdAt: new Date().toISOString(),
+      };
+    else delete doc.lastCommit;
     doc.sourceFingerprint = project.inspection.fingerprint;
     delete doc.sourceDiagnostics;
+    // Validate the persisted envelope too: aggregated batches must respect history limits.
+    documentSchema.parse(doc);
     await safeDirectory(project.root, "motion");
-    await atomicJson(path.join(project.root, "motion/motion.json"), doc);
+    try {
+      await atomicJson(path.join(project.root, "motion/motion.json"), doc, {
+        durable: true,
+      });
+    } catch (error) {
+      // A directory-sync failure after rename is not an uncommitted transaction.
+      const persisted = documentSchema.parse(
+        JSON.parse(
+          await readFile(path.join(project.root, "motion/motion.json"), "utf8"),
+        ),
+      );
+      if (!isDeepStrictEqual(persisted, doc)) throw error;
+      return {
+        document: doc,
+        diff: motionDiff(before, doc.state),
+        durabilityWarning: String(error),
+      };
+    }
     return { document: doc, diff: motionDiff(before, doc.state) };
   } finally {
     await unlock();
