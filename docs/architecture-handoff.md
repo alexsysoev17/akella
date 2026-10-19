@@ -4,13 +4,13 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-19 (Europe/Moscow) — text placement regression repair; targeted update, not a full re-audit |
+| Last Updated | 2026-10-19 (Europe/Moscow) — native Skia migration; targeted rendering/runtime update, not a full re-audit |
 | Last Full Audit | 2026-10-13 — структурный аудит исходников перечисленных подсистем; не полный production E2E и не формальная верификация каждой ветви |
-| Git Commit | Checkpoint `7ce6ab9`, after product hardening commit `e573774`; text placement repair is uncommitted at this documentation update. |
+| Git Commit | Checkpoint `53fb100`, after text placement commit `71c8426`; native migration is uncommitted at this documentation update. |
 | Git Branch | `main`; локальный репозиторий создан после первоначального аудита |
-| Working Tree Status | main; text transport, browser regression tests and documentation uncommitted at this update. No source design or client motion state edited. |
-| Documentation Version | 1.0.18 |
-| Scope of Last Update | WebKit foreignObject compositor placement, browser-specific transport within existing renderer, source-to-pixel tests, coordinate trace and known subpixel limits. No AI/provider changes. |
+| Working Tree Status | main; native renderer, integrations, tests, dependencies and documentation uncommitted at this update. User source/motion data not edited; real video tests use isolated ignored copies. |
+| Documentation Version | 1.0.19 |
+| Scope of Last Update | Native CPU Skia worker, pure evaluator boundary, text shaping/transport, geometric Trim Paths, Preview/FFmpeg/API/QA, bounded caches, compatibility and measured verification. No planner/provider rewrite. |
 | Code snapshot SHA-256 | NOT RECALCULATED for this update; use component version digests in actual run artifacts and subsequent Git commit. |
 
 Git 2.54.0 (Apple Git-157): локальная история на main, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
@@ -25,7 +25,7 @@ Snapshot вычислен над отсортированными файлами
 
 Motion Platform — локальное файловое приложение для импорта Figma storyboard, реконструкции статических сцен и создания/редактирования анимаций по текстовому запросу. Исходный экспорт хранится отдельно от Motion State. Пользователь выбирает проект, видит сцены/объекты, пишет prompt, получает автоматически применённые изменения, Preview и возможность Undo/Redo и MP4 export.
 
-Реальный основной путь: **vanilla web UI → локальный Node HTTP job → semantic LLM call → validated IntentPlan → deterministic compiler → task-level scope/requirement checks → local Chromium QA → final candidate reconciliation → revision-checked run commit → autoplay**. В удачном сценарии модель строит intent; первичные Motion Operations строит TypeScript. Модель получает операции для исправления только при repair. Это не открытый агент с произвольным исполнением tools/JavaScript.
+Реальный основной путь: **vanilla web UI → локальный Node HTTP job → semantic LLM call → validated IntentPlan → deterministic compiler → task-level scope/requirement checks → native Skia + numeric QA → final candidate reconciliation → revision-checked run commit → autoplay**. В удачном сценарии модель строит intent; первичные Motion Operations строит TypeScript. Модель получает операции для исправления только при repair. Это не открытый агент с произвольным исполнением tools/JavaScript.
 
 Что существует:
 
@@ -82,13 +82,15 @@ flowchart TD
   CM --> EX
   EX --> FC[final requirement reconciliation]
   FC --> UI
-  MS --> P[presentation.ts motionHtml]
-  S --> R[apps/scene-validator/src/renderer.ts buildSceneSvg]
-  R --> P
-  P --> B[apps/scene-validator/src/motion/browser.ts / engine.applyFrame]
-  B --> PRE[UI iframe Preview]
-  P --> VID[video.ts Chromium frame capture + FFmpeg]
+  MS --> E[motion/evaluation.ts pure frame evaluation]
+  S --> N[native/renderer.ts + text.ts + paths.ts]
+  E --> N
+  N --> W[native/worker.ts CPU Skia + bounded frame cache]
+  W --> PRE[native/preview.ts RGBA transport canvas putImageData]
+  W --> VID[motion/video.ts same RGBA frames + FFmpeg]
+  W --> QA
   VID --> MP4[project/renders/*.mp4]
+  COMPAT[AKELLA_RENDERER=browser-compat explicit temporary mode] --> OLD[presentation.ts + browser.ts + buildSceneSvg + video-browser.ts]
   HR --> LOG[run.json + trace.json]
   QA --> ART[motion/qa/run/attempt artifacts]
   LOG --> INS[apps/scene-validator/src/harness/inspector.ts → apps/scene-validator/src/web/inspector.js]
@@ -1206,7 +1208,52 @@ Browser raster tests are run sequentially in `npm test`, with cross-browser plac
 
 **Remaining limitation:** WebKit native SVG transport preserves placement but does not inherit Chromium's subpixel-compositor quality. An isolated fractional SVG transport experiment measured up to0.75px centroid residual. No claim that WebKit passes the0.125px jitter criterion. Chromium/MP4 keep the existing compositor; Preview and video may differ in subpixel/font rasterization. This repair restores source placement, not complete cross-browser motion-raster parity or every Definition-of-Done quality criterion. The source/segmentation/math have not been weakened to hide this limitation.
 
+## Native Skia rendering migration — 2026-10-19 (v1.0.19)
+
+**IMPLEMENTED, default runtime; targeted migration, not a complete feature-parity audit.** Earlier browser/compositor sections above describe the retained `browser-compat` path and historical evidence. Their browser-specific limitations do not describe the default pixel generation anymore. Existing `buildSceneSvg`/`motionHtml` remain compatibility utilities; production Preview, reconstruction, QA and video choose native unless `AKELLA_RENDERER=browser-compat` is explicitly set at process startup. There is no automatic hidden browser fallback. Unsupported native features report a code/warning; explicit compatibility mode remains available while coverage is extended.
+
+### Boundary and dependency choice
+
+- `motion/evaluation.ts`: the existing keyframe/easing/velocity/expression frame mathematics moved out of DOM-facing `engine.ts`, which reexports it for old callers. No second Motion Engine, planner or library. Existing transitions use `statePresentation`/`interpolateState` and the same source hierarchy.
+- `native/skia.ts`: official Google `canvaskit-wasm@0.42.0` (BSD-3-Clause), software CPU Skia in a Node Worker. This is **WASM Skia, not a C++ Node addon and not browser Canvas rendering**. It provides SkParagraph/HarfBuzz and contour measurement without DOM/GPU/browser installation. `@resvg/resvg-js@2.6.2` is a native Rust addon used only to decode fallback source SVG assets; animated Trim Paths never use rasterized fallback geometry. macOS verified; Windows implementation path exists but runtime NOT VERIFIED.
+- `native/renderer.ts`: source scene graph plus pure evaluated state → PNG or straight RGBA8888. Same frame/options/state/font environment yields the same pixels. Raster fills/crop/alpha, source vector geometry, linear/radial gradients, strokes/caps/joins/dashes, transforms, hierarchy/order, blend/opacity, clipping, sibling alpha/vector/luminance masks, layer blur/drop shadow, state transitions and text motion are implemented. Figma previews are not renderer inputs.
+- Three-scene UI smoke on the actual local server verified native Preview, all thumbnail images loaded, and no page JS errors. Source/stored motion schemas remain compatible. Additive optional Trim Path `startFrom/startTo` and text segmentation `paragraph`; existing documents need no rewriting. The browser compatibility text adapter explicitly rejects paragraph motion instead of pretending support.
+
+### Text and geometry
+
+`native/font-index.ts` reads bounded OpenType/TTC family metadata. `fonts.ts` indexes/hashes system fonts once per worker lifetime; loads only requested/fallback families into shared ref-counted FontMgr. `AKELLA_FONT_DIRS` overrides roots (OS path delimiter). Frame metadata records resolved family, candidate font basenames/digests and font-catalog digest, **not a claim of a uniquely selected font file when several faces are candidates**. Missing source family is an explicit warning. Install/replace fonts and restart the server to refresh the catalog. Font files are not copied into user projects by this migration.
+
+`native/text.ts` shapes mixed runs through SkParagraph/HarfBuzz, lays out paragraphs/lines in the original source box, preserves native UTF-16 ranges/spacing/alignment/line heights/decorations and caches layout. Block/paragraph/line/word/grapheme transforms use the existing evaluator. Native CPU paragraph baseline snapping was reproduced during development; ephemeral in-memory Skia glyph planes (density2, up to4 for scaled output) preserve stable fractional transport. They are derived render caches, not permanent PNG replacements: editable text/source/styles remain authoritative. No per-frame HTML clones, browser font metrics or source coordinate compensation. Word/grapheme slicing may split ligatures or connected-script clusters and emits a warning; arbitrary-script segmented fidelity is NOT PROVEN.
+
+`native/paths.ts` measures actual curved contours and extracts arc-length segments with Skia `ContourMeasure.getSegment`. Start/end intervals, multiple contours, closed/open geometry, reverse direction and original transforms/stroke appearance are retained. Full closed contours retain closure; invalid wrapping/reversed intervals fail explicitly. Missing centerline is not inferred from an outline; scale/opacity/rectangular clipping do not substitute Trim Paths. SVG asset fallback is decoded locally and reports a warning; it cannot become a trim source.
+
+### Preview, API, export and resource policy
+
+- `native/preview.ts` displays server pixels via `putImageData`, never evaluates scene content. Existing Timeline/AI/selection messages remain; polygon hit testing is approximate (not mask/alpha-aware). Obsolete distant seeks are aborted, completed obsolete results discarded, playback may skip displaying frames under CPU load. One synchronous Skia frame cannot be interrupted halfway; cancellation applies between frames/queued jobs.
+- `GET /api/projects/:id/motion/frame?frame=N&scale=1`: PNG. `transport=packet`: 4-byte big-endian JSON length, metadata JSON, RGBA bytes. Optional revision guard rejects stale state. `POST .../render-sequence` warms up to30 frames through existing cancellable job/progress endpoints; `POST .../render-cache-clear` releases sessions/cache. Ordinary preview requests use the same frame service as export, not a full video render.
+- `motion/video.ts`: identical native RGBA frames stream with backpressure into existing FFmpeg, retaining lock/source-fingerprint checks and atomic publication. H264 YUV420 adds padding at right/bottom for odd dimensions; `encodedSize` is recorded. Input pixels before codec are identical to Preview; decoded lossy MP4 is tested with the existing mean-RGBA tolerance3, not claimed pixel-identical. Video QA crops only the documented padding, not source content.
+- `native/worker.ts` serializes CPU work; at most2 state sessions, shared unchanged source renderer, frame LRU120 entries/**64MiB**, queue64, cancelled-ID bound512. Source/state/options digests invalidate frames; fonts are part of QA environment identity. Decode cache256MiB; loaded font bytes max192MiB, per text glyph planes64MiB, effect-plane cache128MiB. Max32M frame/SVG pixels, scale4, source file128MiB, decoded raster64M pixels, text16384UTF-16 units/512 animation units. These are component limits, **not a total RSS guarantee**. Font indexing and decoded images still have workload-dependent memory costs. Disposal releases Skia objects; worker close releases WASM heap. New session opening plus its first render is one atomic queued operation, so concurrent15-scene thumbnails cannot evict their state before drawing. Resolved first-frame Promises release their pixel buffers.
+- `management.ts:findProject` resolves small manifests and inspects only the requested project, avoiding source inventories of every unrelated project on each frame request. No stale project cache was introduced. `native/service.ts` reads canonical motion with inode/mtime/ctime/size+source stamp (8-project cache); no second Motion State. `harness/versions.ts` fingerprints native components and pure evaluator. AI reasoning/provider/intent/compiler/store semantics unchanged.
+
+### QA and verification actually executed
+
+`native/qa.ts` retains numeric QA and performs actual Skia frame rendering, repeatable random access, immutable source/layout, sampled segment continuity, nonzero stagger contract, independent alpha-centroid fractional glyph probe, native trim geometry/parameters plus visible counterfactual image differences. Counterfactuals preserve animation IDs/dependencies: deleting a reveal track had incorrectly invalidated Ribbon2 timing during initial integration; fixed by replacing only its reveal interval. No global pixel-count monotonicity assumption. Segment continuity samples nine evenly spaced interval frames; it is not the old exhaustive every-frame DOM transform check or proof of artistic quality. Existing render budgets/cancellation/admission still apply. Warnings remain visible, absent checks are not marked PASSED.
+
+Actual evidence, macOS/Node24.19:
+
+- TypeScript/application build/worker/UI build PASS. Final native regression suite **21/21 PASS**, no skips (5.304s): includes fifteen-scene concurrent thumbnails, actual Chromium/WebKit pixel transport and FFmpeg. Compatibility **227/227 PASS** (95.415s) plus **2/2** cross-browser placement (6.113s), unchanged assertions/tolerances. One initial native three-scene failure exposed invalid thumbnail duration and an undefined Paint passed to CanvasKit asset drawing; fixed and native suite rerun21/21.
+- Full56-case existing benchmark: **56/56 PASS**, `artifacts/harness/native-migration-final.json`, production compiler/execution/native QA/persistence with prepared reference provider responses. Semantic model understanding and artistic quality **NOT_TESTED**; no live AI call made. No comparable old-renderer performance baseline was fabricated.
+- Native subpixel alpha-centroid maximum residual **0.093747px**, unchanged threshold0.125px. Real Chromium/WebKit UI canvas bytes equal backend RGBA in HTTP regression; synthetic export input SHA-256 equals Preview frame bytes.
+- Existing Figma-derived `test14`: nine actual native PNGs rendered and frame170 visually inspected; installed X5 Sans resolved, no renderer warnings on those samples. Isolated copy rendered actual MP4; decoded frames40/110/170 mean-RGBA error **1.578/2.090/2.070**, all below3. Original source/motion26 files verified byte-identical to the isolated test copy after validation. Comparing against the Figma reference additionally exposed a FontWeight integration bug: passing CSS numeric700 instead of CanvasKit Embind enum produced Regular despite Bold metadata. Fixed with supported enum mapping and a real Regular/Bold alpha-mass regression; nonstandard variable-axis weights warn about mapping. Frame170 re-rendered and visually inspected against the original Figma PNG. Artifacts ignored, not Git content.
+- Real480×1057 raw-RGBA sample: cold first frame including worker/font/source setup **892ms**; uncached frame170 **68.68ms** wall (68.14 draw); repeated cached170 **0.233ms**. One local sample, not median/p95 or a30FPS guarantee. Earlier PNG frame170 draw137ms + encode54ms; leaf effect-plane cache reduces observed draw to~65ms, raw transport avoids PNG compression. No controlled cross-version speedup claim. Unit workload measured~0.5GiB process RSS; not a leak proof or large-production-project bound.
+
+### Remaining limits / requires review
+
+Exact Figma typography/pixel parity is NOT PROVEN. Native metrics can differ from Figma despite the same installed family; multi-face selection, complex scripts, wrapping and font versions require visual validation. Gradient text, paragraph indent and tiled image fills explicitly require compatibility; image color filters and unsupported effects emit warnings. Angular/diamond gradients and unavailable structured features are not silently approximated. SVG fallback is asset rasterization and may have resolution limits. Native leaf blur/shadow supported; full Figma inner/background blur and every mask/blend interaction not verified. Glyph planes are finite-resolution caches, not unlimited-resolution vector glyphs during zoom. CPU cache misses are not reliably real-time30FPS. Large-project/long-playback soak, GPU acceleration, Windows runtime and full old/new visual parity remain unverified. Existing tests prove their fixtures, not arbitrary client designs. Temporary browser compatibility retains previous browser-dependent behavior and limitations.
+
 ## ARCHITECTURE CHANGE HISTORY
+
+- 2026-10-19 — v1.0.19: default Node-worker CPU Skia pipeline; pure motion evaluator boundary, native shaped live text caches/contour trims, same RGBA Preview/FFmpeg, bounded API/cache/cancellation and native QA. Compatibility explicit; measured reference/native/real-project evidence and limitations above. No live provider or full audit.
 
 - 2026-10-19 — v1.0.18: reproduced WebKit foreignObject HTML-layer paint displacement despite correct matrices; native SVG transport on WebKit, unchanged Chromium compositor, source-to-pixel browser regressions and actual coordinate evidence. Targeted repair; WebKit subpixel quality remains limited.
 

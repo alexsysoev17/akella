@@ -1,3 +1,8 @@
+import {
+  renderingMode,
+  renderNativeFrame,
+  compareNativeFrames,
+} from "../native/client.js";
 import { chromium } from "playwright";
 import { createRequire } from "node:module";
 import { execFile } from "node:child_process";
@@ -43,6 +48,47 @@ export async function evaluateVideoConsistency(
   ].slice(0, 8);
   if (!frames.length)
     return { status: "NOT_TESTED", reason: "NO_RELEVANT_FRAMES" };
+  if (renderingMode() === "native") {
+    const video = await exportVideo(project.root),
+      samples = [];
+    for (const frame of frames) {
+      const native = await renderNativeFrame(project, s, frame),
+        decoded = await promisify(execFile)(
+          createRequire(import.meta.url)("ffmpeg-static") as string,
+          [
+            "-v",
+            "error",
+            "-i",
+            path.join(project.root, "renders", video.file),
+            "-vf",
+            `select=eq(n\\,${frame}),crop=${s.settings.width}:${s.settings.height}:0:0:exact=1`,
+            "-frames:v",
+            "1",
+            "-f",
+            "image2pipe",
+            "-vcodec",
+            "png",
+            "-",
+          ],
+          { encoding: "buffer", maxBuffer: 20000000 },
+        ),
+        difference = await compareNativeFrames(native.png, decoded.stdout);
+      samples.push({
+        frame,
+        meanAbsolutePixelDifference: difference.meanAbsoluteError,
+        status: difference.meanAbsoluteError < 3 ? "PASSED" : "FAILED",
+      });
+    }
+    return {
+      status: samples.every((s) => s.status === "PASSED") ? "PASSED" : "FAILED",
+      motionRevision: doc.revision,
+      video: video.file,
+      samples,
+      tolerance: 3,
+      method:
+        "Actual shared Skia native frame vs decoded H264 MP4; average absolute RGBA difference",
+    };
+  }
   const video = await exportVideo(project.root),
     browser = await chromium.launch({ headless: true });
   try {

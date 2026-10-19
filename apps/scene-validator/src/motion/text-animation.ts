@@ -89,6 +89,7 @@ export function prepareTextAnimation(node: SVGGElement, state: MotionState) {
   const layout = saved.layout,
     track = tracks[0],
     settings = track.text!;
+  if(settings.segmentation==="paragraph")throw new Error("PARAGRAPH_REQUIRES_NATIVE_RENDERER");
   const units =
     settings.segmentation === "line"
       ? layout.lines

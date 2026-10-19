@@ -12,7 +12,7 @@ import {
 } from "../motion-library/expressions/registry.js";
 export const textAnimationSchema = z
   .object({
-    segmentation: z.enum(["block", "line", "word", "character"]),
+    segmentation: z.enum(["block", "paragraph", "line", "word", "character"]),
     timing: z
       .enum(["simultaneous", "staggered", "sequential"])
       .default("staggered"),
@@ -149,6 +149,8 @@ export const animationSchema = z.discriminatedUnion("effect", [
       ...common,
       effect: z.literal("trimPath"),
       parameters: fade.extend({
+        startFrom: z.number().min(0).max(1).optional(),
+        startTo: z.number().min(0).max(1).optional(),
         direction: z
           .enum(["forward", "reverse", "leftToRight", "rightToLeft"])
           .nullable()

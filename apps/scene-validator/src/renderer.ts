@@ -1,3 +1,5 @@
+import { renderingMode } from "./native/client.js";
+import { reconstructNativeProject } from "./native/reconstruct.js";
 import { pathCapability } from "./motion-library/registry/path-capability.js";
 import { readFile, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
@@ -260,7 +262,8 @@ export async function buildSceneSvg(
       const color = brush(paint, node);
       const geometry = list(p.strokeGeometry);
       const trimAttributes =
-        options.motion && pathCapability(node.type, p).supported
+        options.motion &&
+        pathCapability(node.type, p, "browser-compat").supported
           ? ` data-motion-trim="true" data-motion-stroke-width="${num(p.strokeWeight, 1)}" data-motion-stroke-cap="${p.strokeCap === "ROUND" ? "round" : p.strokeCap === "SQUARE" ? "square" : "butt"}" data-motion-stroke-miterlimit="${num(p.strokeMiterLimit, 4)}" data-motion-stroke-join="${p.strokeJoin === "ROUND" ? "round" : p.strokeJoin === "BEVEL" ? "bevel" : "miter"}"${geometry.length ? ` data-motion-centerline="${escape(node.type === "LINE" ? `M0 0 L${w} ${h}` : obj(list(p.vectorPaths)[0]).data)}"` : ""}`
           : "";
 
@@ -525,6 +528,8 @@ export async function reconstructProject(
 ): Promise<
   Map<string, { png: string; html: string; stats: RenderStats; error?: string }>
 > {
+  if (renderingMode() === "native")
+    return reconstructNativeProject(project, output);
   let browser;
   try {
     browser = await chromium.launch({ headless: true });

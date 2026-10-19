@@ -73,3 +73,33 @@ await cp(
   ),
   { recursive: true },
 );
+
+// Native worker is a Node-only bundle; it is never sent to the browser.
+await build({
+  entryPoints: [
+    fileURLToPath(
+      new URL("../apps/scene-validator/src/native/worker.ts", import.meta.url),
+    ),
+  ],
+  outfile: fileURLToPath(
+    new URL(
+      "../apps/scene-validator/src/native/worker-runtime.mjs",
+      import.meta.url,
+    ),
+  ),
+  bundle: true,
+  format: "esm",
+  platform: "node",
+  target: "node20",
+  packages: "external",
+});
+await cp(
+  new URL(
+    "../apps/scene-validator/src/native/worker-runtime.mjs",
+    import.meta.url,
+  ),
+  new URL(
+    "../apps/scene-validator/dist/src/native/worker-runtime.mjs",
+    import.meta.url,
+  ),
+);

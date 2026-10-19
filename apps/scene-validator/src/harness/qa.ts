@@ -1,3 +1,4 @@
+import { renderingMode, nativeEnvironment } from "../native/client.js";
 import { chromium, type Browser } from "playwright";
 import { readFile, readdir, cp, rm } from "node:fs/promises";
 import path from "node:path";
@@ -25,6 +26,8 @@ export class RunQA {
           ? undefined
           : task.targetReference;
     const key = digest([
+      renderingMode(),
+      renderingMode() === "native" ? await nativeEnvironment() : null,
       this.run.project.inspection.fingerprint,
       next,
       before,
@@ -62,7 +65,8 @@ export class RunQA {
       }
     }
     this.run.cacheMisses++;
-    this.browser ??= await chromium.launch({ headless: true });
+    if (renderingMode() === "browser-compat")
+      this.browser ??= await chromium.launch({ headless: true });
     const renderStart = performance.now();
     const report = await motionQA(
       this.run.project,

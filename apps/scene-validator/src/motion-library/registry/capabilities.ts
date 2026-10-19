@@ -34,7 +34,7 @@ export const capabilityRegistry = [
         "total duration includes stagger",
         "matching segmentation settings for compound tracks",
       ],
-      implementationReference: "motion/text-animation.ts",
+      implementationReference: "native/text.ts + native/renderer.ts (browser compatibility: motion/text-animation.ts)",
     },
     evaluator: evaluateAnimation,
     supportedProperties:

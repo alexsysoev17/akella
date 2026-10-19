@@ -1,8 +1,9 @@
 import { spawn } from "node:child_process";
-import { chromium } from "playwright";
+import { renderNativeFrame, renderingMode } from "../native/client.js";
+import { exportBrowserVideo } from "./video-browser.js";
 import { createRequire } from "node:module";
 const ffmpegPath: unknown = createRequire(import.meta.url)("ffmpeg-static");
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { writeFile, rm, rename } from "node:fs/promises";
 import path from "node:path";
 import { once } from "node:events";
@@ -15,13 +16,18 @@ import {
   fingerprint,
 } from "../files.js";
 import { readMotion } from "./store.js";
-import { motionHtml } from "./presentation.js";
+
 export async function exportVideo(
   projectRoot: string,
   onProgress: (n: number, total: number) => void = () => {},
+  options: {
+    signal?: AbortSignal;
+    renderer?: "native" | "browser-compat";
+  } = {},
 ) {
+  if ((options.renderer ?? renderingMode()) === "browser-compat")
+    return exportBrowserVideo(projectRoot, onProgress);
   const unlock = await lockProject(projectRoot);
-  let browser;
   let encoder: ReturnType<typeof spawn> | undefined;
   let temporary: string | undefined;
   try {
@@ -36,21 +42,12 @@ export async function exportVideo(
     const renders = await safeDirectory(projectRoot, "renders");
     const name = `motion-${randomUUID()}.mp4`;
     temporary = path.join(renders, "." + name);
-    const presentation = await motionHtml(project, state);
-    browser = await chromium.launch({ headless: true });
-    const page = await browser.newPage({
-      viewport: { width: state.settings.width, height: state.settings.height },
-      deviceScaleFactor: 1,
+    const first = await renderNativeFrame(project, state, 0, {
+      signal: options.signal,
+      encoding: "rgba",
     });
-    await page.route("**/*", (route) =>
-      route.request().url().startsWith("data:")
-        ? route.continue()
-        : route.abort(),
-    );
-    await page.setContent(presentation.html, { waitUntil: "load" });
-    await page.evaluate(async () => {
-      await window.motionReady;
-    });
+    const warnings = new Set(first.warnings);
+    const usedFonts = new Map(first.fonts.map((font) => [font.family, font]));
     let stderr = "";
     encoder = spawn(
       binary,
@@ -60,9 +57,11 @@ export async function exportVideo(
         "-loglevel",
         "error",
         "-f",
-        "image2pipe",
-        "-vcodec",
-        "png",
+        "rawvideo",
+        "-pixel_format",
+        "rgba",
+        "-video_size",
+        `${state.settings.width}x${state.settings.height}`,
         "-framerate",
         String(state.settings.fps),
         "-i",
@@ -97,9 +96,30 @@ export async function exportVideo(
     });
     completed.catch(() => {});
     encoder!.stdin!.on("error", () => {});
+    const frameDigests: { frame: number; sha256: string }[] = [];
     for (let frame = 0; frame < state.settings.durationFrames; frame++) {
-      await page.evaluate((f) => window.motionFrame(f), frame);
-      const png = await page.screenshot({ type: "png" });
+      options.signal?.throwIfAborted();
+      const rendered =
+        frame === 0
+          ? first
+          : await renderNativeFrame(project, state, frame, {
+              signal: options.signal,
+              encoding: "rgba",
+            });
+      rendered.warnings.forEach((w) => warnings.add(w));
+      for (const font of rendered.fonts) usedFonts.set(font.family, font);
+      const png = rendered.png;
+      if (
+        [
+          0,
+          Math.floor(state.settings.durationFrames / 2),
+          state.settings.durationFrames - 1,
+        ].includes(frame)
+      )
+        frameDigests.push({
+          frame,
+          sha256: createHash("sha256").update(png).digest("hex"),
+        });
       if (!encoder!.stdin!.write(png))
         await Promise.race([
           once(encoder!.stdin!, "drain"),
@@ -125,7 +145,16 @@ export async function exportVideo(
       motionRevision: doc.revision,
       settings: state.settings,
       sourceFingerprint: project.inspection.fingerprint,
-      warnings: presentation.warnings,
+      warnings: [...warnings],
+      renderer: first.renderer,
+      fonts: [...usedFonts.values()],
+      environment: first.environment,
+      encodedSize: {
+        width: Math.ceil(state.settings.width / 2) * 2,
+        height: Math.ceil(state.settings.height / 2) * 2,
+      },
+      inputEncoding: "rgba",
+      frameDigests,
       renderedAt: new Date().toISOString(),
     });
     return {
@@ -133,11 +162,19 @@ export async function exportVideo(
       revision: doc.revision,
       frames: state.settings.durationFrames,
       fps: state.settings.fps,
-      warnings: presentation.warnings,
+      warnings: [...warnings],
+      renderer: first.renderer,
+      fonts: [...usedFonts.values()],
+      environment: first.environment,
+      encodedSize: {
+        width: Math.ceil(state.settings.width / 2) * 2,
+        height: Math.ceil(state.settings.height / 2) * 2,
+      },
+      inputEncoding: "rgba",
+      frameDigests,
     };
   } finally {
     encoder?.kill("SIGTERM");
-    await browser?.close();
     if (temporary) await rm(temporary, { force: true });
     await unlock();
   }

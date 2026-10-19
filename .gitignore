@@ -47,3 +47,6 @@ secrets.json
 
 # Shared provider contract browser bundle
 /apps/scene-validator/src/web/provider-contract.js
+
+# Native Skia worker bundle
+/apps/scene-validator/src/native/worker-runtime.mjs

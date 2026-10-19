@@ -1,3 +1,4 @@
+import { renderingMode } from "../native/client.js";
 import { qaAdmission } from "./qa/policy.js";
 import { selectorContext } from "../harness/selector-context.js";
 import {
@@ -75,6 +76,7 @@ export async function projectMotion(project: LoadedProject) {
   const registry = await ensureRegistry(project);
   return {
     document,
+    renderer:renderingMode(),
     registry,
     diagnostics: [
       ...(document.sourceDiagnostics ?? []),

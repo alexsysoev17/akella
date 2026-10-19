@@ -1,3 +1,6 @@
+import { renderProjectFrame, framePacket } from "../native/service.js";
+import { nativePreviewHtml } from "../native/preview.js";
+import { renderingMode, clearNativeCache } from "../native/client.js";
 import {
   saveProviderSettings,
   loadProviderSettings,
@@ -70,6 +73,39 @@ export async function motionApi(
     response.end(JSON.stringify(value));
   };
   if (request.method === "GET") {
+    if (action === "frame") {
+      const query = new URL(request.url!, "http://127.0.0.1").searchParams;
+      const frame = z.coerce
+        .number()
+        .int()
+        .min(0)
+        .max(108000)
+        .parse(query.get("frame") ?? 0);
+      const scale = z.coerce
+        .number()
+        .positive()
+        .max(4)
+        .parse(query.get("scale") ?? 1);
+      const controller = new AbortController();
+      response.on("close", () => controller.abort());
+      const result = await renderProjectFrame(project, frame, {
+        scale,
+        encoding: query.get("transport") === "packet" ? "rgba" : "png",
+        revision: query.get("revision") ?? undefined,
+        signal: controller.signal,
+      });
+      const packet = query.get("transport") === "packet";
+      response.writeHead(200, {
+        "Content-Type": packet ? "application/x-akella-frame" : "image/png",
+        "Cache-Control": "no-store",
+        "X-Akella-Renderer": result.renderer,
+        "X-Akella-Frame": String(result.frame),
+        "X-Akella-Revision": result.revision,
+      });
+      response.end(packet ? framePacket(result) : result.png);
+      return true;
+    }
+
     if (!action) {
       json(await projectMotion(project));
       return true;
@@ -254,10 +290,40 @@ export async function motionApi(
       return true;
     }
     if (action === "thumbnail") {
-      const html = await sceneThumbnailHtml(
-        project,
-        decodeURIComponent(segments[5] ?? ""),
+      const sceneId = decodeURIComponent(segments[5] ?? "");
+      const scene = project.inspection.document.scenes.find(
+        (s) => s.sceneId === sceneId,
       );
+      if (!scene) throw new Error("Scene not found");
+      if (renderingMode() === "native") {
+        const { defaultMotion } = await import("./context.js");
+        const { renderNativeFrame } = await import("../native/client.js");
+        const state = defaultMotion(project);
+        state.blocks = [
+          {
+            ...state.blocks.find((b) => b.sceneId === sceneId)!,
+            startFrame: 0,
+          },
+        ];
+        state.settings.durationFrames = state.blocks[0].durationFrames;
+        state.settings.width = Math.ceil(scene.width);
+        state.settings.height = Math.ceil(scene.height);
+        const result = await renderNativeFrame(project, state, 0, {
+          scale: Math.min(1, 320 / scene.width),
+        });
+        response.writeHead(200, {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-cache",
+          "X-Akella-Renderer": result.renderer,
+          "Content-Security-Policy":
+            "default-src 'none'; img-src data:; style-src 'unsafe-inline'; frame-ancestors 'self'",
+        });
+        response.end(
+          `<!doctype html><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000}img{width:100%;height:100%;object-fit:contain}</style><img alt="" src="data:image/png;base64,${Buffer.from(result.png).toString("base64")}">`,
+        );
+        return true;
+      }
+      const html = await sceneThumbnailHtml(project, sceneId);
       response.writeHead(200, {
         "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": "no-cache",
@@ -269,12 +335,22 @@ export async function motionApi(
     }
     if (action === "preview") {
       const doc = await readMotion(project);
-      const built = await motionHtml(project, doc.state);
+      const native = renderingMode() === "native";
+      const built = native
+        ? {
+            html: nativePreviewHtml(
+              `/api/projects/${encodeURIComponent(project.config.projectId)}/motion`,
+              doc.state.settings.width,
+              doc.state.settings.height,
+              doc.revision,
+            ),
+          }
+        : await motionHtml(project, doc.state);
       response.writeHead(200, {
         "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": "no-store",
         "Content-Security-Policy":
-          "default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'self'",
+          "default-src 'none'; connect-src 'self'; img-src data: blob: 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'self'",
       });
       response.end(built.html);
       return true;
@@ -321,6 +397,62 @@ export async function motionApi(
     }
   }
   if (request.method === "POST") {
+    if (action === "render-cache-clear") {
+      await clearNativeCache();
+      json({ cleared: true });
+      return true;
+    }
+    if (action === "render-sequence") {
+      const value = z
+        .object({
+          frames: z.array(z.number().int().min(0).max(108000)).min(1).max(30),
+          revision: z.string().optional(),
+        })
+        .strict()
+        .parse(JSON.parse((await body(request, 20000)).toString()));
+      const id = randomUUID(),
+        controller = new AbortController(),
+        job = {
+          projectId: project.config.projectId,
+          status: "running" as "running" | "completed" | "failed",
+          stage: "native-render",
+          progress: 0,
+          total: value.frames.length,
+          result: undefined as unknown,
+          error: undefined as string | undefined,
+        };
+      if (jobs.size > 200) {
+        for (const [key, v] of jobs)
+          if (v.status !== "running") {
+            jobs.delete(key);
+            break;
+          }
+      }
+      jobs.set(id, job);
+      controllers.set(id, controller);
+      json({ jobId: id }, 202);
+      void (async () => {
+        try {
+          for (const frame of value.frames) {
+            await renderProjectFrame(project, frame, {
+              revision: value.revision,
+              encoding: "rgba",
+              signal: controller.signal,
+            });
+            job.progress++;
+          }
+          job.status = "completed";
+          job.result = { frames: value.frames, renderer: "skia-cpu/1" };
+        } catch (e) {
+          job.status = "failed";
+          job.error = String(e);
+        } finally {
+          controllers.delete(id);
+        }
+      })();
+      return true;
+    }
+
     if (!request.headers["content-type"]?.startsWith("application/json"))
       throw new Error("application/json required");
     const input: unknown = JSON.parse(
@@ -430,13 +562,16 @@ export async function motionApi(
                 { signal: controller.signal },
               )
           : () =>
-              exportVideo(project.root, (progress, total) =>
-                jobs.set(id, {
-                  projectId: project.config.projectId,
-                  status: "running",
-                  progress,
-                  total,
-                }),
+              exportVideo(
+                project.root,
+                (progress, total) =>
+                  jobs.set(id, {
+                    projectId: project.config.projectId,
+                    status: "running",
+                    progress,
+                    total,
+                  }),
+                { signal: controller.signal },
               );
       void work()
         .then((result) =>

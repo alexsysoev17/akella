@@ -1,3 +1,5 @@
+import { renderingMode } from "../../native/client.js";
+import { nativeMotionQA } from "../../native/qa.js";
 import { qaAdmission } from "./policy.js";
 import { textRasterQA } from "./text.js";
 import { chromium, type Page, type Browser } from "playwright";
@@ -46,7 +48,7 @@ async function pixelDifference(page: Page, a: Buffer, b: Buffer) {
     { a: a.toString("base64"), b: b.toString("base64") },
   );
 }
-export async function motionQA(
+export async function browserMotionQA(
   project: LoadedProject,
   state: MotionState,
   relativeDirectory: string,
@@ -1052,3 +1054,6 @@ export async function motionQA(
   await atomicJson(path.join(directory, "report.json"), report);
   return report;
 }
+
+/** Explicit compatibility selection; production defaults to the shared native renderer. */
+export const motionQA:typeof browserMotionQA = (...args) => renderingMode()==="browser-compat" ? browserMotionQA(...args) : nativeMotionQA(...args);

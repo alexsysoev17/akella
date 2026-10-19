@@ -84,7 +84,7 @@ export async function mountMotion(
     )
       return;
     if (event.data?.type === "motion-ready") {
-      send({ type: "motion-state", state: data.document.state });
+      send({ type: "motion-state", state: data.document.state, revision:data.document.revision });
       seek(frame);
       if (pendingPlayback) {
         pendingPlayback = false;
@@ -93,6 +93,7 @@ export async function mountMotion(
           executionMessage || "Анимация обновлена. Воспроизводим preview.";
       }
     }
+    if(event.data?.type === "motion-render-error")error(event.data.error);
     if (event.data?.type === "motion-select") {
       selected = data.objects.find(
         (o) =>
@@ -287,7 +288,7 @@ export async function mountMotion(
       $("m-preview").style.aspectRatio = `${s.width}/${s.height}`;
       $("m-preview").src =
         url + "/preview?revision=" + encodeURIComponent(doc.revision);
-    } else send({ type: "motion-state", state: doc.state });
+    } else send({ type: "motion-state", state: doc.state, revision:doc.revision });
     objects();
     seek(frame);
   }
@@ -472,7 +473,7 @@ export async function mountMotion(
       <select id="m-scenes" hidden aria-hidden="true" tabindex="-1">${data.scenes.map((s) => `<option value="${esc(s.sceneId)}">${esc(s.name)}</option>`).join("")}</select>
       <div id="m-objects" class="scene-tree">${data.scenes.map((s, i) => `<div class="scene-row" data-scene-row="${esc(s.sceneId)}"><button data-scene-button="${esc(s.sceneId)}" aria-expanded="false" title="${esc(s.name)}"><span class="disclosure">›</span><span class="scene-title">Сцена ${i + 1}</span><span class="scene-name">${esc(s.name)}</span></button><iframe class="scene-thumb" title="Миниатюра сцены ${i + 1}" tabindex="-1" aria-hidden="true" loading="lazy" src="${url}/thumbnail/${encodeURIComponent(s.sceneId)}"></iframe></div><div class="scene-objects" data-scene-objects="${esc(s.sceneId)}" hidden></div>`).join("")}</div>
       <button id="m-open-settings" class="settings-launch"><span>⚙</span> Настройки</button></aside>
-      <div class="motion-workspace"><div class="viewer-toolbar"><div class="toolbar-actions"><button id="m-undo" class="quiet" title="Отменить" aria-label="Отменить">↶</button><button id="m-redo" class="quiet" title="Повторить" aria-label="Повторить">↷</button><button id="m-render" class="secondary">Экспорт MP4</button></div></div>
+      <div class="motion-workspace"><div class="viewer-toolbar"><small class="muted">${data.renderer === "browser-compat" ? "Совместимость · браузерный рендер" : "Skia · нативный рендер"}</small><div class="toolbar-actions"><button id="m-undo" class="quiet" title="Отменить" aria-label="Отменить">↶</button><button id="m-redo" class="quiet" title="Повторить" aria-label="Повторить">↷</button><button id="m-render" class="secondary">Экспорт MP4</button></div></div>
       <div class="video-stage"><iframe id="m-preview" title="Покадровый preview анимации"></iframe></div>
       <div class="transport"><button id="m-play" class="quiet">▶ Воспроизвести</button><div id="m-timeline" role="slider" tabindex="0" aria-label="Позиция на таймлайне" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div><input type="range" min="0" value="0" id="m-scrub" hidden aria-hidden="true" tabindex="-1"><span id="m-time"></span></div>
       <div class="prompt-composer"><label class="sr-only" for="m-ai">Опишите анимацию</label><textarea id="m-ai" placeholder="Опишите, как должна двигаться сцена…"></textarea><div class="composer-footer"><button id="m-inspector" class="secondary">Inspector</button><button id="m-cancel" hidden>Отменить</button><button id="m-generate">Сделать <span aria-hidden="true">↗</span></button></div></div>

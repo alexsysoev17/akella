@@ -6,6 +6,22 @@ AI Motion Agent самостоятельно выбирает объект и н
 
 Одинаковые имена слоёв теперь связывают состояния между сценами: **точное имя → logical object → переход по исходной геометрии**. Инструкция, ограничения композиции и результаты приёмки: [Object States](docs/object-states.md).
 
+## Native Renderer (Skia)
+
+По умолчанию сцены рисует **CPU Skia в Node Worker**, через официальный `canvaskit-wasm@0.42.0`. Браузер показывает готовые RGBA-кадры; тот же рендерер подаёт кадры в FFmpeg. Текст остаётся редактируемыми данными, Trim Paths вырезает реальные сегменты кривых. Figma previews не используются для восстановления сцены.
+
+Нужные шрифты должны быть установлены локально; отсутствие семейства показывается предупреждением. После установки шрифтов перезапустите сервер. `AKELLA_FONT_DIRS` позволяет задать каталоги шрифтов (на macOS разделитель `:`). Совпадение с Figma пиксель в пиксель не гарантируется.
+
+Временный старый путь можно включить явно перед запуском:
+
+```sh
+AKELLA_RENDERER=browser-compat sh scripts/platform.sh dev
+```
+
+Автоматического скрытого переключения нет. В native пока не поддержаны градиентная заливка текста, paragraph indent и tiled image fills; часть эффектов сообщает ограничения. Word/grapheme animation требует проверки лигатур и связанных письменностей. Новый сложный кадр на CPU может считаться дольше33мс; Preview пропускает показ кадров под нагрузкой, экспорт считает каждый.
+
+Проверки: `npm run test:native` — native pixels/API/Chromium+WebKit transport/FFmpeg; `npm run test:compat` — прежний renderer; `npm test` — оба набора. `npm run benchmark` — подготовленные reference-ответы, не live AI. Полная схема, API, лимиты и фактически измеренные результаты — в [architecture-handoff](docs/architecture-handoff.md#native-skia-rendering-migration--2026-10-19-v1019).
+
 ## Запуск на этом Mac
 
 ```sh
@@ -33,7 +49,7 @@ sh scripts/platform.sh dev
 
 ```sh
 npm ci
-node node_modules/playwright/cli.js install chromium
+node node_modules/playwright/cli.js install chromium webkit # только для browser QA/compatibility tests
 npm run check
 npm run dev
 npm run projects
