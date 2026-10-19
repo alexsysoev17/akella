@@ -12,7 +12,7 @@
     "dev": "node --import tsx apps/scene-validator/src/cli.ts dev",
     "typecheck": "tsc --noEmit -p tsconfig.check.json",
     "build": "tsc && node scripts/build-ui.mjs",
-    "test": "node --import tsx --test apps/scene-validator/tests/*.test.ts",
+    "test": "node --import tsx --test --test-concurrency=1 apps/scene-validator/tests/*.test.ts && npm run test:text-placement",
     "check": "npm run typecheck && npm test && npm run build",
     "projects": "node --import tsx apps/scene-validator/src/cli.ts projects",
     "import": "node --import tsx apps/scene-validator/src/cli.ts import",
@@ -32,7 +32,8 @@
     "benchmark:video": "node --import tsx scripts/benchmark.ts --video --cases WORKFLOW_04_EIGHT_OBJECTS,WORKFLOW_05_PATH_SEQUENCE",
     "benchmark:report": "node --import tsx scripts/benchmark-report.ts",
     "diagnose:text": "node --import tsx scripts/diagnose-text.ts",
-    "benchmark:qualify": "node --import tsx scripts/benchmark.ts --live --qualify"
+    "benchmark:qualify": "node --import tsx scripts/benchmark.ts --live --qualify",
+    "test:text-placement": "node --import tsx --test apps/scene-validator/tests/text-placement.browser.ts"
   },
   "dependencies": {
     "@openai/codex-sdk": "0.162.1",

@@ -1,3 +1,4 @@
+import { configureTextPlane } from "./text-transport.js";
 import { snapshotText, type TextLayout, type TextUnit } from "./text-layout.js";
 import type { Animation, MotionState } from "./schema.js";
 import type { Values } from "./engine.js";
@@ -116,11 +117,8 @@ export function prepareTextAnimation(node: SVGGElement, state: MotionState) {
     slice.setAttribute("clip-path", `url(#${clip.id})`);
     const clone = source.cloneNode(true) as SVGForeignObjectElement;
     clone.style.visibility = "visible";
-    const html = clone.firstElementChild as HTMLElement;
-    html.style.willChange = "transform, opacity";
-    html.style.transformOrigin = "0 0";
-    html.style.transform = "translate3d(0,0,0)";
-    mover.setAttribute("data-text-renderer", "html-compositor");
+    const transport = configureTextPlane(clone);
+    mover.setAttribute("data-text-renderer", transport);
     slice.append(clone);
     mover.append(slice);
     mask.append(mover);
@@ -297,19 +295,23 @@ export function placeTextUnit(
 ) {
   const dx = v.x ?? 0,
     dy = v.y ?? 0;
-  // SVG-transforming foreignObject re-hints text at integer baselines in Chromium.
-  // Move its composited HTML plane instead; the source slice follows that plane,
-  // while an optional reveal mask remains fixed in the source coordinate system.
-  unit.mover.setAttribute("transform", "translate(0 0)");
+  // Chromium uses a shaped HTML plane for subpixel transport. WebKit must keep
+  // transform/alpha on SVG to preserve source placement. The clip follows the
+  // chosen plane exactly once; optional reveal masks remain source-local.
+  const native = unit.mover.dataset.textRenderer === "svg-native";
+  unit.mover.setAttribute(
+    "transform",
+    native ? `translate(${dx} ${dy})` : "translate(0 0)",
+  );
   unit.mover.setAttribute("data-text-offset", JSON.stringify({ x: dx, y: dy }));
   const html = unit.mover.querySelector("foreignObject")!
     .firstElementChild as HTMLElement;
-  html.style.transform = `translate3d(${dx}px,${dy}px,0)`;
-  unit.sliceRect.setAttribute("x", String(unit.bounds.x + dx));
-  unit.sliceRect.setAttribute("y", String(unit.bounds.y + dy));
-  unit.mover.setAttribute("opacity", "1");
+  html.style.transform = native ? "none" : `translate3d(${dx}px,${dy}px,0)`;
+  unit.sliceRect.setAttribute("x", String(unit.bounds.x + (native ? 0 : dx)));
+  unit.sliceRect.setAttribute("y", String(unit.bounds.y + (native ? 0 : dy)));
+  unit.mover.setAttribute("opacity", String(native ? (v.opacity ?? 1) : 1));
   unit.mover.setAttribute("data-text-opacity", String(v.opacity ?? 1));
-  html.style.opacity = String(v.opacity ?? 1);
+  html.style.opacity = String(native ? 1 : (v.opacity ?? 1));
 }
 
 /** Read-on-demand diagnostics: rendering does not measure/rebuild layout here. */
@@ -349,7 +351,7 @@ export function textDiagnostics(
         visibleInScene,
         segmentation: e.track.text!.segmentation,
         staggerFrames: e.track.text!.staggerFrames,
-        renderer: "foreignObject/html-compositor",
+        renderer: e.units[0]?.mover.dataset.textRenderer,
         layoutHash: "text-layout/1-" + (hash >>> 0).toString(16),
         preparationMs: e.layout.preparationMs,
         lineCount: e.layout.lines.length,
@@ -381,7 +383,10 @@ export function textDiagnostics(
           const matrix = unit.mover.getScreenCTM(),
             html =
               unit.mover.querySelector("foreignObject")!.firstElementChild!;
-          const rendered = new DOMMatrix(getComputedStyle(html).transform);
+          const native = unit.mover.dataset.textRenderer === "svg-native";
+          const rendered = native
+            ? unit.mover.transform.baseVal.consolidate()!.matrix
+            : new DOMMatrix(getComputedStyle(html).transform);
           const effective = matrix
             ? DOMMatrix.fromMatrix(matrix).multiply(
                 new DOMMatrix(getComputedStyle(html).transform),
@@ -412,7 +417,11 @@ export function textDiagnostics(
             },
             offset: { x: values.x ?? 0, y: values.y ?? 0 },
             opacity: values.opacity ?? 1,
-            renderedOpacity: Number(getComputedStyle(html).opacity),
+            renderedOpacity: Number(
+              native
+                ? unit.mover.getAttribute("opacity")
+                : getComputedStyle(html).opacity,
+            ),
             expectedOpacity: expected.opacity ?? 1,
             renderedOffset: !visibleInScene
               ? null

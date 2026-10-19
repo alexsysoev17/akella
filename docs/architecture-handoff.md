@@ -4,13 +4,13 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-19 (Europe/Moscow) — AI product portability hardening; targeted update, not a full re-audit |
+| Last Updated | 2026-10-19 (Europe/Moscow) — text placement regression repair; targeted update, not a full re-audit |
 | Last Full Audit | 2026-10-13 — структурный аудит исходников перечисленных подсистем; не полный production E2E и не формальная верификация каждой ветви |
-| Git Commit | Checkpoint `6d64e1f`, after portability commit `4495bb9`; hardening changes are uncommitted at this documentation update. |
+| Git Commit | Checkpoint `7ce6ab9`, after product hardening commit `e573774`; text placement repair is uncommitted at this documentation update. |
 | Git Branch | `main`; локальный репозиторий создан после первоначального аудита |
-| Working Tree Status | main; reviewed product-hardening source/tests/docs uncommitted at this update. No client project data changed. |
-| Documentation Version | 1.0.17 |
-| Scope of Last Update | Shared capability guidance, full request budgets, adapter health/errors, model qualification, incremental inventory, explicit history archival, compact commit diagnostics; local tests and one live Codex smoke. |
+| Working Tree Status | main; text transport, browser regression tests and documentation uncommitted at this update. No source design or client motion state edited. |
+| Documentation Version | 1.0.18 |
+| Scope of Last Update | WebKit foreignObject compositor placement, browser-specific transport within existing renderer, source-to-pixel tests, coordinate trace and known subpixel limits. No AI/provider changes. |
 | Code snapshot SHA-256 | NOT RECALCULATED for this update; use component version digests in actual run artifacts and subsequent Git commit. |
 
 Git 2.54.0 (Apple Git-157): локальная история на main, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
@@ -1171,7 +1171,44 @@ This increment reuses the existing planner, compiler, provider registry, QA and 
 - Synthetic 32 MiB asset: cold hash 30.754 ms, warm inventory 1.396 ms, zero binary bytes rehashed on warm hit. This is one local sample, not a general large-project benchmark.
 - Full eight-case live qualification, API/local-model integration and a new dedicated Preview/MP4 comparison were NOT RUN in this increment. Previous MP4 evidence remains historical. Model admission, full diagnostic scaling, token reduction and gradual module decomposition remain ongoing engineering work.
 
+## Text placement regression — 2026-10-19 (v1.0.18)
+
+### Confirmed cause and actual boundary
+
+Reproduced on existing `projects/test14`, text `9:339`, parent `9:332`, scene `scene_9_3a_332`, using actual Chromium and Playwright WebKit 26.5. No Figma/source edits or coordinate compensation. Imported source has parent-local/scene translation `(22,27)`, absolute translation `(-1997,-2142)`, width444.6559753417969, height162, rotation0. At the measured viewport scale1.021759697 the screen matrix translation is `(22.47871334,27.58751183)`.
+
+The first divergence is **painting/compositing**, not exporter/importer, snapshot layout, source matrix or animation state. WebKit reports a correct CTM and bounding rectangle but paints HTML with `will-change:transform,opacity` / CSS transform inside SVG foreignObject at the SVG origin. Even with all animations disabled this occurs in Motion Preview; ordinary static reconstruction has no promoted HTML plane and retains position. The HTML-compositor optimization introduced in `efcd2f2` is the relevant regression trigger. The later provider portability change does not alter text geometry.
+
+Measured white-glyph pixel bounds in the header crop (x0,y0,x1,y1), frame89 in animated mode:
+
+| Renderer | Before static | After static | After segmented resting text |
+|---|---|---|---|
+| Chromium |23,34,466,183|23,34,466,183|23,34,466,183|
+| WebKit |0,6,442,156|22,34,465,183|23,34,465,183|
+
+Pixel glyph origin differs legitimately from the object-box origin. Cross-browser1px edge differences are not a new layout offset or a claim of identical fonts. The local artifacts `artifacts/text-position/coordinate-trace.json`, `before-*` and `after-*` contain source values, DOM matrices and actual PNGs. They are ignored client diagnostics, not repository fixtures. Actual Figma Desktop re-export was NOT RUN; existing exported source and repeated synthetic imports were checked.
+
+### Coordinate ownership and correction
+
+- Exported `sceneTransform` remains canonical. `renderer.ts:render` recovers parent-local matrices through `inverse(parent) * sceneTransform`; SVG ancestry owns scene/object transforms, unchanged.
+- `text-layout.ts:snapshotText` stores shaped line/word/grapheme boxes in text-object-local coordinates. These are not scene positions and never replace source matrices.
+- `motion/text-transport.ts:configureTextPlane` selects the paint transport. Chromium retains its original HTML compositor initialization. WebKit removes HTML promotion before layout/readiness and uses `svg-native`; no source properties are modified. This is a narrow tested engine policy based on browser identification, not a general raster feature detector. Future WebKit versions require revalidation.
+- `browser.ts` configures all native text planes before preparing snapshots and revealing the canvas. `text-animation.ts:prepareTextAnimation/placeTextUnit` uses the same transport for clones: Chromium offsets/alpha on HTML with following slice bounds; WebKit offsets/alpha on the SVG mover with unchanged local slice bounds. Optional masks remain fixed in source-local space. Both preserve persistent units at rest and existing inertia evaluation, segmentation, typography and alignment.
+- `textDiagnostics` and `text-probe.ts` report the actual transport and measure its actual offsets/opacity. The probe is not silently labeled compositor when using native SVG. Geometry/readiness checks are not substitutes for pixel tests.
+
+A proposed `position:fixed` HTML workaround was rejected: it fails with transformed preview ancestors/scaling. SVG filters/compositing isolation did not correct the measured defect. No such workaround, fixed correction, alignment change or new renderer is shipped.
+
+### Verification and limits
+
+`tests/text-placement.browser.ts` uses actual pixels in Chromium and WebKit, source reconstruction as a per-browser reference, and a negative control restoring the old composited HTML style (which loses placement). It covers static/resting block slide/fade, line slide/fade/compound/inertia, word/character motion, three alignments, auto-resize metadata/fixed boxes, missing-font fallback, empty text, nested rotated/scaled parents, viewport resize, nonsequential seek, edit/removal, actual save/reload, repeated imports and unchanged source/non-text pixels. It is a synthetic fixture; the real project PNG evidence is separate. Existing text tests exercise Chromium subpixel transport, Unicode/mixed typography, clipping and decoded MP4 comparisons.
+
+Browser raster tests are run sequentially in `npm test`, with cross-browser placement as a separate final stage (`npm run test:text-placement`). Parallel runs exposed an intermittent Chromium DPR2 raster test failure (0.25px residual against0.125px threshold), including a run without concurrent WebKit. This is not proven to be a WebKit-only contention issue. Extra requestAnimationFrame waits did not reliably fix it and were removed; thresholds and checks remain unchanged. Actual commands: `node --import tsx --test --test-concurrency=1 apps/scene-validator/tests/*.test.ts`: **227/227**, 77.356s; `node --import tsx --test apps/scene-validator/tests/text-placement.browser.ts`: **2/2**, 6.172s. TypeScript check/application build/UI bundle PASS. No tests skipped. Chromium DPR2 residual0.000379px against unchanged0.125px tolerance; the negative legacy SVG test still fails as expected. Existing Chromium Preview/decoded MP4 frame10/20/45 mean-RGBA errors0.605/1.120/2.151 (<3). New WebKit Preview/decoded Chromium MP4 frame4/7/10 mean-RGBA errors0.907/0.977/0.977 (<3), with different glyph/codec threshold edge bounds; this is a codec-tolerance comparison, not pixel-exact or arbitrary-frame parity. Source placement is separately checked against per-browser static reconstruction (2px edge tolerance) before codec conversion. No live AI calls were needed or made.
+
+**Remaining limitation:** WebKit native SVG transport preserves placement but does not inherit Chromium's subpixel-compositor quality. An isolated fractional SVG transport experiment measured up to0.75px centroid residual. No claim that WebKit passes the0.125px jitter criterion. Chromium/MP4 keep the existing compositor; Preview and video may differ in subpixel/font rasterization. This repair restores source placement, not complete cross-browser motion-raster parity or every Definition-of-Done quality criterion. The source/segmentation/math have not been weakened to hide this limitation.
+
 ## ARCHITECTURE CHANGE HISTORY
+
+- 2026-10-19 — v1.0.18: reproduced WebKit foreignObject HTML-layer paint displacement despite correct matrices; native SVG transport on WebKit, unchanged Chromium compositor, source-to-pixel browser regressions and actual coordinate evidence. Targeted repair; WebKit subpixel quality remains limited.
 
 - 2026-10-19 — v1.0.17: shared capability guidance, complete request/model budgets, adapter health/errors, eight-case live qualification command, bounded source hash cache, explicit history archival and compact commit diagnostics. 227 local tests and 56 reference cases pass; one live compound smoke passes. Actual token usage increased; no API/local or complete live qualification claim.
 

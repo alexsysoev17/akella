@@ -1,3 +1,4 @@
+import { configureTextPlane } from "./text-transport.js";
 import { textRenderProbe } from "./text-probe.js";
 import {
   prepareTextAnimation,
@@ -47,6 +48,11 @@ window.motionReady = (async () => {
     ...document.querySelectorAll<HTMLElement>("[data-motion-block]"),
   ];
   for (const block of blocks) block.style.display = "block";
+  // Configure transport before measuring immutable text layout. It never owns source position.
+  for (const source of document.querySelectorAll<SVGForeignObjectElement>(
+    "foreignObject[data-text-source]",
+  ))
+    configureTextPlane(source);
   const missing: string[] = [];
   await Promise.all(
     [...document.querySelectorAll<HTMLElement>("[data-text-start]")].map(

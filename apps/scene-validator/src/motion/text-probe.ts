@@ -82,8 +82,7 @@ export function textRenderProbe(
       htmlBackground: document.documentElement.style.background,
       canvas,
       visibility: canvas?.style.visibility ?? "",
-      legacy:
-        options.legacy ?? original.dataset.textRenderer !== "html-compositor",
+      legacy: options.legacy ?? false,
     };
     if (canvas) canvas.style.visibility = "hidden";
     document.body.style.background = "transparent";
@@ -95,7 +94,9 @@ export function textRenderProbe(
       height,
       source:
         "actual cloned text render plane; alpha-centroid local transport probe",
-      renderer: active.legacy ? "legacy-svg-transform" : "html-compositor",
+      renderer: active.legacy
+        ? "legacy-svg-transform"
+        : original.dataset.textRenderer,
     };
   }
   if (!active) return null;
