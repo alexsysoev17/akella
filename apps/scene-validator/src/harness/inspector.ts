@@ -117,6 +117,9 @@ export async function inspectorRun(root: string, id: string, raw = false) {
       ? (trace.find((e) => e.stage === "received")?.data ?? "NOT_AVAILABLE")
       : requestFile;
   const doc = full ? ((await saved(root, "motion/motion.json")) as Data) : {};
+  const commitReceipt = full
+    ? ((await saved(root, `motion/ai/${id}/commit-receipt.json`)) as Data)
+    : {};
   const history = Array.isArray(doc.history)
     ? doc.history.filter(
         (h: Data) =>
@@ -325,7 +328,13 @@ export async function inspectorRun(root: string, id: string, raw = false) {
               status: "COMMITTED_HISTORY",
               entries: history.map((h: Data) => h.editId),
             }
-          : { status: "NOT_CONFIRMED" },
+          : commitReceipt?.status === "COMMITTED" && commitReceipt.runId === id
+            ? {
+                ...commitReceipt,
+                status: "HISTORICAL_COMMIT_RECEIPT",
+                currentEffectiveState: "NOT_CONFIRMED",
+              }
+            : { status: "NOT_CONFIRMED" },
     candidateCommit: full
       ? await saved(root, `motion/ai/${id}/candidate-commit.json`)
       : "NOT_AVAILABLE",

@@ -1,5 +1,6 @@
 import {
   saveProviderSettings,
+  loadProviderSettings,
   ProviderSettingsError,
 } from "./provider-settings.js";
 import {
@@ -222,7 +223,12 @@ export async function motionApi(
       return true;
     }
     if (action === "provider") {
-      json(await providerStatus());
+      json(
+        await providerStatus(
+          (await loadProviderSettings(project)).settings,
+          project.root,
+        ),
+      );
       return true;
     }
     if (action === "object") {

@@ -4,6 +4,20 @@ import { noSymlinkPath } from "../files.js";
 import path from "node:path";
 export const harnessConfigSchema = z
   .object({
+    modelProfiles: z
+      .array(
+        z
+          .object({
+            provider: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
+            model: z.string().max(200),
+            contextWindowTokens: z.number().int().positive(),
+            maxOutputTokens: z.number().int().positive(),
+            transportOverheadTokens: z.number().int().min(0),
+          })
+          .strict(),
+      )
+      .max(100)
+      .default([]),
     maxLLMCalls: z.number().int().min(1).max(10).default(3),
     maxRepairAttempts: z.number().int().min(0).max(2).default(2),
     maxContextBytes: z.number().int().min(4000).max(300000).default(60000),

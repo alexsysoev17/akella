@@ -218,3 +218,54 @@ export async function changeMotion(
     await unlock();
   }
 }
+
+/** Explicit maintenance, never automatic history deletion. Original document remains archived. */
+export async function archiveMotionHistory(
+  projectPath: string,
+  expectedRevision: string,
+  keepEntries = 100,
+) {
+  if (
+    !Number.isSafeInteger(keepEntries) ||
+    keepEntries < 1 ||
+    keepEntries > 10000
+  )
+    throw new Error("Invalid history retention count");
+  const unlock = await lockProject(projectPath);
+  try {
+    const project = await loadProject(projectPath),
+      doc = await readMotion(project);
+    if (doc.revision !== expectedRevision)
+      throw new Error("STALE_PROJECT_REVISION");
+    const drop = Math.max(0, doc.cursor - keepEntries);
+    if (!drop)
+      return {
+        archived: false,
+        revision: doc.revision,
+        removedFromActiveHistory: 0,
+      };
+    const directory = await safeDirectory(
+      project.root,
+      "motion/history-archives",
+    );
+    const archive = path.join(directory, `${randomUUID()}.json`);
+    await atomicJson(archive, doc, { durable: true });
+    doc.history = doc.history.slice(drop);
+    doc.cursor -= drop;
+    doc.revision = randomUUID();
+    delete doc.lastCommit;
+    delete doc.sourceDiagnostics;
+    documentSchema.parse(doc);
+    await atomicJson(path.join(project.root, "motion/motion.json"), doc, {
+      durable: true,
+    });
+    return {
+      archived: true,
+      revision: doc.revision,
+      removedFromActiveHistory: drop,
+      archive: path.relative(project.root, archive),
+    };
+  } finally {
+    await unlock();
+  }
+}

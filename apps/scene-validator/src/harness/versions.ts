@@ -2,6 +2,11 @@ import { readFile } from "node:fs/promises";
 import { digest } from "./context.js";
 const components = [
   "files",
+  "source",
+  "harness/providers/budget",
+  "harness/providers/codex",
+  "harness/qualification",
+  "motion-library/guidance",
   "motion/store",
   "motion/service",
   "motion/geometry",

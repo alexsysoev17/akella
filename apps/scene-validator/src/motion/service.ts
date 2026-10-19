@@ -9,7 +9,7 @@ import {
 import { providerIds } from "../harness/providers/index.js";
 import { redact, redactSecrets } from "../harness/security.js";
 import { HarnessRun } from "../harness/runtime.js";
-import { agentContext } from "../harness/context.js";
+import { digest, agentContext } from "../harness/context.js";
 import { recentSuccessfulActions } from "./contextual-resolution.js";
 import { RunQA } from "../harness/qa.js";
 import type { HarnessConfig } from "../harness/config.js";
@@ -588,6 +588,19 @@ export async function proposeMotion(
           },
         };
         try {
+          if (generated.reconciliation.completed)
+            await atomicJson(path.join(directory, "commit-receipt.json"), {
+              runId: id,
+              receipt: committed.lastCommit,
+              status: "COMMITTED",
+              beforeStateDigest: stateDigest(doc.state),
+              afterStateDigest: stateDigest(committed.state),
+              changes: motionDiff(doc.state, committed.state).map((c) => ({
+                path: c.path,
+                beforeDigest: digest(c.before),
+                afterDigest: digest(c.after),
+              })),
+            });
           await harness?.record("commit-result", {
             persisted: !!generated.reconciliation.completed,
             receipt: committed.lastCommit ?? null,

@@ -16,7 +16,7 @@ export async function inspectSource(
   reportRelative = "export-report.json",
 ): Promise<SourceInspection> {
   relativePath(sceneRelative, "scene path");
-  const files = await inventory(root);
+  const files = await inventory(root, { reuseHashes: true });
   const cacheKey =
     root +
     "/" +

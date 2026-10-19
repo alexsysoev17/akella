@@ -184,7 +184,7 @@ export async function selectorContext(
       fullDocumentSent: false,
       profile: "selector-edit",
       objectIndex:
-        "named/selected/recent candidates only; resolver queries full authoritative state",
+        "all-scene compact identities; resolver queries full authoritative state; read visibility does not authorize writes",
     },
   };
   const bytes = Buffer.byteLength(JSON.stringify(value));

@@ -1,3 +1,8 @@
+import {
+  archiveMotionHistory,
+  readMotion,
+} from "../apps/scene-validator/src/motion/store.js";
+import { loadProject } from "../apps/scene-validator/src/project.js";
 import { runAgentEvals } from "../apps/scene-validator/src/harness/evals.ts";
 import { evalFixture } from "./harness-fixtures.ts";
 import {
@@ -27,7 +32,21 @@ const run = async (config?: Parameters<typeof runAgentEvals>[0]["config"]) =>
     onCase: (id, status) => console.log(id, status),
   });
 if (command === "eval") console.log(JSON.stringify(await run(), null, 2));
-else if (command === "metrics") {
+else if (command === "archive-history") {
+  if (!root) throw new Error("--project required");
+  const project = await loadProject(root);
+  console.log(
+    JSON.stringify(
+      await archiveMotionHistory(
+        root,
+        (await readMotion(project)).revision,
+        Number(arg("keep", "100")),
+      ),
+      null,
+      2,
+    ),
+  );
+} else if (command === "metrics") {
   if (!root) throw new Error("--project required");
   console.log(JSON.stringify(harnessMetrics(await readRuns(root)), null, 2));
 } else if (command === "improvements") {

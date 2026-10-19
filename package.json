@@ -31,7 +31,8 @@
     "benchmark:replay": "node --import tsx scripts/replay-agent-run.ts",
     "benchmark:video": "node --import tsx scripts/benchmark.ts --video --cases WORKFLOW_04_EIGHT_OBJECTS,WORKFLOW_05_PATH_SEQUENCE",
     "benchmark:report": "node --import tsx scripts/benchmark-report.ts",
-    "diagnose:text": "node --import tsx scripts/diagnose-text.ts"
+    "diagnose:text": "node --import tsx scripts/diagnose-text.ts",
+    "benchmark:qualify": "node --import tsx scripts/benchmark.ts --live --qualify"
   },
   "dependencies": {
     "@openai/codex-sdk": "0.162.1",

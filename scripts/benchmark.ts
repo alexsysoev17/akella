@@ -1,3 +1,7 @@
+import {
+  qualificationCases,
+  modelQualification,
+} from "../apps/scene-validator/src/harness/qualification.js";
 import { benchmarkSummary, writeBenchmarkReport } from "./benchmark-report.ts";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
@@ -21,6 +25,10 @@ const datasetPath = arg("dataset", "harness/evals/benchmark.json")!,
   );
 const live = args.includes("--live"),
   provider = live ? arg("provider", "codex-sdk")! : "benchmark-reference";
+if (args.includes("--qualify") && (!live || !arg("model")))
+  throw new Error(
+    "Qualification requires --live and explicit --model before any provider calls",
+  );
 let current = dataset.cases[0];
 function nativeWire(value: unknown, schema: unknown, root = schema): unknown {
   if (!schema || typeof schema !== "object") return value;
@@ -156,7 +164,9 @@ try {
     fixture: evalFixture,
     keepFixtures: args.includes("--keep-fixtures"),
     verifyVideo: args.includes("--video"),
-    caseIds: arg("cases")?.split(","),
+    caseIds:
+      arg("cases")?.split(",") ??
+      (args.includes("--qualify") ? qualificationCases : undefined),
     config: { maxLLMCalls: 1, maxRepairAttempts: 0 },
     onCase: (id, status) => {
       current = dataset.cases.find((c) => c.evalId === id)!;
@@ -194,6 +204,9 @@ try {
       : "CLEAN",
     versions,
     measurements: benchmarkSummary(result),
+    qualification: args.includes("--qualify")
+      ? modelQualification(result)
+      : undefined,
     benchmark: {
       cases: result.results.length,
       passed,
@@ -208,7 +221,12 @@ try {
   await writeFile(output, JSON.stringify(report, null, 2));
   await writeBenchmarkReport(output);
   console.log(JSON.stringify({ output, ...report.benchmark }, null, 2));
-  if (passed !== result.results.length) process.exitCode = 1;
+  if (
+    passed !== result.results.length ||
+    (report.qualification &&
+      report.qualification.status !== "QUALIFIED_FOR_TESTED_WORKFLOWS")
+  )
+    process.exitCode = 1;
 } finally {
   unregister();
 }

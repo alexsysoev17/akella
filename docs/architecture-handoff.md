@@ -4,13 +4,13 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-19 (Europe/Moscow) — AI-native/provider portability review; not a full re-audit |
+| Last Updated | 2026-10-19 (Europe/Moscow) — AI product portability hardening; targeted update, not a full re-audit |
 | Last Full Audit | 2026-10-13 — структурный аудит исходников перечисленных подсистем; не полный production E2E и не формальная верификация каждой ветви |
-| Git Commit | Checkpoint `48baa93` after reliability commit `e4aee55`; provider-portability source/tests/docs are the subsequent working-tree change set at documentation update. |
+| Git Commit | Checkpoint `6d64e1f`, after portability commit `4495bb9`; hardening changes are uncommitted at this documentation update. |
 | Git Branch | `main`; локальный репозиторий создан после первоначального аудита |
-| Working Tree Status | main; reviewed provider-portability source/tests/docs uncommitted at this update. No project data changed. |
-| Documentation Version | 1.0.16 |
-| Scope of Last Update | Targeted AI-native/product and provider-portability audit; model identifiers, explicit output schema dialect, capability admission and adapter contract tests. No new full audit or live provider integration. |
+| Working Tree Status | main; reviewed product-hardening source/tests/docs uncommitted at this update. No client project data changed. |
+| Documentation Version | 1.0.17 |
+| Scope of Last Update | Shared capability guidance, full request budgets, adapter health/errors, model qualification, incremental inventory, explicit history archival, compact commit diagnostics; local tests and one live Codex smoke. |
 | Code snapshot SHA-256 | NOT RECALCULATED for this update; use component version digests in actual run artifacts and subsequent Git commit. |
 
 Git 2.54.0 (Apple Git-157): локальная история на main, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
@@ -1116,7 +1116,7 @@ Remaining priorities: compact schema/provider overhead with measured live eviden
 - `structuredOutput` capability is now checked before calling the adapter. An adapter without native schema enforcement can still implement JSON prompting/parsing and declare structured output, but it must return parsed data; downstream validation remains mandatory. Unsupported output fails before generation. Unsolicited tool calls are rejected even in AIClient paths without a Harness runtime; primary Harness already rejected them.
 - These changes do not implement OpenAI/Claude HTTP clients, local model serving or automatic model routing. Existing adapters, project states, compiler and QA remain shared. No provider-specific Motion Knowledge added.
 
-### Verified weaknesses / recommended order
+### Historical findings before v1.0.17 (current disposition below)
 
 | Priority | Evidence | Product consequence / next step |
 |---|---|---|
@@ -1140,7 +1140,40 @@ To add an adapter: implement generate/capabilities, register a stable ID at star
 
 Four new adapter-contract tests cover namespaced/tagged model IDs, raw JSON-schema optional fields, strict/default backward compatibility, runtime rejection of malformed output, unsupported structured capability with zero calls and forbidden tools without Harness runtime. They use mock adapters; they do not verify a real API/local model. Actual verification: TypeScript typecheck/build and UI bundling PASS; full suite **219/219**, no failed/skipped tests,18.250 s; five reference-provider production-path benchmark cases **5/5** (`artifacts/harness/provider-portability-reference.json`). No live provider calls in this update.
 
+## AI product hardening — 2026-10-19 (v1.0.17)
+
+This increment reuses the existing planner, compiler, provider registry, QA and benchmark. It does not introduce a second engine, provider router or model-specific knowledge base.
+
+### Runtime changes and contracts
+
+- `motion-library/guidance.ts:capabilityGuidance` derives text capabilities/constraints from the existing registry. `motion/provider.ts` adds this guidance to structured calls and compatibility prompts. Contradictory legacy text restrictions and nearest-effect substitution instructions were removed. Explicit unsupported techniques must remain diagnosed; true path reveal and evaluator-based inertia cannot be substituted. Large legacy modules remain; this is not a complete compiler refactor.
+- `harness/providers/budget.ts:providerBudget` accounts for messages, response schema and tools in the serialized request, retaining the common byte limit. Optional exact provider/model profiles in `motion/harness/config.json:modelProfiles` reserve output and transport overhead against a context window. Adapter `estimateInputTokens` is optional; fallback is a conservative UTF-8 byte bound, not measured tokenizer usage. Actual transport hidden overhead needs a configured reserve. No model window specifications are invented. Smaller models may require further schema reduction; unknown profiles do not provide a model-window guarantee. Output is capped by the configured profile; content is never silently truncated.
+- `ProviderAdapter.health()` owns connectivity. The API reads the selected project provider; absent health support yields UNKNOWN. Codex keeps its existing login check with a five-second timeout. Typed transport categories include authorization, rate limit, overload, context exhaustion and timeout. No blind retries added. API/local adapters and machine credential provisioning remain NOT IMPLEMENTED.
+- `motion/intent/planner.ts:semanticContext` factors repeated object-type sets into references and omits redundant capability descriptions. IDs, constraints and technique contracts remain available. `harness/runtime.ts` traces per-component bytes and full input budget. This change does not establish a token-cost reduction (actual evidence below).
+
+### Qualification and consistency
+
+`harness/qualification.ts` and `scripts/benchmark.ts --live --qualify` require an explicit model and eight existing representative cases: single/compound creation, sequencing, complex scenes, multi-turn editing, lifecycle deletion, ambiguity and text. Qualification checks execution and actual render evidence in addition to case outcomes. This is a developer report, not a runtime model allowlist. Lifecycle semantic expectations are incomplete in the existing dataset; NOT_TESTED is not semantic proof. Artistic quality and production readiness remain unproven. Mock/reference reports cannot qualify a model. Catalog/guidance contract tests verify semantic bindings and lossless compact capability references; they do not prove every possible technique combination.
+
+### Storage and diagnostics
+
+- `files.ts:inventory` streams hashes instead of loading entire assets. `source.ts:inspectSource` opts into a bounded 2,048-entry hash cache keyed by path and file identity/size/mtime/ctime/mode. Before/after metadata checks reject changes during hashing. Imports/copy verification retain strict hashing by default. Cache validity assumes ordinary filesystem metadata, not malicious metadata restoration or arbitrary remote-filesystem guarantees.
+- `motion/store.ts:archiveMotionHistory`, exposed by `scripts/harness-cli.ts archive-history`, explicitly archives the complete original motion document durably before shortening active history under the existing lock and revision check. Current state and redo tail are preserved; retained undo depth is limited by the requested count. No automatic deletion. This reduces active JSON size, not total disk consumption; full snapshot archives remain. Tested on synthetic data only; no client history was archived.
+- `motion/service.ts` persists compact `commit-receipt.json` with actual commit receipt, state digests and changed-path digests. Inspector can report HISTORICAL_COMMIT_RECEIPT when the full motion document exceeds its 4 MiB read cap or history is archived, explicitly marking current effective state NOT_CONFIRMED. The cap still limits full historical state/diff inspection. Receipts are diagnostic evidence, never a second authoritative Motion State.
+- `harness/versions.ts` includes the new budget/guidance/qualification and affected source components in run version fingerprints. Diagnostics follow existing privacy/redaction settings.
+
+### Actual verification and measured limits
+
+- TypeScript check, application build and UI bundle: PASS. Full local suite: **227/227**, no skipped/failed tests, 18.767 s. Eight new hardening tests cover request budget, model reserve, health fallback, qualification rejection, capability contracts, large asset cache invalidation, archival/undo/redo/stale revision, transport errors and large-history receipt fallback.
+- Full prepared-response production-path benchmark: **56/56**, repeated with comparable baseline: **56/56**, zero regressions (`artifacts/harness/ai-product-final-reference.json`). Semantic language understanding and artistic quality are NOT TESTED by reference responses.
+- One real Codex NEW_09_COMPOUND smoke: PASS, one LLM call, zero repairs; semantic/compilation/execution and sampled-render checks passed (`artifacts/harness/ai-product-live.json`). Input/output 18,494/197 tokens, total 9,379.6 ms, QA 622.9 ms, rendering 543.8 ms, 23 sampled frames. First-preview-available time is backend availability, not measured browser paint.
+- Prior same-case artifact: 17,987/198 tokens and 10,767.5 ms. Current user message 8,913 vs 9,963 bytes; system 4,774 vs 3,857; total messages 13,687 vs 13,820; schema unchanged at 10,471 bytes. Input tokens **increased by 507**. These single runs with provider-default model are not a controlled latency study; no median/p95 or cost improvement claimed.
+- Synthetic 32 MiB asset: cold hash 30.754 ms, warm inventory 1.396 ms, zero binary bytes rehashed on warm hit. This is one local sample, not a general large-project benchmark.
+- Full eight-case live qualification, API/local-model integration and a new dedicated Preview/MP4 comparison were NOT RUN in this increment. Previous MP4 evidence remains historical. Model admission, full diagnostic scaling, token reduction and gradual module decomposition remain ongoing engineering work.
+
 ## ARCHITECTURE CHANGE HISTORY
+
+- 2026-10-19 — v1.0.17: shared capability guidance, complete request/model budgets, adapter health/errors, eight-case live qualification command, bounded source hash cache, explicit history archival and compact commit diagnostics. 227 local tests and 56 reference cases pass; one live compound smoke passes. Actual token usage increased; no API/local or complete live qualification claim.
 
 - 2026-10-19 — v1.0.16: targeted provider-portability review; optional schema dialect, model namespace/tag support and capability/tool admission tests. Existing Codex wire default retained. No API/local-model E2E claim.
 

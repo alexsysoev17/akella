@@ -87,6 +87,31 @@ export function semanticContext(context: unknown): unknown {
   const rows = (v: unknown, keys: string[]) =>
     Array.isArray(v) ? v.map((x) => pick(x, keys)) : v;
   const knowledge = c.motionKnowledge as Record<string, unknown> | undefined;
+  const capabilityTypes: Record<string, unknown> = {};
+  const compactCapabilities = Array.isArray(knowledge?.capabilities)
+    ? knowledge.capabilities.map((entry: Record<string, unknown>) => {
+        const types = entry.supportedObjectTypes;
+        let ref = Object.keys(capabilityTypes).find(
+          (key) =>
+            JSON.stringify(capabilityTypes[key]) === JSON.stringify(types),
+        );
+        if (!ref) {
+          ref = "types" + Object.keys(capabilityTypes).length;
+          capabilityTypes[ref] = types;
+        }
+        return {
+          ...(pick(entry, [
+            "id",
+            "kind",
+            "lifecycle",
+            "semanticTechniques",
+            "supportedProperties",
+            "constraints",
+          ]) as object),
+          objectTypesRef: ref,
+        };
+      })
+    : undefined;
   const rest = pick(c, [
     "project",
     "sceneIndex",
@@ -143,16 +168,8 @@ export function semanticContext(context: unknown): unknown {
           easingIds: knowledge.easingIds,
           composition: knowledge.composition,
           skills: rows(knowledge.skills, ["id"]),
-          capabilities: rows(knowledge.capabilities, [
-            "id",
-            "kind",
-            "lifecycle",
-            "description",
-            "semanticTechniques",
-            "supportedProperties",
-            "supportedObjectTypes",
-            "constraints",
-          ]),
+          capabilityObjectTypes: capabilityTypes,
+          capabilities: compactCapabilities,
           expressions: rows(knowledge.expressions, ["id", "description"]),
           customEasings: rows(knowledge.customEasings, [
             "id",

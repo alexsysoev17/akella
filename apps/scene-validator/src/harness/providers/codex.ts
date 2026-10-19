@@ -1,10 +1,13 @@
 import { redactSecrets, redact } from "../security.js";
 import { Codex } from "@openai/codex-sdk";
+import { promisify } from "node:util";
+import { execFile } from "node:child_process";
 import { spawn } from "node:child_process";
 import { access, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   ProviderError,
+  transportErrorCode,
   type ProviderAdapter,
   type ProviderRequest,
   type ProviderResponse,
@@ -52,6 +55,27 @@ export class CodexAdapter implements ProviderAdapter {
       usage: true,
       nativeOutputTokenLimit: false,
     };
+  }
+  async health() {
+    try {
+      const { stdout, stderr } = await promisify(execFile)(
+        await codexBinary(),
+        ["login", "status"],
+        { timeout: 5000, maxBuffer: 100000 },
+      );
+      const authenticated = /Logged in/i.test(stdout + stderr);
+      return {
+        status: authenticated ? ("READY" as const) : ("AUTH_REQUIRED" as const),
+        message: authenticated
+          ? "Codex: авторизация подтверждена; доступ к модели проверяется запросом"
+          : "Codex: требуется авторизация",
+      };
+    } catch {
+      return {
+        status: "UNAVAILABLE" as const,
+        message: "Codex недоступен или проверка авторизации не завершена",
+      };
+    }
   }
   async generate(req: ProviderRequest): Promise<ProviderResponse> {
     if (req.tools?.length)
@@ -208,7 +232,7 @@ export class CodexAdapter implements ProviderAdapter {
         throw new ProviderError("TIMEOUT", "Provider time budget exceeded");
       if (e instanceof ProviderError) throw e;
       throw new ProviderError(
-        e instanceof SyntaxError ? "INVALID_OUTPUT" : "TRANSPORT",
+        e instanceof SyntaxError ? "INVALID_OUTPUT" : transportErrorCode(e),
         String(e),
       );
     }

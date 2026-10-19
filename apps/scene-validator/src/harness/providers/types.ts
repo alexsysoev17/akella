@@ -34,10 +34,16 @@ export interface ProviderResponse {
   diagnostics: string[];
   toolCalls: { name: string; arguments: unknown }[];
 }
+export interface ProviderHealth {
+  status: "READY" | "UNAVAILABLE" | "AUTH_REQUIRED" | "UNKNOWN";
+  message: string;
+}
 export interface ProviderAdapter {
   readonly id: string;
   readonly mode: "live" | "mock";
   capabilities(): ProviderCapabilities;
+  health?(): Promise<ProviderHealth>;
+  estimateInputTokens?(request: ProviderRequest): number;
   generate(request: ProviderRequest): Promise<ProviderResponse>;
 }
 export class ProviderError extends Error {
@@ -48,7 +54,11 @@ export class ProviderError extends Error {
       | "TIMEOUT"
       | "CANCELLED"
       | "INVALID_OUTPUT"
-      | "TRANSPORT",
+      | "TRANSPORT"
+      | "AUTH_REQUIRED"
+      | "RATE_LIMITED"
+      | "OVERLOADED"
+      | "CONTEXT_EXHAUSTED",
     message: string,
   ) {
     super(`${code}: ${message}`);
@@ -79,4 +89,24 @@ export function registeredProvider(id: string, directory: string) {
 }
 export function providerIds() {
   return [...factories.keys()];
+}
+
+/** HTTP-compatible adapters retain actionable transport categories without retrying blindly. */
+export function transportErrorCode(error: unknown): ProviderError["code"] {
+  const e =
+    error && typeof error === "object"
+      ? (error as { status?: number; statusCode?: number; code?: string })
+      : {};
+  if (
+    ["context_length_exceeded", "context_window_exceeded"].includes(
+      e.code ?? "",
+    )
+  )
+    return "CONTEXT_EXHAUSTED";
+  const status = e.status ?? e.statusCode;
+  if (status === 401 || status === 403) return "AUTH_REQUIRED";
+  if (status === 429) return "RATE_LIMITED";
+  if (status === 503) return "OVERLOADED";
+  if (status === 408 || status === 504) return "TIMEOUT";
+  return "TRANSPORT";
 }

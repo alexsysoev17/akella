@@ -1,3 +1,4 @@
+import { providerBudget } from "./providers/budget.js";
 import { PROVIDER_ID_PATTERN } from "../provider-contract.js";
 import { providerIds } from "./providers/index.js";
 import { retainRuns } from "./retention.js";
@@ -149,11 +150,13 @@ export class HarnessRun {
       throw new BudgetError("PROVIDER_NOT_REGISTERED");
     if (this.calls.length >= this.config.maxLLMCalls)
       throw new BudgetError("LLM_CALL_BUDGET");
-    if (
-      Buffer.byteLength(request.messages.map((m) => m.content).join("")) >
-      this.config.maxContextBytes
-    )
-      throw new BudgetError("CONTEXT_BUDGET");
+    const budget = providerBudget(
+      adapter,
+      request,
+      this.config.maxContextBytes,
+      this.config.modelProfiles,
+    );
+    request = { ...request, maxOutputTokens: budget.outputTokens };
     const known = this.calls.reduce((n, c) => n + (c.cost ?? 0), 0);
     if (
       this.config.maxEstimatedCost !== null &&
@@ -195,6 +198,7 @@ export class HarnessRun {
     );
     const call = {
       purpose,
+      inputBudget: budget,
       requestBytes: {
         messages: Buffer.byteLength(
           request.messages.map((m) => m.content).join(""),
@@ -250,10 +254,7 @@ export class HarnessRun {
       call.cost = result.estimatedCost;
       call.diagnostics = result.diagnostics;
       call.status = "SUCCESS";
-      if (
-        result.usage &&
-        result.usage.outputTokens > this.config.maxOutputTokens
-      )
+      if (result.usage && result.usage.outputTokens > request.maxOutputTokens)
         throw new BudgetError("OUTPUT_TOKEN_BUDGET");
       if (
         this.config.maxEstimatedCost !== null &&

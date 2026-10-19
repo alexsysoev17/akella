@@ -62,7 +62,16 @@ export async function noSymlinkPath(
   )
     throw new Error("Path resolves outside root");
 }
-export async function inventory(root: string): Promise<FileDigest[]> {
+const hashCache = new Map<string, { stamp: string; sha256: string }>();
+export const inventoryMetrics = { bytesHashed: 0, cacheHits: 0 };
+export function resetInventoryMetrics() {
+  inventoryMetrics.bytesHashed = 0;
+  inventoryMetrics.cacheHits = 0;
+}
+export async function inventory(
+  root: string,
+  options: { reuseHashes?: boolean } = {},
+): Promise<FileDigest[]> {
   const result: FileDigest[] = [];
   async function visit(directory: string) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -71,11 +80,43 @@ export async function inventory(root: string): Promise<FileDigest[]> {
         throw new Error(`Symlinks are not supported: ${file}`);
       if (entry.isDirectory()) await visit(file);
       else if (entry.isFile()) {
-        const bytes = await readFile(file);
+        const stampOf = (v: Awaited<ReturnType<typeof lstat>>) =>
+          [v.dev, v.ino, v.size, v.mtimeMs, v.ctimeMs, v.mode].join(":");
+        const before = await lstat(file);
+        if (!before.isFile() || before.isSymbolicLink())
+          throw new Error("Source entry changed during inventory");
+        const stamp = stampOf(before),
+          cached = options.reuseHashes ? hashCache.get(file) : undefined;
+        let sha256: string;
+        if (cached?.stamp === stamp) {
+          sha256 = cached.sha256;
+          inventoryMetrics.cacheHits++;
+        } else {
+          const handle = await open(file, "r");
+          try {
+            const hash = createHash("sha256");
+            for await (const chunk of handle.createReadStream({
+              autoClose: false,
+            })) {
+              hash.update(chunk);
+              inventoryMetrics.bytesHashed += chunk.length;
+            }
+            sha256 = hash.digest("hex");
+          } finally {
+            await handle.close();
+          }
+        }
+        if (stampOf(await lstat(file)) !== stamp)
+          throw new Error("Source changed during inventory; retry");
+        if (options.reuseHashes) {
+          if (hashCache.size >= 2048)
+            hashCache.delete(hashCache.keys().next().value!);
+          hashCache.set(file, { stamp, sha256 });
+        }
         result.push({
           path: path.relative(root, file).split(path.sep).join("/"),
-          size: bytes.length,
-          sha256: createHash("sha256").update(bytes).digest("hex"),
+          size: before.size,
+          sha256,
         });
       } else throw new Error(`Unsupported filesystem entry: ${file}`);
     }
