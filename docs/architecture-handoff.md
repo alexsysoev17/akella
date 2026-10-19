@@ -6,9 +6,9 @@
 |---|---|
 | Last Updated | 2026-10-19 (Europe/Moscow) — native Skia migration; targeted rendering/runtime update, not a full re-audit |
 | Last Full Audit | 2026-10-13 — структурный аудит исходников перечисленных подсистем; не полный production E2E и не формальная верификация каждой ветви |
-| Git Commit | Checkpoint `53fb100`, after text placement commit `71c8426`; native migration is uncommitted at this documentation update. |
+| Git Commit | Implementation `0c88d36` (native migration), checkpoint `53fb100`, previous text placement `71c8426`; status metadata follows the implementation commit. |
 | Git Branch | `main`; локальный репозиторий создан после первоначального аудита |
-| Working Tree Status | main; native renderer, integrations, tests, dependencies and documentation uncommitted at this update. User source/motion data not edited; real video tests use isolated ignored copies. |
+| Working Tree Status | main; implementation committed in `0c88d36`; this status-only documentation update follows verification. User source/motion data not edited; real video tests use isolated ignored copies. |
 | Documentation Version | 1.0.19 |
 | Scope of Last Update | Native CPU Skia worker, pure evaluator boundary, text shaping/transport, geometric Trim Paths, Preview/FFmpeg/API/QA, bounded caches, compatibility and measured verification. No planner/provider rewrite. |
 | Code snapshot SHA-256 | NOT RECALCULATED for this update; use component version digests in actual run artifacts and subsequent Git commit. |
