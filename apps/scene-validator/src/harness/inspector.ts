@@ -89,6 +89,7 @@ export async function inspectorRuns(root: string) {
       runId: id,
       createdAt: run.createdAt,
       status: run.status,
+      failure: run.failure ?? null,
       calls: run.calls,
       metrics: run.metrics,
     });
@@ -285,6 +286,7 @@ export async function inspectorRun(root: string, id: string, raw = false) {
     : "NOT_AVAILABLE_PRIVACY";
   const view = clean({
     run: raw ? run : { ...run, result: undefined },
+    startupFailure: run.failure ?? "NOT_RECORDED_LEGACY_RUN",
     trace,
     semanticDiagnostics: Array.isArray(trace)
       ? trace.filter((e) =>
@@ -502,6 +504,9 @@ export function debugReport(data: Data) {
     `Run: ${run.runId}`,
     `Status: ${run.status}`,
     `Created: ${run.createdAt}`,
+    "",
+    "## Failure Diagnostic",
+    JSON.stringify(run.failure ?? "NOT_RECORDED_LEGACY_RUN", null, 2),
     "",
     "## User Prompt",
     String(data.prompt),

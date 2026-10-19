@@ -1,3 +1,4 @@
+import { duringStage } from "../harness/failure.js";
 import { renderingMode } from "../native/client.js";
 import { qaAdmission } from "./qa/policy.js";
 import { selectorContext } from "../harness/selector-context.js";
@@ -76,7 +77,7 @@ export async function projectMotion(project: LoadedProject) {
   const registry = await ensureRegistry(project);
   return {
     document,
-    renderer:renderingMode(),
+    renderer: renderingMode(),
     registry,
     diagnostics: [
       ...(document.sourceDiagnostics ?? []),
@@ -147,7 +148,8 @@ export async function prepareMotionRequest(
         null,
         "",
       );
-      run.failures.push(error.code);
+      run.phase = "provider-settings-initialization";
+      await run.captureFailure(error);
       try {
         await run.diagnostic("provider-settings-validation", error.diagnostic);
       } finally {
@@ -169,18 +171,49 @@ export async function proposeMotion(
   } = {},
 ) {
   let settingsSource = "api";
-  const request = await prepareMotionRequest(project, input, (source) => {
-      settingsSource = source;
-    }),
-    doc = await readMotion(project);
-  if (doc.revision !== request.expectedRevision)
-    throw new Error("Анимация изменилась до запроса. Обновите страницу.");
-  const savedSettings = await saveProviderSettings(
-    project,
-    request.settings,
-    "execution",
-  );
   const id = randomUUID();
+  const { request, doc, savedSettings } = await (async () => {
+    let stage = "request-preparation";
+    try {
+      const request = await prepareMotionRequest(project, input, (source) => {
+        settingsSource = source;
+      });
+      stage = "project-state-read";
+      const doc = await readMotion(project);
+      if (doc.revision !== request.expectedRevision)
+        throw new Error("Анимация изменилась до запроса. Обновите страницу.");
+      stage = "provider-settings-persistence";
+      const savedSettings = await saveProviderSettings(
+        project,
+        request.settings,
+        "execution",
+      );
+      return { request, doc, savedSettings };
+    } catch (error) {
+      if (execute && !(error instanceof ProviderSettingsError)) {
+        const text =
+          input &&
+          typeof input === "object" &&
+          "request" in input &&
+          typeof input.request === "string"
+            ? input.request.slice(0, 20000)
+            : "";
+        const run = await HarnessRun.start(
+          project,
+          id,
+          text,
+          null,
+          "",
+          options.signal,
+          options.config,
+        );
+        run.phase = stage;
+        await run.captureFailure(error);
+        await run.finish("FAILED");
+      }
+      throw error;
+    }
+  })();
   const harness =
     execute && request.settings.provider !== "manual-response"
       ? await HarnessRun.start(
@@ -193,6 +226,7 @@ export async function proposeMotion(
           options.config,
         )
       : undefined;
+  if (harness) harness.providerInitializationStatus = "SETTINGS_VALIDATED";
   let runQA: RunQA | undefined;
   const directory =
     harness?.directory ??
@@ -255,15 +289,12 @@ export async function proposeMotion(
           !/добав|появ|движ|позици|создай|изинг|easing|фейд|fade|trim|масштаб|ключ/iu.test(
             request.request,
           )));
+    if (harness) harness.phase = "context-construction";
     const selectedContext = harness
       ? contextualEditHint
         ? await selectorContext(project, doc, request, recent, harness.config)
-        : await agentContext(
-            project,
-            doc.state,
-            request,
-            recent,
-            harness.config,
+        : await duringStage("context-construction", () =>
+            agentContext(project, doc.state, request, recent, harness.config),
           )
       : undefined;
     if (selectedContext) enrichedContext = selectedContext.value;
@@ -322,15 +353,23 @@ export async function proposeMotion(
       await harness.record("context-built", {
         digest: selectedContext.contextDigest,
         bytes: selectedContext.bytes,
+        internalBytes:
+          "internalBytes" in selectedContext
+            ? selectedContext.internalBytes
+            : selectedContext.bytes,
         references: selectedContext.references,
       });
+    }
+    if (harness) {
+      harness.phase = "provider-initialization";
+      harness.providerInitializationStatus = "SETTINGS_VALIDATED";
     }
     await atomicJson(path.join(directory, "context.json"), enrichedContext);
     await safeDirectory(project.root, "motion/ai");
     if (harness)
       await harness.record("provider-settings", {
         source: settingsSource,
-        providerInitializationStatus: "ADAPTER_READY",
+        providerInitializationStatus: "SETTINGS_VALIDATED",
         provider: request.settings.provider,
         persisted: savedSettings.persisted,
         reason: savedSettings.persisted
@@ -722,7 +761,7 @@ export async function proposeMotion(
     }
   } catch (error) {
     if (harness) {
-      harness.failures.push(String(error).split(":")[0]);
+      await harness.captureFailure(error);
       await harness.finish(
         /CANCELLED/.test(String(error))
           ? "CANCELLED"

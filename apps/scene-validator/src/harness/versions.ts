@@ -1,3 +1,4 @@
+import { duringStage } from "./failure.js";
 import { readFile } from "node:fs/promises";
 import { digest } from "./context.js";
 const components = [
@@ -76,28 +77,39 @@ const components = [
   "motion/intent/execution",
   "motion-library/registry/path-capability",
   "harness/context",
+  "harness/semantic-context",
+  "harness/failure",
   "harness/selector-context",
   "harness/runtime",
   "harness/qa",
   "harness/config",
 ];
-export async function codeVersions() {
-  return await Promise.all(
-    components.map(async (id) => {
-      let content: string;
-      try {
-        content = await readFile(
-          new URL("../" + id + ".ts", import.meta.url),
-          "utf8",
-        );
-      } catch (e) {
-        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-        content = await readFile(
-          new URL("../" + id + ".js", import.meta.url),
-          "utf8",
-        );
-      }
-      return { id: "code:" + id, version: digest(content) };
-    }),
+export async function codeVersions(
+  base = new URL("../", import.meta.url),
+  ids: readonly string[] = components,
+) {
+  return await duringStage("source-versions", () =>
+    Promise.all(
+      ids.map(async (id) => {
+        let content: string;
+        try {
+          content = await readFile(new URL(id + ".ts", base), "utf8");
+        } catch (e) {
+          if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+          try {
+            content = await readFile(new URL(id + ".js", base), "utf8");
+          } catch (error) {
+            const code =
+              (error as NodeJS.ErrnoException).code === "ENOENT"
+                ? "SOURCE_VERSION_REQUIRED_MISSING"
+                : "SOURCE_VERSION_READ_FAILED";
+            throw Object.assign(new Error(code + ": " + id, { cause: error }), {
+              code,
+            });
+          }
+        }
+        return { id: "code:" + id, version: digest(content) };
+      }),
+    ),
   );
 }

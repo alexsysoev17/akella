@@ -25,6 +25,7 @@ export class RunQA {
         task.techniques.some((t) => String(t) === "objectStateTransition")
           ? undefined
           : task.targetReference;
+    this.run.phase = "native-dependency-initialization";
     const key = digest([
       renderingMode(),
       renderingMode() === "native" ? await nativeEnvironment() : null,
@@ -35,6 +36,7 @@ export class RunQA {
       task.userIntent,
       this.run.references,
     ]);
+    this.run.phase = "motion-qa";
     const cacheRoot = await safeDirectory(
         this.run.project.root,
         "motion/harness/cache/qa",

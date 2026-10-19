@@ -1,3 +1,4 @@
+import { failureDiagnostic, type FailureDiagnostic } from "./failure.js";
 import { providerBudget } from "./providers/budget.js";
 import { PROVIDER_ID_PATTERN } from "../provider-contract.js";
 import { providerIds } from "./providers/index.js";
@@ -49,6 +50,22 @@ export class HarnessRun {
   references: unknown[] = [];
   techniques: string[] = [];
   failures: string[] = [];
+  phase = "initialization";
+  providerInitializationStatus = "NOT_STARTED";
+  failure: FailureDiagnostic | undefined;
+  async captureFailure(error: unknown) {
+    if (this.finished) return;
+    this.failure = failureDiagnostic(
+      error,
+      this.phase,
+      this.providerInitializationStatus,
+      this.config.privacy === "full",
+    );
+    this.failures.push(this.failure.errorCode);
+    await this.diagnostic("run-failed", this.failure);
+    if (this.config.privacy === "full")
+      await atomicJson(path.join(this.directory, "error.json"), this.failure);
+  }
   renderedFrames = 0;
   repairAttempts = 0;
   qaDurationMs = 0;
@@ -116,6 +133,7 @@ export class HarnessRun {
       await run.persist("RUNNING");
       return run;
     } catch (error) {
+      await run.captureFailure(error);
       await run.finish("FAILED");
       throw error;
     }
@@ -142,6 +160,8 @@ export class HarnessRun {
     await this.persist("RUNNING");
   }
   async invoke(adapter: ProviderAdapter, request: ProviderRequest) {
+    this.phase = "provider-startup";
+    this.providerInitializationStatus = "ADAPTER_READY";
     this.checkpoint();
     if (
       !PROVIDER_ID_PATTERN.test(adapter.id) ||
@@ -227,6 +247,8 @@ export class HarnessRun {
       diagnostics: [] as string[],
     };
     this.calls.push(call);
+    this.phase = "provider-call";
+    this.providerInitializationStatus = "STARTED";
     const start = performance.now();
     await this.record("provider-started", {
       callIndex: this.calls.length,
@@ -263,9 +285,12 @@ export class HarnessRun {
       )
         throw new BudgetError("COST_BUDGET");
       this.checkpoint();
+      this.providerInitializationStatus = "READY";
+      this.phase = request.purpose ?? "semantic-planning";
       return { ...result, callIndex: this.calls.indexOf(call) + 1 };
     } catch (e) {
       call.status = String(e);
+      this.providerInitializationStatus = "CALL_FAILED";
       throw e;
     } finally {
       call.latencyMs = performance.now() - start;
@@ -371,6 +396,7 @@ export class HarnessRun {
         },
         artisticQuality: "NOT_TESTED",
         failures: this.failures,
+        failure: this.failure ?? null,
         result:
           this.config.privacy === "full"
             ? result
