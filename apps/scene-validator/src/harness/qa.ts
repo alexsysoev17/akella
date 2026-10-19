@@ -1,3 +1,5 @@
+import { verifyWithInfrastructureRecovery } from "../motion/qa/failure.js";
+import { closeNativeRenderer } from "../native/client.js";
 import { renderingMode, nativeEnvironment } from "../native/client.js";
 import { chromium, type Browser } from "playwright";
 import { readFile, readdir, cp, rm } from "node:fs/promises";
@@ -70,18 +72,20 @@ export class RunQA {
     if (renderingMode() === "browser-compat")
       this.browser ??= await chromium.launch({ headless: true });
     const renderStart = performance.now();
-    const report = await motionQA(
-      this.run.project,
-      next,
-      dir,
-      task.userIntent,
-      before,
-      scope,
-      {
-        signal: this.run.signal,
-        beforeRender: () => this.run.beforeRender(),
-        browser: this.browser,
-      },
+    const report = await verifyWithInfrastructureRecovery(
+      () =>
+        motionQA(this.run.project, next, dir, task.userIntent, before, scope, {
+          signal: this.run.signal,
+          beforeRender: () => this.run.beforeRender(),
+          browser: this.browser,
+        }),
+      () => closeNativeRenderer(),
+      () =>
+        this.run.record("render-infrastructure-recovery", {
+          taskId: task.taskId,
+          attempt: 1,
+          semanticRepair: false,
+        }),
     );
     this.run.renderDurationMs += performance.now() - renderStart;
     this.run.qaDurationMs += performance.now() - start;

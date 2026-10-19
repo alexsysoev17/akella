@@ -35,3 +35,48 @@ export class NativeRenderError extends Error {
     super(`${code}: ${targetId ? targetId + ": " : ""}${message}`);
   }
 }
+
+// MakeSurface allocates a caller-owned WASM pixel plane. Surface.delete() alone
+// does NOT release it; CanvasKit's software Surface.dispose() does both jobs.
+const surfaces = {
+  created: 0,
+  disposed: 0,
+  live: 0,
+  liveBytes: 0,
+  peakLiveBytes: 0,
+};
+export function makeSurface(kit: CanvasKit, width: number, height: number) {
+  const surface = kit.MakeSurface(width, height);
+  if (!surface)
+    throw new NativeRenderError(
+      "SURFACE_ALLOCATION_FAILED",
+      `${width}x${height}`,
+    );
+  const bytes = width * height * 4;
+  surfaces.created++;
+  surfaces.live++;
+  surfaces.liveBytes += bytes;
+  surfaces.peakLiveBytes = Math.max(surfaces.peakLiveBytes, surfaces.liveBytes);
+  const release = surface.dispose.bind(surface);
+  let released = false;
+  surface.dispose = () => {
+    if (released) return;
+    released = true;
+    try {
+      release();
+    } finally {
+      surfaces.disposed++;
+      surfaces.live--;
+      surfaces.liveBytes -= bytes;
+    }
+  };
+  return surface;
+}
+export function nativeMemory(kit: CanvasKit) {
+  return {
+    ...surfaces,
+    wasmHeapBytes:
+      (kit as unknown as { HEAPU8?: Uint8Array }).HEAPU8?.buffer.byteLength ??
+      null,
+  };
+}

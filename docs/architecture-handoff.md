@@ -4,13 +4,13 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-19 (Europe/Moscow) — Motion Agent pre-provider startup repair; targeted update, not a full re-audit |
+| Last Updated | 2026-10-19 (Europe/Moscow) — native surface ownership, infrastructure recovery and task-scoped repair; targeted update, not a full re-audit |
 | Last Full Audit | 2026-10-13 — структурный аудит исходников перечисленных подсистем; не полный production E2E и не формальная верификация каждой ветви |
-| Git Commit | Startup repair checkpoint `6ecc217`; native implementation `0c88d36`, metadata `f9355b2`. Startup repair is uncommitted at this documentation update. |
+| Git Commit | Startup repair committed `197a42b`; checkpoint before this repair `7304326`. Native memory/repair changes are uncommitted at this documentation update. |
 | Git Branch | `main`; локальный репозиторий создан после первоначального аудита |
-| Working Tree Status | main; startup/context/diagnostics/tests/docs uncommitted at this update. Original test21 source and canonical motion untouched; replay uses an isolated copy, live provider uses a synthetic temporary fixture. |
-| Documentation Version | 1.0.20 |
-| Scope of Last Update | Shared semantic projection for context admission, early failure stages/root cause/redaction/Inspector, required source-version diagnostics, startup and live smoke verification. Native renderer and motion semantics preserved. |
+| Working Tree Status | main; reviewed native/harness/repair/tests/docs changes uncommitted at this update. User projects and diagnostic artifacts are ignored. Original source assets remain unchanged. |
+| Documentation Version | 1.0.21 |
+| Scope of Last Update | CanvasKit software-surface disposal, measured Full HD memory stability, infrastructure-vs-semantic repair routing, bounded repair projection and instructions; reference-run recovery verification. |
 | Code snapshot SHA-256 | NOT RECALCULATED for this update; use component version digests in actual run artifacts and subsequent Git commit. |
 
 Git 2.54.0 (Apple Git-157): локальная история на main, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
@@ -1275,6 +1275,8 @@ Verified reproduction on the current original source/state/request: `codeVersion
 
 ## ARCHITECTURE CHANGE HISTORY
 
+- 2026-10-19 — v1.0.21: fixed confirmed software-surface pixel-plane leak via official dispose; measured two320-frame real-project soaks; isolated infrastructure recovery from semantic repair; bounded task context/instructions and strict-wire test;232+2+27 tests/build/typecheck PASS. Recovered only2missing test21 requirements, reconciled15/15 with real native QA and copy Undo/Redo. Font590→600 warning remains.
+
 - 2026-10-19 — v1.0.20: verified pre-provider context admission bug; shared existing semantic projection, required version errors, privacy-safe early failure stages/cause/stack, Inspector alert. Five startup regressions, full232+2+21, exact isolated mock boundary replay and one real synthetic Codex SUCCESS. Historical lost exception remains unknown.
 
 - 2026-10-19 — v1.0.19: default Node-worker CPU Skia pipeline; pure motion evaluator boundary, native shaped live text caches/contour trims, same RGBA Preview/FFmpeg, bounded API/cache/cancellation and native QA. Compatibility explicit; measured reference/native/real-project evidence and limitations above. No live provider or full audit.
@@ -1322,3 +1324,33 @@ Verified reproduction on the current original source/state/request: `codeVersion
 | 2026-10-14 | Semantic graph stabilization, exact source provenance, scoped repair, full candidate preflight and permanent benchmark | graph/provenance/entrance/repair; existing planner/compiler/execution/provider/context/Inspector/evals; benchmark scripts/dataset | Partial update;189/189 local tests PASS,39/39 reference scenarios (strict visual29/31+2warnings); one authorized live Codex test11 copy10/10 requirements,22operations,10QA; five actual decoded MP4/Preview samples PASS; no original client-project changes |
 
 | 2026-10-14 | Unified effect lifecycle / animation storage routing | effectOperation/schema; capability metadata; contextual-resolution/selector-context; compiler/operations/dependencies; QA/Inspector; existing benchmark +7cases | Partial update;194/194 local regression,5/5 lifecycle targeted;46/46 reference scenarios; real test11 saved-answer delete/reverse replay2/2 with2operations and actual render QA; two decoded MP4/Preview five-frame checks PASS; zero new live calls, original revision/source preserved |
+
+
+## Native memory and repair routing — 2026-10-19 (v1.0.21)
+
+**Confirmed root cause:** CanvasKit 0.42.0 `MakeSurface` allocates an externally owned WASM RGBA plane. Its official software `Surface.dispose()` frees that plane and deletes the SkSurface; `.delete()` alone does not. The renderer used `.delete()` on frame, glyph, effect and probe surfaces, leaking approximately 8.29 MB per Full HD surface. An isolated old-lifecycle measurement grew from RSS119,291,904/WASM134,217,728 at frame0 to RSS783,745,024/WASM683,212,800 at frame80. This is caller resource-ownership misuse, not proof of a CanvasKit allocator defect. The historical run reached RSS≈2.715GB/261 QA frames.
+
+`native/skia.ts::makeSurface` centralizes official allocation/disposal and exposes created/disposed/live/liveBytes/peakLiveBytes plus observable WASM heap capacity. All software surfaces in `native/renderer.ts` and `native/text.ts` now use `dispose()` in finally blocks. Worker decoded comparison images, temporary Trim Paths geometry and effect filters also have exception cleanup. The worker remains the existing renderer worker; no second renderer or lower-resolution fallback. Surface counters describe this worker's tracked software planes, not all allocations or an OS memory limit. WASM heap capacity need not shrink after freeing buffers.
+
+`native/client.ts`/`worker.ts` accept `cache:false` for genuinely uncached rendering and return nativeMemory. Existing bounded frame/asset caches remain. `native/qa.ts` scopes object samples to the relevant block, reuses identical local QA frames within a16MiB cap, and records unique/reused requests/cache bytes. The random-access determinism check explicitly bypasses both local and worker frame caches for its two verification renders. Render and numerical checks remain required; no threshold changes.
+
+Verified real Figma-derived **test21:320 uncached1920×1080 renders in one process**, peak RSS515,457,024; WASM heap134,217,728 throughout, final327 created/327 disposed/0live/0liveBytes, frame cache0entries. Separate automated synthetic320-frame fixture includes live text and cubic geometric Trim Paths; deterministic fresh seeking and path geometry are asserted after the soak. These finite observations establish removal of the measured per-frame leak; they do not prove unlimited playback stability, every native allocation's ownership or a global RSS cap. Multiple processes/stress suites running concurrently have independent RSS costs.
+
+### Routing and context contracts
+
+`motion/qa/failure.ts` distinguishes animation-validation, rendering-infrastructure and provider-or-budget failures. `harness/qa.ts` permits one worker reset and QA retry for recognized infrastructure failures, recording the original checks and a real recovery event. `motion/intent/execution.ts` retains generated operations/verification diagnostics but does not invoke semantic repair for infrastructure or provider-budget failures. Independently verified tasks are retained; unverified operations are not committed. Existing per-run budgets still apply to recovery renders. Dependency initialization failures outside this retry boundary stop safely; they are not automatically retried indefinitely.
+
+`motion/intent/repair-context.ts::taskRepairContext` projects only the task's requirements, direct timing dependencies, target states, relevant tracks/expressions/blocks, typed candidate operations and exact failed-check names/reasons/scalar metrics. Large pixel arrays/full prior responses/history remain local diagnostic artifacts. Projection fails explicitly above12,000bytes rather than truncating requirements. `motion/service.ts` invokes the **same provider adapter and existing Plan schema** with compact task-repair instructions; it no longer combines enrichedContext/full requestScope/current motion/repeated histories. Full-request admission including strict-wire schema remains enforced by the existing Harness budget; smaller custom budgets can still reject safely. No new planner/compiler or LLM calls for resource errors.
+
+Historical failed repair request measured context110,832bytes plus prompt envelope11,720bytes and transformed schema; recorded full strict-wire request171,132bytes against60,000. Projecting each of the two actual failed tasks produces5,025bytes, retaining its requirement and5candidate operations. An infrastructure mock-provider test sends a maximum12KB context through the real AIClient strict-wire schema path: full messages+schema47,905bytes (<60KB). This is an actual serialized request measurement, not a live-model test or token estimate. No timeout/context limit increases and no live provider calls for this repair.
+
+### Recovery and verification
+
+Recovery completed and verified as follows. Original run artifacts retain their historical PARTIAL_SUCCESS status; they must never be overwritten to fabricate a successful old run. Recovery uses only the two missing saved requirements, a candidate state on an isolated copy, full-contract reconciliation and native QA, then the existing revision/source-fingerprint-checked `changeMotion` transaction. No replay of successful requirements or mutation of source exports.
+
+
+Actual final verification: `npm run check` exit0; **232/232** base/compatibility tests (92.681s), **2/2** cross-browser placement tests (6.596s), **27/27** native tests (25.085s), TypeScript and application/worker/UI build PASS. Six new native-memory tests cover320FullHD renders/text/geometricTrimPaths/fresh seek, repeated object QA/surface ownership, resource errors with zero semantic repairs/independent-result preservation, bounded repair projection, one infrastructure reset, and full strict-wire60KB admission. Existing native Preview/decoded-MP4 tests pass; no complete test21 MP4 was exported in this task. No live AI calls were made.
+
+Reference test21 recovery: only the two missing saved requirements were compiled and verified on an isolated copy, then all15 requirements reconciled and13 native QA tasks executed without failed checks. All QA tasks have WARNING solely for existing font weight590→600 mapping; variable-font fidelity remains REVIEW. Existing20 animations/10 expressions and all block timing were deep-equal before/after; additions are6base tracks+4inertia expressions. Copy Undo/Redo restored exact before/after states. Original canonical revision `fbc8972f-43be-4576-a048-51d135f39b80` now has26animations/14expressions and2history entries, with one separate infrastructure-recovery transaction. Historical PARTIAL_SUCCESS run is unchanged; ignored `motion/recoveries/native-memory-recovery.json` records the new verification. Source assets and exports were not modified.
+
+A second real-project stress run **after recovery** rendered320uncachedFullHD frames, peakRSS509,001,728, WASM134,217,728 throughout,327created/327disposed/0live surfaces,0cached frames. Evidence scripts/results are ignored under `artifacts/memory-repair/`; they intentionally are not tracked client fixtures. The permanent synthetic regression remains in `tests/native-memory.test.ts`.

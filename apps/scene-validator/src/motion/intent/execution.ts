@@ -1,3 +1,5 @@
+import { failureCategory, infrastructureFailure } from "../qa/failure.js";
+import { taskRepairContext } from "./repair-context.js";
 import { qaAdmission } from "../qa/policy.js";
 import { resolveTextSettings } from "../../motion-library/techniques/text.js";
 import { isDeepStrictEqual } from "node:util";
@@ -642,13 +644,7 @@ export async function runIntentTasks(
         } else
           generated = parsePlan(
             await hooks.repair(
-              {
-                motion: current,
-                intentRequirement: plan.requirements.filter((r) =>
-                  task.requirementIds.includes(r.requirementId),
-                ),
-                repairFeedback: feedback,
-              },
+              taskRepairContext(project, current, plan, task, feedback),
               task.userIntent,
               task,
               attempt,
@@ -761,7 +757,15 @@ export async function runIntentTasks(
           validation: task.validationResult,
           qa,
         });
-        if (!qaAdmission(qa).accepted) throw new Error("MOTION_QA_FAILED");
+        if (!qaAdmission(qa).accepted)
+          throw new Error(
+            infrastructureFailure(
+              qa as { checks?: { status: string; reason?: string }[] },
+            )
+              ? "RENDER_INFRASTRUCTURE_FAILED: " +
+                JSON.stringify((qa as { checks?: unknown[] }).checks)
+              : "MOTION_QA_FAILED",
+          );
         hooks.checkpoint?.();
         current = await hooks.commit(task, generated, next);
         task.status = "PASSED";
@@ -801,6 +805,7 @@ export async function runIntentTasks(
           });
         task.primaryFailureReason ??= failureReason;
         feedback = {
+          failureCategory: failureCategory(failureReason),
           taskId: task.taskId,
           requirementIds: task.requirementIds,
           targetId: task.targetReference.targetId,
@@ -834,6 +839,7 @@ export async function runIntentTasks(
         task.repairHistory.push({ attempt, feedback });
         await hooks.trace(tasks, { status: "repair", feedback });
         if (
+          failureCategory(failureReason) !== "animation-validation" ||
           signature === previousSignature ||
           attempt === (hooks.maxAttempts ?? 3) ||
           /COMPILER_COVERAGE_ERROR|UNSUPPORTED_COMPOUND_EDIT|^Error: OPERATION_VALIDATION_ERROR|BUDGET|CANCELLED|authentication|timeout|aborted|401|403|login|Исходный дизайн|Анимация уже изменилась/i.test(

@@ -28,6 +28,7 @@ import { within, noSymlinkPath } from "../files.js";
 import { fonts, projectFonts, type FontResources } from "./fonts.js";
 import {
   skia,
+  makeSurface,
   record,
   list,
   number as num,
@@ -380,7 +381,7 @@ export class NativeRenderer {
         "FRAME_SIZE_LIMIT",
         "Maximum 32M output pixels, scale <=4",
       );
-    const surface = k.MakeSurface(width, height);
+    const surface = makeSurface(k, width, height);
     if (!surface)
       throw new NativeRenderError(
         "SURFACE_ALLOCATION_FAILED",
@@ -899,9 +900,12 @@ export class NativeRenderer {
                           true,
                         )
                       : paint;
-                    canvas.drawPath(trimmed, brush.paint);
-                    trimmed.delete();
-                    if (outlined) brush.dispose();
+                    try {
+                      canvas.drawPath(trimmed, brush.paint);
+                    } finally {
+                      trimmed.delete();
+                      if (outlined) brush.dispose();
+                    }
                   }
                 };
                 if (outlined) {
@@ -956,160 +960,173 @@ export class NativeRenderer {
       };
       const effects = list(p.effects).filter((e) => e.visible !== false);
       let filter: ReturnType<typeof k.ImageFilter.MakeBlur> | null = null;
-      for (const e of effects) {
-        const old = filter;
-        if (e.type === "DROP_SHADOW") {
-          const c = record(e.color),
-            o = record(e.offset);
-          filter = k.ImageFilter.MakeDropShadow(
-            num(o.x),
-            num(o.y),
-            num(e.radius) / 2,
-            num(e.radius) / 2,
-            k.Color4f(num(c.r), num(c.g), num(c.b), num(c.a, 1)),
-            old,
-          );
-        } else if (e.type === "LAYER_BLUR")
-          filter = k.ImageFilter.MakeBlur(
-            num(e.radius) / 2,
-            num(e.radius) / 2,
-            k.TileMode.Decal,
-            old,
-          );
-        else
-          warnings.push(
-            `${n.figmaNodeId}: unsupported effect ${String(e.type)}`,
-          );
-        old?.delete();
-      }
-      const blend = String(p.blendMode ?? "NORMAL")
-        .toLowerCase()
-        .replace(/_(.)/g, (_, c: string) => c.toUpperCase());
-      const mode =
-        (
-          {
-            multiply: k.BlendMode.Multiply,
-            screen: k.BlendMode.Screen,
-            overlay: k.BlendMode.Overlay,
-            darken: k.BlendMode.Darken,
-            lighten: k.BlendMode.Lighten,
-            colorDodge: k.BlendMode.ColorDodge,
-            colorBurn: k.BlendMode.ColorBurn,
-            hardLight: k.BlendMode.HardLight,
-            softLight: k.BlendMode.SoftLight,
-            exclusion: k.BlendMode.Exclusion,
-            hue: k.BlendMode.Hue,
-            saturation: k.BlendMode.Saturation,
-            color: k.BlendMode.Color,
-            luminosity: k.BlendMode.Luminosity,
-            difference: k.BlendMode.Difference,
-          } as Record<string, typeof k.BlendMode.SrcOver>
-        )[blend] ?? k.BlendMode.SrcOver;
-      if (
-        filter &&
-        !maskOnly &&
-        n.type !== "TEXT" &&
-        !(n.children ?? []).length &&
-        v.trim === undefined &&
-        v.reveal === undefined
-      ) {
-        const density = Math.max(1, Math.min(4, Math.ceil(scale))),
-          key = n.figmaNodeId + ":" + density;
-        let cached = this.effectPlanes.get(key);
-        const pad = Math.ceil(
-          Math.max(
-            2,
-            ...effects.map(
-              (e) =>
-                num(e.radius) * 2 +
-                Math.max(
-                  Math.abs(num(record(e.offset).x)),
-                  Math.abs(num(record(e.offset).y)),
-                ),
-            ),
-          ) +
-            num(p.strokeWeight) * num(p.strokeMiterLimit, 4),
-        );
-        const w = Math.ceil(num(p.width)) + 2 * pad,
-          h = Math.ceil(num(p.height)) + 2 * pad,
-          bytes = w * h * density * density * 4;
+      try {
+        for (const e of effects) {
+          const old = filter;
+          if (e.type === "DROP_SHADOW") {
+            const c = record(e.color),
+              o = record(e.offset);
+            filter = k.ImageFilter.MakeDropShadow(
+              num(o.x),
+              num(o.y),
+              num(e.radius) / 2,
+              num(e.radius) / 2,
+              k.Color4f(num(c.r), num(c.g), num(c.b), num(c.a, 1)),
+              old,
+            );
+          } else if (e.type === "LAYER_BLUR")
+            filter = k.ImageFilter.MakeBlur(
+              num(e.radius) / 2,
+              num(e.radius) / 2,
+              k.TileMode.Decal,
+              old,
+            );
+          else {
+            warnings.push(
+              `${n.figmaNodeId}: unsupported effect ${String(e.type)}`,
+            );
+            continue;
+          }
+          old?.delete();
+        }
+        const blend = String(p.blendMode ?? "NORMAL")
+          .toLowerCase()
+          .replace(/_(.)/g, (_, c: string) => c.toUpperCase());
+        const mode =
+          (
+            {
+              multiply: k.BlendMode.Multiply,
+              screen: k.BlendMode.Screen,
+              overlay: k.BlendMode.Overlay,
+              darken: k.BlendMode.Darken,
+              lighten: k.BlendMode.Lighten,
+              colorDodge: k.BlendMode.ColorDodge,
+              colorBurn: k.BlendMode.ColorBurn,
+              hardLight: k.BlendMode.HardLight,
+              softLight: k.BlendMode.SoftLight,
+              exclusion: k.BlendMode.Exclusion,
+              hue: k.BlendMode.Hue,
+              saturation: k.BlendMode.Saturation,
+              color: k.BlendMode.Color,
+              luminosity: k.BlendMode.Luminosity,
+              difference: k.BlendMode.Difference,
+            } as Record<string, typeof k.BlendMode.SrcOver>
+          )[blend] ?? k.BlendMode.SrcOver;
         if (
-          !cached &&
-          bytes > 0 &&
-          this.effectBytes + bytes <= 128 * 1024 * 1024
+          filter &&
+          !maskOnly &&
+          n.type !== "TEXT" &&
+          !(n.children ?? []).length &&
+          v.trim === undefined &&
+          v.reveal === undefined
         ) {
-          const surface = k.MakeSurface(w * density, h * density);
-          if (surface) {
-            const original = canvas;
-            try {
-              canvas = surface.getCanvas();
-              canvas.clear(k.TRANSPARENT);
-              canvas.scale(density, density);
-              canvas.translate(pad, pad);
-              const paint = new k.Paint();
-              paint.setImageFilter(filter);
-              canvas.saveLayer(paint);
-              paint.delete();
-              contents();
-              canvas.restore();
-              surface.flush();
-              cached = {
-                image: surface.makeImageSnapshot(),
-                pad,
-                width: w,
-                height: h,
-              };
-              this.effectPlanes.set(key, cached);
-              this.effectBytes += bytes;
-            } finally {
-              canvas = original;
-              surface.delete();
+          const density = Math.max(1, Math.min(4, Math.ceil(scale))),
+            key = n.figmaNodeId + ":" + density;
+          let cached = this.effectPlanes.get(key);
+          const pad = Math.ceil(
+            Math.max(
+              2,
+              ...effects.map(
+                (e) =>
+                  num(e.radius) * 2 +
+                  Math.max(
+                    Math.abs(num(record(e.offset).x)),
+                    Math.abs(num(record(e.offset).y)),
+                  ),
+              ),
+            ) +
+              num(p.strokeWeight) * num(p.strokeMiterLimit, 4),
+          );
+          const w = Math.ceil(num(p.width)) + 2 * pad,
+            h = Math.ceil(num(p.height)) + 2 * pad,
+            bytes = w * h * density * density * 4;
+          if (
+            !cached &&
+            bytes > 0 &&
+            this.effectBytes + bytes <= 128 * 1024 * 1024
+          ) {
+            const surface = makeSurface(k, w * density, h * density);
+            if (surface) {
+              const original = canvas;
+              try {
+                canvas = surface.getCanvas();
+                canvas.clear(k.TRANSPARENT);
+                canvas.scale(density, density);
+                canvas.translate(pad, pad);
+                const paint = new k.Paint();
+                paint.setImageFilter(filter);
+                canvas.saveLayer(paint);
+                paint.delete();
+                contents();
+                canvas.restore();
+                surface.flush();
+                cached = {
+                  image: surface.makeImageSnapshot(),
+                  pad,
+                  width: w,
+                  height: h,
+                };
+                this.effectPlanes.set(key, cached);
+                this.effectBytes += bytes;
+              } finally {
+                canvas = original;
+                surface.dispose();
+              }
             }
           }
-        }
-        if (cached) {
-          filter.delete();
-          filter = null;
-          layer(
-            opacity,
-            () =>
-              canvas.drawImageRectOptions(
-                cached!.image,
-                k.XYWHRect(0, 0, cached!.image.width(), cached!.image.height()),
-                k.XYWHRect(
-                  -cached!.pad,
-                  -cached!.pad,
-                  cached!.width,
-                  cached!.height,
+          if (cached) {
+            filter.delete();
+            filter = null;
+            layer(
+              opacity,
+              () =>
+                canvas.drawImageRectOptions(
+                  cached!.image,
+                  k.XYWHRect(
+                    0,
+                    0,
+                    cached!.image.width(),
+                    cached!.image.height(),
+                  ),
+                  k.XYWHRect(
+                    -cached!.pad,
+                    -cached!.pad,
+                    cached!.width,
+                    cached!.height,
+                  ),
+                  k.FilterMode.Linear,
+                  k.MipmapMode.None,
                 ),
-                k.FilterMode.Linear,
-                k.MipmapMode.None,
-              ),
-            mode,
-          );
-        } else {
+              mode,
+            );
+          } else {
+            const paint = new k.Paint();
+            paint.setAlphaf(clamp(opacity));
+            paint.setImageFilter(filter);
+            canvas.saveLayer(paint);
+            paint.delete();
+            filter.delete();
+            filter = null;
+            contents();
+            canvas.restore();
+          }
+        } else if (filter) {
           const paint = new k.Paint();
           paint.setAlphaf(clamp(opacity));
           paint.setImageFilter(filter);
+          paint.setBlendMode(mode);
           canvas.saveLayer(paint);
           paint.delete();
           filter.delete();
+          filter = null;
           contents();
           canvas.restore();
-        }
-      } else if (filter) {
-        const paint = new k.Paint();
-        paint.setAlphaf(clamp(opacity));
-        paint.setImageFilter(filter);
-        paint.setBlendMode(mode);
-        canvas.saveLayer(paint);
-        paint.delete();
-        filter.delete();
-        contents();
-        canvas.restore();
-      } else if (opacity !== 1 || mode !== k.BlendMode.SrcOver)
-        layer(opacity, contents, mode);
-      else contents();
+        } else if (opacity !== 1 || mode !== k.BlendMode.SrcOver)
+          layer(opacity, contents, mode);
+        else contents();
+      } finally {
+        filter?.delete();
+      }
       canvas.restore();
     };
     try {
@@ -1195,7 +1212,7 @@ export class NativeRenderer {
         paths: pathTrace,
       };
     } finally {
-      surface.delete();
+      surface.dispose();
     }
   }
   probeText(targetId: string) {
@@ -1210,7 +1227,7 @@ export class NativeRenderer {
         "Probe exceeds 4M pixels",
       );
     const k = this.kit,
-      surface = k.MakeSurface(width, height);
+      surface = makeSurface(k, width, height);
     if (!surface)
       throw new NativeRenderError("TEXT_PROBE_ALLOCATION_FAILED", targetId);
     const samples = [];
@@ -1261,7 +1278,7 @@ export class NativeRenderer {
         renderer: "native-glyph-plane",
       };
     } finally {
-      surface.delete();
+      surface.dispose();
     }
   }
   dispose() {

@@ -1,7 +1,7 @@
 import { validateMotion } from "../motion/operations.js";
 import { fontCatalogDigest } from "./fonts.js";
 import { parentPort } from "node:worker_threads";
-import { skia } from "./skia.js";
+import { skia, nativeMemory } from "./skia.js";
 import { NativeRenderer, nativeDigest, type NativeFrame } from "./renderer.js";
 import type { LoadedProject } from "../types.js";
 import type { MotionState } from "../motion/schema.js";
@@ -77,7 +77,8 @@ parentPort!.on("message", (message) => {
           message.frame +
           ":" +
           nativeDigest(message.options ?? {});
-        let result = cache.get(key),
+        let result =
+            message.options?.cache === false ? undefined : cache.get(key),
           cacheHit = !!result;
         if (result) {
           hits++;
@@ -99,7 +100,10 @@ parentPort!.on("message", (message) => {
             bytes -= cache.get(old)!.png.byteLength;
             cache.delete(old);
           }
-          if (result.png.byteLength <= 64 * 1024 * 1024) {
+          if (
+            message.options?.cache !== false &&
+            result.png.byteLength <= 64 * 1024 * 1024
+          ) {
             cache.set(key, result);
             bytes += result.png.byteLength;
           }
@@ -114,6 +118,7 @@ parentPort!.on("message", (message) => {
               cacheHit,
               cache: { bytes, entries: cache.size, hits, misses },
               memory: process.memoryUsage(),
+              nativeMemory: nativeMemory(await skia()),
             },
           },
           [png.buffer],
@@ -135,8 +140,8 @@ parentPort!.on("message", (message) => {
         const kit = await skia(),
           a = kit.MakeImageFromEncoded(message.a),
           b = kit.MakeImageFromEncoded(message.b);
-        if (!a || !b) throw new Error("NATIVE_COMPARE_DECODE_FAILED");
         try {
+          if (!a || !b) throw new Error("NATIVE_COMPARE_DECODE_FAILED");
           if (a.width() !== b.width() || a.height() !== b.height())
             throw new Error("NATIVE_COMPARE_SIZE_MISMATCH");
           const info = {
@@ -168,8 +173,8 @@ parentPort!.on("message", (message) => {
             },
           });
         } finally {
-          a.delete();
-          b.delete();
+          a?.delete();
+          b?.delete();
         }
       } else if (kind === "clear") {
         for (const s of sessions.values()) s.renderer.dispose();

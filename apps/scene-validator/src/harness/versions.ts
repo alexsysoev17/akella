@@ -13,6 +13,8 @@ const components = [
   "motion/geometry",
   "motion/intent/retime",
   "motion/qa/policy",
+  "motion/qa/failure",
+  "motion/intent/repair-context",
   "motion/engine",
   "motion/evaluation",
   "motion/video",

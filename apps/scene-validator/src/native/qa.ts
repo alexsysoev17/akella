@@ -1,3 +1,4 @@
+import { failureCategory } from "../motion/qa/failure.js";
 import type { LoadedProject } from "../types.js";
 import type { MotionState } from "../motion/schema.js";
 import type { Browser } from "playwright";
@@ -49,7 +50,18 @@ export async function nativeMotionQA(
     samples: { frame: number; file: string }[] = [],
     warnings = new Set<string>(),
     before = nativeDigest(project.inspection.document),
-    frames = [...new Set(numeric.frames)].slice(0, 24);
+    frames = [...new Set(numeric.frames)]
+      .filter(
+        (frame) =>
+          !targetScope ||
+          state.blocks.some(
+            (b) =>
+              b.sceneId === targetScope.sceneId &&
+              frame >= b.startFrame &&
+              frame < b.startFrame + b.durationFrames,
+          ),
+      )
+      .slice(0, 24);
   const report = {
     scope: "native Skia objective checks; artistic quality NOT_TESTED",
     status: "PASSED",
@@ -62,14 +74,55 @@ export async function nativeMotionQA(
     rendererWarnings: [] as string[],
     subjectiveQuality: "NOT_TESTED",
     renderer: "skia-cpu/1",
+    failureCategory: null as string | null,
+    renderMetrics: { uniqueRequests: 0, reusedRequests: 0, cachePeakBytes: 0 },
+    nativeMemory: undefined as
+      | Awaited<ReturnType<typeof renderNativeFrame>>["nativeMemory"]
+      | undefined,
   };
-  const render = async (s: MotionState, frame: number) => {
+  const renderCache = new Map<
+    string,
+    Awaited<ReturnType<typeof renderNativeFrame>>
+  >();
+  let cacheBytes = 0;
+  const stateDigests = new WeakMap<MotionState, string>();
+  const render = async (s: MotionState, frame: number, fresh = false) => {
     options.signal?.throwIfAborted();
+    let digest = stateDigests.get(s);
+    if (!digest) {
+      digest = nativeDigest(s);
+      stateDigests.set(s, digest);
+    }
+    const key = digest + ":" + frame;
+    const cached = renderCache.get(key);
+    if (cached && !fresh) {
+      report.renderMetrics.reusedRequests++;
+      return cached;
+    }
     options.beforeRender?.();
+    report.renderMetrics.uniqueRequests++;
     const result = await renderNativeFrame(project, s, frame, {
       signal: options.signal,
+      cache: !fresh,
     });
     result.warnings.forEach((w) => warnings.add(w));
+    report.nativeMemory = result.nativeMemory;
+    while (
+      cacheBytes + result.png.byteLength > 16 * 1024 * 1024 &&
+      renderCache.size
+    ) {
+      const first = renderCache.keys().next().value!;
+      cacheBytes -= renderCache.get(first)!.png.byteLength;
+      renderCache.delete(first);
+    }
+    if (!fresh && result.png.byteLength <= 16 * 1024 * 1024) {
+      renderCache.set(key, result);
+      cacheBytes += result.png.byteLength;
+      report.renderMetrics.cachePeakBytes = Math.max(
+        report.renderMetrics.cachePeakBytes,
+        cacheBytes,
+      );
+    }
     return result;
   };
   try {
@@ -87,8 +140,8 @@ export async function nativeMotionQA(
       metrics: { renderer: "skia-cpu/1", frames: frames.length },
     });
     const sampleFrame = frames[Math.floor(frames.length / 2)] ?? 0,
-      a = await render(state, sampleFrame),
-      b = await render(state, sampleFrame);
+      a = await render(state, sampleFrame, true),
+      b = await render(state, sampleFrame, true);
     checks.push({
       name: "NATIVE_RANDOM_ACCESS_DETERMINISM",
       category: "render",
@@ -342,6 +395,7 @@ export async function nativeMotionQA(
       });
   } catch (e) {
     if (options.signal?.aborted) throw e;
+    report.failureCategory = failureCategory(e);
     checks.push({
       name: "renderedFrames",
       category: "render",

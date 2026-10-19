@@ -7,7 +7,13 @@ import type {
   Image,
 } from "canvaskit-wasm";
 import type { FontResources } from "./fonts.js";
-import { record, number, list, NativeRenderError } from "./skia.js";
+import {
+  record,
+  number,
+  list,
+  NativeRenderError,
+  makeSurface,
+} from "./skia.js";
 import type { ShapeNode } from "./paths.js";
 export interface TextUnit {
   start: number;
@@ -401,7 +407,8 @@ export function drawTextPlane(
         "TEXT_GLYPH_CACHE_LIMIT",
         "Native glyph planes exceed 64MiB per text layout",
       );
-    const surface = kit.MakeSurface(
+    const surface = makeSurface(
+      kit,
       Math.max(1, Math.ceil(width * density)),
       Math.max(1, Math.ceil(height * density)),
     );
@@ -416,7 +423,7 @@ export function drawTextPlane(
       plane = { image: surface.makeImageSnapshot(), x, y, width, height };
       layout.planes.set(cacheKey, plane);
     } finally {
-      surface.delete();
+      surface.dispose();
     }
   }
   canvas.drawImageRectOptions(

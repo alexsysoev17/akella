@@ -41,6 +41,8 @@ import { readOptional } from "../management.js";
 import { readMotion, changeMotion } from "./store.js";
 import { buildContext, objectsIn } from "./context.js";
 import { applyOperations, motionDiff } from "./operations.js";
+import { taskRepairInstructions } from "./intent/repair-context.js";
+import { planSchema } from "./schema.js";
 import { parsePlan } from "./schema.js";
 import {
   CodexProvider,
@@ -492,18 +494,14 @@ export async function proposeMotion(
               await providerDirectory(`${task.taskId}/attempt-${attempt}`),
               harness?.providerRuntime(),
             );
-            return provider.editMotionPlan(
-              {
-                ...enrichedContext,
-                ...(ctx as object),
-                requestScope: contract.requirements,
-                taskScope: task,
-                repairScope: {
-                  requirementIds: task.requirementIds,
-                  techniques: task.techniques,
-                },
-              },
-              text,
+            return parsePlan(
+              await provider.structured(
+                ctx,
+                text,
+                taskRepairInstructions,
+                planSchema,
+                "task-repair",
+              ),
             );
           },
           verify: async (task, next, before, attempt) => {

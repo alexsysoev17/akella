@@ -6,6 +6,14 @@ export type RenderedFrame = NativeFrame & {
   cacheHit: boolean;
   cache: { bytes: number; entries: number; hits: number; misses: number };
   memory: NodeJS.MemoryUsage;
+  nativeMemory: {
+    created: number;
+    disposed: number;
+    live: number;
+    liveBytes: number;
+    peakLiveBytes: number;
+    wasmHeapBytes: number | null;
+  };
 };
 let worker: Worker | undefined,
   sequence = 0;
@@ -85,6 +93,7 @@ export async function renderNativeFrame(
     scale?: number;
     transparent?: boolean;
     encoding?: "png" | "rgba";
+    cache?: boolean;
     signal?: AbortSignal;
   } = {},
   reopenAttempts = 0,
@@ -111,6 +120,7 @@ export async function renderNativeFrame(
           scale: options.scale ?? 1,
           transparent: options.transparent ?? false,
           encoding: options.encoding ?? "png",
+          cache: options.cache ?? true,
         },
       },
       options.signal,
@@ -154,6 +164,7 @@ export async function renderNativeFrame(
           scale: options.scale ?? 1,
           transparent: options.transparent ?? false,
           encoding: options.encoding ?? "png",
+          cache: options.cache ?? true,
         },
       },
       options.signal,
