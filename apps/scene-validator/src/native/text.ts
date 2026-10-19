@@ -224,9 +224,24 @@ export function makeText(
         warnings.push(
           "Length-changing text case cannot preserve original segmentation indices",
         );
-      builder.pushStyle(new kit.TextStyle(style({ ...t, ...s })));
-      builder.addText(value);
-      builder.pop();
+      const runStyle = style({ ...t, ...s }),
+        foreground = new kit.Paint(),
+        background = new kit.Paint();
+      try {
+        foreground.setAntiAlias(true);
+        foreground.setColor(runStyle.color ?? kit.BLACK);
+        background.setColor(kit.TRANSPARENT);
+        builder.pushPaintStyle(
+          new kit.TextStyle(runStyle),
+          foreground,
+          background,
+        );
+        builder.addText(value);
+        builder.pop();
+      } finally {
+        foreground.delete();
+        background.delete();
+      }
     }
     if (!content) builder.addText("\u200b");
     const paragraph = builder.build();
@@ -426,13 +441,20 @@ export function drawTextPlane(
       surface.dispose();
     }
   }
-  canvas.drawImageRectOptions(
-    plane.image,
-    kit.XYWHRect(0, 0, plane.image.width(), plane.image.height()),
-    kit.XYWHRect(plane.x, plane.y, plane.width, plane.height),
-    kit.FilterMode.Linear,
-    kit.MipmapMode.None,
-  );
+  const paint = new kit.Paint();
+  paint.setAntiAlias(true);
+  try {
+    canvas.drawImageRectOptions(
+      plane.image,
+      kit.XYWHRect(0, 0, plane.image.width(), plane.image.height()),
+      kit.XYWHRect(plane.x, plane.y, plane.width, plane.height),
+      kit.FilterMode.Linear,
+      kit.MipmapMode.None,
+      paint,
+    );
+  } finally {
+    paint.delete();
+  }
 }
 export function drawStableText(
   kit: CanvasKit,

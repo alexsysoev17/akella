@@ -151,6 +151,95 @@ export class NativeRenderer {
   private paths: PathResources;
   private images = new Map<string, Image>();
   private texts = new Map<string, NativeText>();
+  private mipmaps = new Map<Image, Image>();
+  private mipmapBytes = 0;
+  /** Transform-aware sampling, retaining original decoded pixels and bounded native mipmaps. */
+  private drawRaster(
+    canvas: Canvas,
+    image: Image,
+    destination: Float32Array,
+    paint: Paint,
+    warnings: string[],
+    label: string,
+  ) {
+    const k = this.kit,
+      m = canvas.getTotalMatrix(),
+      sx = (destination[2] - destination[0]) / image.width(),
+      sy = (destination[3] - destination[1]) / image.height(),
+      a = m[0] * sx,
+      b = m[3] * sx,
+      c = m[1] * sy,
+      d = m[4] * sy,
+      sum = a * a + b * b + c * c + d * d,
+      det = a * d - b * c,
+      hi = Math.sqrt(
+        Math.max(
+          0,
+          (sum + Math.sqrt(Math.max(0, sum * sum - 4 * det * det))) / 2,
+        ),
+      ),
+      lo = hi > 0 ? Math.abs(det) / hi : 0,
+      source = k.XYWHRect(0, 0, image.width(), image.height());
+    if (hi > 1.05)
+      warnings.push(
+        `RASTER_RESOLUTION: ${label}; source ${image.width()}x${image.height()}; maximum output scale ${hi.toFixed(3)}; ${(1 / hi).toFixed(3)} source pixels/output pixel`,
+      );
+    if (lo < 0.75) {
+      let mip = this.mipmaps.get(image);
+      if (!mip) {
+        const bytes = Math.ceil((image.width() * image.height() * 4 * 4) / 3);
+        if (bytes <= 64 * 1024 * 1024) {
+          while (
+            this.mipmapBytes + bytes > 64 * 1024 * 1024 &&
+            this.mipmaps.size
+          ) {
+            const [key, old] = this.mipmaps.entries().next().value!;
+            this.mipmapBytes -= Math.ceil(
+              (key.width() * key.height() * 4 * 4) / 3,
+            );
+            old.delete();
+            this.mipmaps.delete(key);
+          }
+          mip = image.makeCopyWithDefaultMipmaps();
+          if (mip) {
+            this.mipmaps.set(image, mip);
+            this.mipmapBytes += bytes;
+          }
+        }
+      }
+      if (mip) {
+        canvas.drawImageRectOptions(
+          mip,
+          source,
+          destination,
+          k.FilterMode.Linear,
+          k.MipmapMode.Linear,
+          paint,
+        );
+        return;
+      }
+      warnings.push(
+        `RASTER_MIPMAP_LIMIT: ${label}; cubic filtering used within64MiB mipmap budget`,
+      );
+    }
+    canvas.drawImageRectCubic(image, source, destination, 1 / 3, 1 / 3, paint);
+  }
+  private textDensity(canvas: Canvas, warnings: string[], target: string) {
+    const m = canvas.getTotalMatrix(),
+      sum = m[0] ** 2 + m[1] ** 2 + m[3] ** 2 + m[4] ** 2,
+      det = m[0] * m[4] - m[1] * m[3],
+      scale = Math.sqrt(
+        Math.max(
+          0,
+          (sum + Math.sqrt(Math.max(0, sum * sum - 4 * det * det))) / 2,
+        ),
+      );
+    if (scale > 4)
+      warnings.push(
+        `TEXT_RASTER_RESOLUTION: ${target}; transform ${scale.toFixed(3)} exceeds bounded glyph density4`,
+      );
+    return Math.max(1, Math.min(4, Math.ceil(2 * scale)));
+  }
   private assetWarnings: string[] = [];
   private effectPlanes = new Map<
     string,
@@ -235,8 +324,26 @@ export class NativeRenderer {
       image.delete();
       throw new NativeRenderError("IMAGE_TOO_LARGE", id);
     }
-    this.images.set(id, image);
-    return image;
+    // Decode once into premultiplied pixels BEFORE filtering. The encoded-image
+    // decoder can expose Unpremul pixels; interpolating those produces dark fringes.
+    const info = {
+      width: image.width(),
+      height: image.height(),
+      colorType: this.kit.ColorType.RGBA_8888,
+      alphaType: this.kit.AlphaType.Premul,
+      colorSpace: this.kit.ColorSpace.SRGB,
+    };
+    let normalized: Image | null = null;
+    try {
+      const pixels = image.readPixels(0, 0, info);
+      if (pixels instanceof Uint8Array) normalized = this.kit.MakeImage(info, pixels, info.width * 4);
+    } finally {
+      image.delete();
+    }
+    if (!normalized)
+      throw new NativeRenderError("IMAGE_PREMULTIPLY_FAILED", id);
+    this.images.set(id, normalized);
+    return normalized;
   }
   private paint(v: Record<string, unknown>, n: NativeNode, stroke = false) {
     const k = this.kit,
@@ -559,7 +666,13 @@ export class NativeRenderer {
             );
           }
           if (!tracks.length) {
-            drawStableText(k, canvas, layout, num(p.width), 2 * scale);
+            drawStableText(
+              k,
+              canvas,
+              layout,
+              num(p.width),
+              this.textDensity(canvas, warnings, n.figmaNodeId),
+            );
             textTrace.push({
               targetId: n.figmaNodeId,
               sceneId,
@@ -711,7 +824,7 @@ export class NativeRenderer {
                   settings.segmentation + ":" + i,
                   bounds,
                   (c) => c.drawPicture(pictures[i]),
-                  2 * scale,
+                  this.textDensity(canvas, warnings, n.figmaNodeId),
                 ),
               );
               canvas.restore();
@@ -744,13 +857,20 @@ export class NativeRenderer {
                 : "RASTER",
             });
             const image = this.images.get(fallback)!;
-            canvas.drawImageRectOptions(
-              image,
-              k.XYWHRect(0, 0, image.width(), image.height()),
-              k.XYWHRect(0, 0, num(p.width), num(p.height)),
-              k.FilterMode.Linear,
-              k.MipmapMode.None,
-            );
+            const brush = new k.Paint();
+            brush.setAntiAlias(true);
+            try {
+              this.drawRaster(
+                canvas,
+                image,
+                k.XYWHRect(0, 0, num(p.width), num(p.height)),
+                brush,
+                warnings,
+                `${n.figmaNodeId}/${fallback}`,
+              );
+            } finally {
+              brush.delete();
+            }
           } else
             for (const fill of list(p.fills)) {
               if (fill.visible === false) continue;
@@ -803,18 +923,22 @@ export class NativeRenderer {
                         ),
                       ),
                     );
-                    canvas.drawImageRect(
+                    this.drawRaster(
+                      canvas,
                       image,
-                      k.XYWHRect(0, 0, image.width(), image.height()),
                       k.XYWHRect(0, 0, w, h),
                       paint.paint,
+                      warnings,
+                      `${n.figmaNodeId}/${fill.assetId}`,
                     );
                   } else
-                    canvas.drawImageRect(
+                    this.drawRaster(
+                      canvas,
                       image,
-                      k.XYWHRect(0, 0, image.width(), image.height()),
                       k.XYWHRect((w - iw) / 2, (h - ih) / 2, iw, ih),
                       paint.paint,
+                      warnings,
+                      `${n.figmaNodeId}/${fill.assetId}`,
                     );
                   canvas.restore();
                   if (
@@ -1284,6 +1408,9 @@ export class NativeRenderer {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
+    for (const image of this.mipmaps.values()) image.delete();
+    this.mipmaps.clear();
+    this.mipmapBytes = 0;
     for (const image of this.images.values()) image.delete();
     for (const text of this.texts.values()) text.dispose();
     this.paths.dispose();

@@ -36,8 +36,8 @@ export class NativeRenderError extends Error {
   }
 }
 
-// MakeSurface allocates a caller-owned WASM pixel plane. Surface.delete() alone
-// does NOT release it; CanvasKit's software Surface.dispose() does both jobs.
+// Own a premultiplied raster plane explicitly. CanvasKit MakeSurface creates an
+// Unpremul surface intended for browser ImageData; native compositing needs Premul.
 const surfaces = {
   created: 0,
   disposed: 0,
@@ -46,18 +46,38 @@ const surfaces = {
   peakLiveBytes: 0,
 };
 export function makeSurface(kit: CanvasKit, width: number, height: number) {
-  const surface = kit.MakeSurface(width, height);
-  if (!surface)
+  const bytes = width * height * 4;
+  const pixels = kit.Malloc(Uint8Array, bytes);
+  let surface;
+  try {
+    surface = kit.MakeRasterDirectSurface(
+      {
+        width,
+        height,
+        colorType: kit.ColorType.RGBA_8888,
+        alphaType: kit.AlphaType.Premul,
+        colorSpace: kit.ColorSpace.SRGB,
+      },
+      pixels,
+      width * 4,
+    );
+  } catch (error) {
+    kit.Free(pixels);
+    throw error;
+  }
+  if (!surface) {
+    kit.Free(pixels);
     throw new NativeRenderError(
       "SURFACE_ALLOCATION_FAILED",
       `${width}x${height}`,
     );
-  const bytes = width * height * 4;
+  }
+  surface.getCanvas().clear(kit.TRANSPARENT);
   surfaces.created++;
   surfaces.live++;
   surfaces.liveBytes += bytes;
   surfaces.peakLiveBytes = Math.max(surfaces.peakLiveBytes, surfaces.liveBytes);
-  const release = surface.dispose.bind(surface);
+  const release = surface.delete.bind(surface);
   let released = false;
   surface.dispose = () => {
     if (released) return;
@@ -65,6 +85,7 @@ export function makeSurface(kit: CanvasKit, width: number, height: number) {
     try {
       release();
     } finally {
+      kit.Free(pixels);
       surfaces.disposed++;
       surfaces.live--;
       surfaces.liveBytes -= bytes;
