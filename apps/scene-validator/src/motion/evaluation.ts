@@ -1,3 +1,4 @@
+import { presentationBlocks } from "./transition-runtime.js";
 import { inverse } from "./geometry.js";
 import { scopedExpressionValue } from "./transition-effects.js";
 import type { StatePresentation } from "./transition-runtime.js";
@@ -178,7 +179,7 @@ export function evaluateMotion(state: MotionState, frame: number, presentation: 
     nodes,
     evaluateAnimation,
   );
-  const blocks = [...state.blocks].sort((a, b) => a.startFrame - b.startFrame);
+  const blocks = presentationBlocks(state).sort((a, b) => a.startFrame - b.startFrame);
   const visible: Record<string, number> = {};
   for (let i = 0; i < blocks.length; i++) {
     const b = blocks[i];

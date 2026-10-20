@@ -1,3 +1,4 @@
+import { requiredProjectFrames, TimelineConstraintError } from "../constraints.js";
 import { MotionToolError, motionStateDigest } from "../tools.js";
 import { failureCategory, infrastructureFailure } from "../qa/failure.js";
 import { taskRepairContext } from "./repair-context.js";
@@ -84,6 +85,9 @@ export function assertIntentScope(
           /reveal|ribbon|trim/i.test(a.animationId) &&
           channels(a).some((c) => c.startsWith("scale"))));
   const baseline = structuredClone(before);
+  if (plan.timelineExtension !== "fixed" && before.settings.timelineExtensionPolicy !== "fixed" && next.settings.durationFrames > before.settings.durationFrames &&
+      next.settings.durationFrames === requiredProjectFrames({ ...next, settings: { ...next.settings, durationFrames: before.settings.durationFrames } }))
+    { baseline.settings.durationFrames = next.settings.durationFrames; baseline.settings.tailPolicy = next.settings.tailPolicy; }
   baseline.animations = [
     ...before.animations.filter((a) => !allowed(a)),
     ...next.animations.filter(allowed),
@@ -94,15 +98,26 @@ export function assertIntentScope(
       ...next.animations.filter(allowed),
     ].map((a) => a.animationId),
   );
+  const transitionIds = new Set((before.objectTransitions ?? []).filter(t => r.techniques.includes("objectStateTransition") && t.logicalObjectId === r.target.logicalObjectId).map(t => t.transitionId));
   const exprAllowed = (e: NonNullable<MotionState["expressions"]>[number]) =>
-    own(e) &&
+    (own(e) &&
     (!r.expressionIds || r.expressionIds.includes(e.expressionId)) &&
     (r.techniques.includes(e.type as (typeof r.techniques)[number]) ||
-      ("sourceAnimationId" in e && allowedIds.has(e.sourceAnimationId)));
+      ("sourceAnimationId" in e && allowedIds.has(e.sourceAnimationId)))) || Boolean(e.transitionId && transitionIds.has(e.transitionId) &&
+      (r.effectOperation?.action !== "remove" || r.dependentPolicy === "removeDependents"));
   baseline.expressions = [
     ...(before.expressions ?? []).filter((e) => !exprAllowed(e)),
     ...(next.expressions ?? []).filter(exprAllowed),
   ];
+  // A base edit may retime its dependents, never rewrite their parameters.
+  baseline.expressions = (baseline.expressions ?? []).flatMap(e => {
+    if (!e.transitionId || !transitionIds.has(e.transitionId) || r.techniques.includes(e.type as IntentRequirement["techniques"][number])) return [e];
+    const old = before.expressions?.find(x => x.expressionId === e.expressionId);
+    if (!old) return [];
+    if (r.effectOperation?.action === "remove" && r.dependentPolicy === "removeDependents") return [];
+    const from = before.objectTransitions?.find(t => t.transitionId === e.transitionId), to = next.objectTransitions?.find(t => t.transitionId === e.transitionId);
+    return [{ ...old, startFrame: old.type === "inertialOvershoot" && from && to ? old.startFrame + to.startFrame + to.durationFrames - from.startFrame - from.durationFrames : old.startFrame }];
+  });
   baseline.timingDependencies = [
     ...(before.timingDependencies ?? []).filter(
       (d) =>
@@ -157,7 +172,8 @@ export function requirementChecks(
 ) {
   if (r.techniques.includes("objectStateTransition")) {
     const matches = (state.objectTransitions ?? []).filter(t => t.logicalObjectId === r.target.logicalObjectId && [t.fromSceneId, t.toSceneId].includes(r.sceneId!) && (!r.parameters.toSceneId || t.toSceneId === r.parameters.toSceneId));
-    return [{ name: "stateTransitionContract", requirementId: r.requirementId, status: matches.length === 1 && (r.parameters.easing == null || JSON.stringify(matches[0].easing) === JSON.stringify(r.parameters.easing)) && (r.parameters.durationSeconds == null || matches[0].durationFrames === Math.round(r.parameters.durationSeconds * state.settings.fps)) ? "PASSED" : "FAILED" }];
+    if (r.effectOperation?.action === "remove") return [{ name: "stateTransitionRemoved", requirementId: r.requirementId, status: matches.length === 0 ? "PASSED" : "FAILED" }];
+    return [{ name: "stateTransitionContract", requirementId: r.requirementId, status: matches.length === 1 && (r.timing.startSeconds == null || matches[0].startFrame === Math.round(r.timing.startSeconds * state.settings.fps)) && (r.parameters.easing == null || JSON.stringify(matches[0].easing) === JSON.stringify(r.parameters.easing)) && (r.parameters.durationSeconds == null || matches[0].durationFrames === Math.round(r.parameters.durationSeconds * state.settings.fps)) ? "PASSED" : "FAILED" }];
   }
   if (
     r.effectOperation?.storage === "animation" &&
@@ -1046,6 +1062,7 @@ export function preflightIntentPlan(
   let candidate = structuredClone(state);
   const reports: unknown[] = [];
   const preparedPlans = new Map<string, { beforeDigest: string; compiled: Plan }>();
+  const recoveries: unknown[] = [];
   while (done.size < tasks.length) {
     const task = tasks.find(
       (t) => !done.has(t.taskId) && t.dependencies.every((id) => done.has(id)),
@@ -1053,14 +1070,31 @@ export function preflightIntentPlan(
     if (!task)
       throw Object.assign(
         new Error("INTENT_PREFLIGHT_FAILED: dependency cycle"),
-        { report: { status: "FAILED", reports } },
+        { report: { status: "FAILED", classification: "INVALID", code: "DEPENDENCY_CYCLE", reports } },
       );
     try {
       if (task.status === "BLOCKED")
         throw new Error(task.error ?? "UNSUPPORTED_REQUIREMENT");
       const compilationStarted = performance.now();
-      const compiled = compileRequirement(project, candidate, plan, task),
-        { next, checks } = admitCompiledTask(project, candidate, plan, task, compiled);
+      const initial = candidate;
+      let working = candidate, prefix: Plan["operations"] = [];
+      let admitted: ReturnType<typeof admitCompiledTask> | undefined, compiled: Plan | undefined;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const proposed = compileRequirement(project, working, plan, task);
+          compiled = { ...proposed, operations: [...prefix, ...proposed.operations] };
+          admitted = admitCompiledTask(project, initial, plan, task, compiled);
+          break;
+        } catch (error) {
+          const required = error instanceof TimelineConstraintError ? error.requiredDurationFrames : error instanceof MotionToolError && error.issue.code === "TIMELINE_CONFLICT" ? Number(error.issue.details.requiredDurationFrames) : NaN;
+          if (attempt === 2 || plan.timelineExtension === "fixed" || state.settings.timelineExtensionPolicy === "fixed" || !Number.isInteger(required) || required <= working.settings.durationFrames || required > 108000) throw error;
+          prefix = [{ type: "setProjectSettings", settings: { ...initial.settings, durationFrames: required, tailPolicy: "holdLastScene" } }];
+          working = applyOperations(initial, prefix, project);
+          recoveries.push({ taskId: task.taskId, classification: "RECOVERABLE", code: "DEPENDENT_EFFECT_EXCEEDS_TIMELINE", resolution: "extendProject", previousDurationFrames: initial.settings.durationFrames, requiredDurationFrames: required, requiredAdditionalFrames: required - initial.settings.durationFrames, attempt: attempt + 1, blocksMoved: false });
+        }
+      }
+      if (!admitted || !compiled) throw new Error("PREFLIGHT_RECOVERY_LIMIT");
+      const { next, checks } = admitted;
       preparedPlans.set(task.taskId, { beforeDigest: motionStateDigest(candidate), compiled });
       if (checks.some((c) => c.status === "FAILED"))
         throw Object.assign(new Error("REQUIREMENT_OPERATIONS_INCOMPLETE"), {
@@ -1091,6 +1125,12 @@ export function preflightIntentPlan(
         {
           report: {
             status: "FAILED",
+            classification: error instanceof TimelineConstraintError || error instanceof MotionToolError && error.issue.code === "TIMELINE_CONFLICT" ? "RECOVERABLE" : /AMBIGUOUS|REQUIRE_POLICY/.test(String(error)) ? "AMBIGUOUS" : /UNSUPPORTED|недоступен/.test(String(error)) ? "UNSUPPORTED" : "INVALID",
+            code: error instanceof TimelineConstraintError ? error.code : error instanceof MotionToolError ? error.issue.code : String(error).replace(/^Error: /, "").split(":")[0],
+            affectedIds: error instanceof TimelineConstraintError ? error.affectedIds : undefined,
+            availableResolutions: error instanceof TimelineConstraintError ? plan.timelineExtension === "fixed" || state.settings.timelineExtensionPolicy === "fixed" ? ["inspectDependencies", "reviseTimelineConstraint"] : ["extendProject", "adjustEffectDuration"] : error instanceof MotionToolError ? error.issue.allowedActions : [],
+            requiredAdditionalFrames: error instanceof TimelineConstraintError ? error.requiredDurationFrames - error.actualDurationFrames : undefined,
+            recoveries,
             taskId: task.taskId,
             reports,
             failure: String(error),
@@ -1104,6 +1144,8 @@ export function preflightIntentPlan(
   }
   return {
     status: "PASSED",
+    classification: "VALID",
+    recoveries,
     durationMs: performance.now() - preflightStarted,
     preparedPlans,
     graphDiff: {

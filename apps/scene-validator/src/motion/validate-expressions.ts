@@ -1,3 +1,4 @@
+import { TimelineConstraintError, requiredProjectFrames } from "./constraints.js";
 import { intervalConflict } from "./intervals.js";
 import { expressionLifecycles } from "../motion-library/expressions/registry.js";
 import type { MotionState } from "./schema.js";
@@ -29,9 +30,9 @@ export function validateExpressions(
     }
     const conflict = intervalConflict(e, state.settings.durationFrames, expressionLifecycles[e.type]);
     if (expressionLifecycles[e.type] === "settling" && conflict)
-      throw new Error(`INVALID_LIFECYCLE_INTERVAL: ${e.expressionId} ${e.type} on ${e.sceneId}/${e.targetId} must finish before final project frame so its settled endpoint is rendered`);
+      throw new TimelineConstraintError(requiredProjectFrames(state), state.settings.durationFrames, [e.expressionId], `INVALID_LIFECYCLE_INTERVAL: ${e.expressionId} ${e.type} on ${e.sceneId}/${e.targetId} must finish before final project frame so its settled endpoint is rendered`);
     if (expressionLifecycles[e.type] === "continuous" && conflict)
-      throw new Error(`INVALID_LIFECYCLE_INTERVAL: ${e.expressionId} ${e.type} exceeds project duration`);
+      throw new TimelineConstraintError(requiredProjectFrames(state), state.settings.durationFrames, [e.expressionId], `INVALID_LIFECYCLE_INTERVAL: ${e.expressionId} ${e.type} exceeds project duration`);
     if (e.type === "inertialOvershoot" && e.transitionId) continue;
     if ("sourceAnimationId" in e) {
       const a = state.animations.find(

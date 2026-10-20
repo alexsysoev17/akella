@@ -1,3 +1,4 @@
+import { TimelineConstraintError } from "../constraints.js";
 import { statePresentation } from "../transitions.js";
 import { parentLocalDelta, unit } from "../geometry.js";
 import {
@@ -478,7 +479,8 @@ export function compileRequirement(
       const existing = transitionForTarget(project, state, r.sceneId!, r.target.sourceNodeId!);
       if (r.kind === "editAnimation") {
         if (!existing) throw new Error("ANIMATION_NOT_FOUND: no existing logical state transition");
-        operations.push(...lowerMotionTool(project, state, { tool: "updateAnimation", animationId: existing.transitionId, patch: {
+        if (r.effectOperation?.action === "remove") operations.push(...lowerMotionTool(project, state, { tool: "removeAnimation", animationId: existing.transitionId, dependentPolicy: r.dependentPolicy ?? "reject" }));
+        else operations.push(...lowerMotionTool(project, state, { tool: "updateAnimation", animationId: existing.transitionId, patch: {
           ...(r.parameters.easing != null ? { easing: r.parameters.easing } : {}),
           ...(r.parameters.durationSeconds != null ? { durationFrames: duration } : r.parameters.durationFactor != null ? { durationFrames: Math.max(1, Math.round(existing.durationFrames * r.parameters.durationFactor)) } : {}),
           ...(r.timing.startSeconds != null ? { startFrame: start } : {}),
@@ -516,12 +518,7 @@ export function compileRequirement(
           warnings.push(
             `Связь после удалённого эффекта снята; начало оставшейся анимации сохранено на кадре ${state.animations.find((a) => a.animationId === d.animationId)?.startFrame}.`,
           );
-      operations.push(
-        ...ids.map((animationId) => ({
-          type: "removeAnimation" as const,
-          animationId,
-        })),
-      );
+      for (const animationId of ids) operations.push(...lowerMotionTool(project, state, { tool: "removeAnimation", animationId, dependentPolicy: r.dependentPolicy ?? "reject" }));
     } else if (task.kind === "editAnimation") {
       const targets = requirementAnimations(state, r);
       const expressions =
@@ -1013,7 +1010,7 @@ function compileInertiaAttachments(
   if (transition && r.targetScope !== "instance") {
     const end = transition.startFrame + transition.durationFrames;
     const settle = Math.min(Math.round(1.2 * state.settings.fps), state.settings.durationFrames - end - 1);
-    if (settle < 4) throw new Error("TIMELINE_CONFLICT: transition inertia needs a visible settling interval; extend project explicitly");
+    if (settle < 4) throw new TimelineConstraintError(end + Math.round(1.2 * state.settings.fps) + 1, state.settings.durationFrames, [transition.transitionId]);
     const defaults = inertiaIntensityDefaults[r.parameters.intensity ?? "normal"];
     const geometry = statePresentation(project, state)[transition.logicalObjectId];
     return (["x", "y"] as const).filter(property => (!r.parameters.property || r.parameters.property === property) && Math.abs(geometry[transition.toSceneId].normalized[property === "x" ? 0 : 1][2] - geometry[transition.fromSceneId].normalized[property === "x" ? 0 : 1][2]) > 1e-8).flatMap(property => {

@@ -83,7 +83,11 @@ export function resetTransitionOpacity(root: Document) {
 /** Render-only source trees for reference states absent from the authored video blocks.
  * These view IDs are never persisted or used as object identity. */
 export function presentationBlocks(state: MotionState): MotionState["blocks"] {
-  const blocks = [...state.blocks];
+  const blocks = state.blocks.map(b => ({ ...b }));
+  if (state.settings.tailPolicy === "holdLastScene") {
+    const last = [...blocks].sort((a,b) => a.startFrame-b.startFrame).at(-1);
+    if (last) last.durationFrames = state.settings.durationFrames - last.startFrame;
+  }
   for (const t of state.objectTransitions ?? []) {
     if (t.timelinePolicy !== "referenceStates") continue;
     for (const sceneId of [t.fromSceneId, t.toSceneId]) {

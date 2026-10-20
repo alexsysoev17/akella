@@ -242,3 +242,62 @@ test("logical ownership validates source identity, preserves absolute noise phas
     assert.throws(() => applyOperations(withInertia, [{ type: "removeObjectStateTransition", transitionId: t.transitionId }], f.project), /DEPENDENT_EXPRESSION/);
   } finally { await closeNativeRenderer(); await f.cleanup(); }
 });
+
+test("recoverable preflight: exact retime, bounded timeline extension, dependent deletion, undo and recreation", async () => {
+  const f = await circleFixture(); let response: unknown;
+  const stop = registerProvider("recover-circle", () => ({ id: "recover-circle", mode: "mock", capabilities: () => ({ structuredOutput: true, nativeToolCalling: false, cancellation: true, usage: false, nativeOutputTokenLimit: false }), generate: async () => ({ output: response, usage: null, estimatedCost: null, latencyMs: 0, diagnostics: ["mock semantics, real execution"], toolCalls: [] }) }));
+  const turn = async (prompt: string, technique: string, kind: string, parameters: {key:string;value:string|number}[] = [], extra: object = {}, fixed = false) => {
+    response = { ...graph(prompt, technique, kind, parameters, { scene: "s0", targets: ["c0"], targetScope: "logicalObject", ...extra }), ...(fixed ? { timelineExtension: "fixed" } : {}) };
+    const before = await readMotion(f.project);
+    const result = await executeMotion(f.project, { mode:"edit", request:prompt, expectedRevision:before.revision, settings:{provider:"recover-circle",model:""} }, () => {}, {config:{maxLLMCalls:1,maxRepairAttempts:0}});
+    assert.equal(result.reconciliation?.status,"SUCCESS",await readFile(path.join(f.project.root,"motion/ai",result.id,"tasks.json"),"utf8"));
+    const doc = await readMotion(f.project); assert.equal(doc.cursor,before.cursor+1); return {doc,run:result.id};
+  };
+  try {
+    await turn("Circle движется линейно за секунду", "objectStateTransition", "objectAnimation", [{key:"durationSeconds",value:1},{key:"easing",value:"linear"},{key:"toSceneId",value:"s1"}], {start:{unit:"frames",value:0}});
+    await turn("Circle поменяй только easing", "objectStateTransition", "editAnimation", [{key:"easing",value:"easeInCubic"}], {effectOperation:{storage:"transition",action:"update"}});
+    await turn("Circle добавь инерцию после движения", "inertialOvershoot", "objectAnimation");
+    const before = await readMotion(f.project), blocks = structuredClone(before.state.blocks);
+    const timing = { start:{unit:"seconds",value:1}, effectOperation:{storage:"transition",action:"updateTiming"} };
+    await assert.rejects(() => turn("Circle движение с 1 до 3 секунд, общая длительность фиксирована", "objectStateTransition", "editAnimation", [{key:"durationSeconds",value:2}], timing, true));
+    assert.deepEqual((await readMotion(f.project)).state,before.state);
+    const moved = await turn("Circle движение с 1 до 3 секунд", "objectStateTransition", "editAnimation", [{key:"durationSeconds",value:2}], timing, true);
+    assert.equal(moved.doc.state.objectTransitions![0].startFrame,12); assert.equal(moved.doc.state.objectTransitions![0].durationFrames,24);
+    assert.ok(moved.doc.state.expressions!.every(e=>e.startFrame===36));
+    assert.ok(moved.doc.state.settings.durationFrames>48); assert.deepEqual(moved.doc.state.blocks,blocks);
+    const last = moved.doc.state.settings.durationFrames - 1;
+    const tail = await renderProjectFrame(f.project,last,{encoding:"rgba"});
+    assert.ok(tail.hits.some(h=>h.targetId==="c1"),"extended tail holds the actual destination object");
+    const video = await exportVideo(f.project.root,()=>{},{renderer:"native"});assert.ok("frameDigests" in video);assert.equal(video.frames,moved.doc.state.settings.durationFrames);assert.equal(video.frameDigests.find(d=>d.frame===last)?.sha256,hash(tail.png));
+    const report = JSON.parse(await readFile(path.join(f.project.root,"motion/ai",moved.run,"compilation-preflight.json"),"utf8"));
+    assert.equal(report.classification,"VALID"); assert.ok(report.recoveries.some((r:{code:string})=>r.code==="DEPENDENT_EFFECT_EXCEEDS_TIMELINE"));
+    await turn("Circle инерция вдвое слабее", "inertialOvershoot", "editAnimation", [{key:"amplitudeFactor",value:.5}], {effectOperation:{storage:"expression",action:"update"},relation:"unchanged"});
+    await turn("Circle добавь wiggle", "wiggle", "objectAnimation");
+    await turn("Circle wiggle слабее", "wiggle", "editAnimation", [{key:"amplitudeFactor",value:.5}], {effectOperation:{storage:"expression",action:"update"},relation:"unchanged"});
+    await turn("Circle убери wiggle", "wiggle", "editAnimation", [], {effectOperation:{storage:"expression",action:"remove"},relation:"unchanged"});
+    const removed = await turn("Circle убери всю анимацию вместе с инерцией", "objectStateTransition", "editAnimation", [], {effectOperation:{storage:"transition",action:"remove"},dependentPolicy:"removeDependents"});
+    assert.equal(removed.doc.state.objectTransitions!.length,0); assert.equal(removed.doc.state.expressions!.length,0);
+    const image = await renderProjectFrame(f.project,0,{encoding:"rgba"}); assert.ok(image.hits.some(h=>h.targetId==="c0"),"Figma object is not deleted");
+    const undo = await changeMotion(f.project.root,{expectedRevision:removed.doc.revision,request:"Undo",action:"undo"});
+    assert.equal(undo.document.state.objectTransitions!.length,1); assert.ok(undo.document.state.expressions!.length);
+    await changeMotion(f.project.root,{expectedRevision:undo.document.revision,request:"Redo",action:"redo"});
+    await turn("Circle снова линейное движение за секунду", "objectStateTransition", "objectAnimation", [{key:"durationSeconds",value:1},{key:"toSceneId",value:"s1"},{key:"easing",value:"linear"}],{start:{unit:"frames",value:0}});
+  } finally { stop();await closeNativeRenderer();await f.cleanup(); }
+});
+
+test("one bounded agent tool decision repairs a stale unsupported transition-removal interpretation", async () => {
+  const f = await circleFixture(); let calls=0;
+  let doc=await readMotion(f.project);
+  const transition={transitionId:"agent-base",logicalObjectId:logicalId("Circle"),fromSceneId:"s0",toSceneId:"s1",timelinePolicy:"referenceStates" as const,startFrame:0,durationFrames:12,easing:"linear" as const,proceduralEffects:[],layerPolicy:{type:"switch" as const,switchProgress:1}};
+  await changeMotion(f.project.root,{expectedRevision:doc.revision,request:"Fixture base",operations:[{type:"animateObjectStateTransition",...transition}]});
+  const prompt="убери анимацию у Circle";
+  const legacy=graph(prompt,"objectStateTransition","unsupported",[],{scene:null,targets:["Circle"],targetScope:"logicalObject",unresolvedReason:"objectTransition removal unavailable in old capability contract"});
+  const stop=registerProvider("recover-decision",()=>({id:"recover-decision",mode:"mock",capabilities:()=>({structuredOutput:true,nativeToolCalling:false,cancellation:true,usage:false,nativeOutputTokenLimit:false}),generate:async()=>({output:++calls===1?legacy:{action:"removeAnimation",dependentPolicy:"removeDependents",reason:"User explicitly requested removing this object's motion"},usage:null,estimatedCost:null,latencyMs:0,diagnostics:["prepared semantic and tool decision"],toolCalls:[]})}));
+  try {
+    doc=await readMotion(f.project);
+    const result=await executeMotion(f.project,{mode:"edit",request:prompt,expectedRevision:doc.revision,settings:{provider:"recover-decision",model:""}},()=>{},{config:{maxLLMCalls:2,maxRepairAttempts:1}});
+    assert.equal(result.reconciliation?.status,"SUCCESS",JSON.stringify(result)); assert.equal(calls,2);
+    const after=await readMotion(f.project);assert.equal(after.state.objectTransitions!.length,0);assert.equal(after.cursor,doc.cursor+1);
+    const decision=JSON.parse(await readFile(path.join(f.project.root,"motion/ai",result.id,"preflight-resolution.json"),"utf8"));assert.equal(decision.action,"removeAnimation");
+  } finally {stop();await closeNativeRenderer();await f.cleanup();}
+});

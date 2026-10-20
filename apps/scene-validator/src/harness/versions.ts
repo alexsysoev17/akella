@@ -10,6 +10,7 @@ const components = [
   "motion-library/guidance",
   "motion/store",
   "motion/tools",
+  "motion/constraints",
   "motion/intervals",
   "motion/tool-runtime",
   "motion/effect-edit",

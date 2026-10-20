@@ -542,7 +542,7 @@ function resolveTrackLifecycle(
 ): IntentRequirement[] | false {
   const kinds = new Set(r.techniques.map((t) => semanticBindings[t]));
   // A logical state transition is a canonical animation entry, not a node animation track.
-  if (kinds.size === 1 && kinds.has("transition")) {
+  if (kinds.has("transition") && !kinds.has("animation")) {
     if (r.effectOperation?.action === "update" && r.effectOperation.storage === "animation")
       r.effectOperation = { storage: "transition", action: "update" };
     if (r.effectOperation?.storage === "transition") return false;

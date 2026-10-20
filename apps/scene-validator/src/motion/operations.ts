@@ -1,3 +1,4 @@
+import { requiredProjectFrames, TimelineConstraintError } from "./constraints.js";
 import { intervalConflict } from "./intervals.js";
 import { retimeScenes, resolveTimingDependencies } from "./intent/retime.js";
 import { instantiatePreset } from "../motion-library/presets/registry.js";
@@ -67,7 +68,7 @@ export function validateMotion(
     }
     if (o.mask) throw new Error("Анимация масок пока не поддерживается.");
     if (intervalConflict(a, state.settings.durationFrames, "finite"))
-      throw new Error(
+      throw new TimelineConstraintError(requiredProjectFrames(state), state.settings.durationFrames, [a.animationId],
         `Анимация ${a.animationId} выходит за длительность ролика.`,
       );
     if (channels(a).includes("trim") && !o.trimSupported)
@@ -168,7 +169,7 @@ export function validateMotion(
     const next = blocks[i + 1];
     if (!next) {
       if (
-        b.startFrame + b.durationFrames !== state.settings.durationFrames ||
+        (state.settings.tailPolicy === "holdLastScene" ? b.startFrame + b.durationFrames > state.settings.durationFrames : b.startFrame + b.durationFrames !== state.settings.durationFrames) ||
         b.transition.durationFrames !== 0
       )
         throw new Error(

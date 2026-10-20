@@ -1,3 +1,5 @@
+import { compileTasks } from "./intent/compiler.js";
+import { findObject, inspectAnimations, inspectTimeline, inspectDependencies } from "./tools.js";
 import { commitChanges } from "./tool-runtime.js";
 import { duringStage } from "../harness/failure.js";
 import { renderingMode } from "../native/client.js";
@@ -486,7 +488,32 @@ export async function proposeMotion(
               "compilation-preflight",
               (error as { report?: unknown }).report ?? { status: "FAILED" },
             );
-            throw error;
+            const failure = (error as { report?: { classification?: string; taskId?: string } }).report;
+            const failedTask = compileTasks(project, contract).find(t => t.taskId === failure?.taskId);
+            const task = contract.requirements.find(r => failedTask?.requirementIds.includes(r.requirementId) && r.techniques.includes("objectStateTransition") && (r.kind === "unsupported" || r.effectOperation?.action === "remove"));
+            if (task && !task.target.logicalObjectId) {
+              const resolved = findObject(project, doc.state, { referenceText: task.sourceText, name: task.target.name, sourceNodeId: task.target.sourceNodeId, sceneId: task.sceneId, techniques: task.techniques, preferExisting: true });
+              if (resolved.target) { task.sceneId = resolved.target.sceneId; task.target = { name: resolved.target.canonicalName, sourceNodeId: resolved.target.sourceNodeId, logicalObjectId: resolved.target.logicalObjectId }; }
+            }
+            // One targeted tool decision, using the existing provider and shared run budget.
+            // Never regenerate a full semantic plan to resolve deterministic frame arithmetic.
+            if (!task?.target.logicalObjectId || task.dependentPolicy === "reject" || !harness?.config.maxRepairAttempts || !["AMBIGUOUS", "UNSUPPORTED"].includes(failure?.classification ?? "")) throw error;
+            onStage("repairing");
+            harness.repairAttempts++;
+            const entries = inspectAnimations(project, doc.state, { logicalObjectId: task.target.logicalObjectId! });
+            const provider = new CodexProvider(request.settings, await providerDirectory("preflight-resolution"), harness.providerRuntime());
+            const decision = await provider.structured({ failure, originalRequirement: task, animations: entries, timeline: inspectTimeline(doc.state), dependencies: entries.map(e => ({ id: e.id, ...inspectDependencies(doc.state, e.id) })) }, request.request,
+              "Resolve ONLY this lifecycle conflict using actual typed tools. Decide whether the original user authorized removing the base animation and its dependent effects. Preserve source objects and unrelated motion. If removal or dependent deletion is not justified return stop. Never fabricate IDs or reinterpret a different request.",
+              z.object({ action: z.enum(["removeAnimation", "stop"]), dependentPolicy: z.enum(["reject", "removeDependents"]), reason: z.string().max(1000) }).strict(), "preflight-resolution");
+            await atomicJson(path.join(directory, "preflight-resolution.json"), decision);
+            if (decision.action === "stop") throw error;
+            task.kind = "editAnimation"; task.unresolvedReason = null; task.effectOperation = { storage: "transition", action: "remove" }; task.dependentPolicy = decision.dependentPolicy;
+            const recovered = preflightIntentPlan(project, doc.state, contract);
+            preparedPlans = recovered.preparedPlans;
+            const { preparedPlans: runtimeOnly, ...recoveredReport } = recovered;
+            await atomicJson(path.join(directory, "intent-contract.json"), contract);
+            await atomicJson(path.join(directory, "compilation-preflight.json"), { ...recoveredReport, preparedPlanCount: runtimeOnly.size, agentResolution: decision });
+            await harness.diagnostic("preflight-resolution", { ...recoveredReport, agentResolution: decision });
           }
         }
         let committed = doc;

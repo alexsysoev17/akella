@@ -1,3 +1,4 @@
+import { TimelineConstraintError } from "./constraints.js";
 import { intervalConflict } from "./intervals.js";
 import { z } from "zod";
 import { createHash } from "node:crypto";
@@ -17,9 +18,10 @@ export const motionToolSchema = z.discriminatedUnion("tool", [
   z.object({ tool: z.literal("updateAnimation"), animationId: id, patch: z.object({ ...timingPatch, easing: easingSchema.optional(), enabled: z.boolean().optional(), parameters: parameters.optional() }).strict() }).strict(),
   z.object({ tool: z.literal("addEffect"), expression: expressionSchema }).strict(),
   z.object({ tool: z.literal("updateEffect"), expressionId: id, patch: z.object({ ...timingPatch, enabled: z.boolean().optional(), ownership: expressionSchema.options[0].shape.ownership, transitionId: id.optional(), parameters: parameters.optional() }).strict() }).strict(),
+  z.object({ tool: z.literal("removeAnimation"), animationId: id, dependentPolicy: z.enum(["reject", "removeDependents"]).default("reject") }).strict(),
   z.object({ tool: z.literal("removeEffect"), expressionId: id }).strict(),
   z.object({ tool: z.literal("createStateTransition"), transition: objectTransitionSchema }).strict(),
-  z.object({ tool: z.literal("adjustTimeline"), policy: z.enum(["extendProject", "rejectOverflow"]), durationFrames: z.number().int().positive() }).strict(),
+  z.object({ tool: z.literal("adjustTimeline"), policy: z.enum(["extendProject", "rejectOverflow"]), durationFrames: z.number().int().positive(), preserveBlocks: z.boolean().optional() }).strict(),
 ]);
 export type MotionTool = z.infer<typeof motionToolSchema>;
 export type ToolIssue = { code: string; message: string; details: Record<string, unknown>; allowedActions: string[] };
@@ -54,7 +56,10 @@ export function lowerMotionTool(project: LoadedProject, state: MotionState, inpu
       const a = state.animations.find(a => a.animationId === command.animationId);
       const t = state.objectTransitions?.find(t => t.transitionId === command.animationId);
       if (a) {
-        const animation = animationSchema.parse({ ...a, ...command.patch, parameters: { ...a.parameters, ...command.patch.parameters } });
+        const parameters = a.effect === "keyframes" && command.patch.durationFrames && !command.patch.parameters
+          ? { ...a.parameters, points: a.parameters.points.map(p => ({ ...p, frame: Math.round(p.frame * command.patch.durationFrames! / a.durationFrames) })) }
+          : { ...a.parameters, ...command.patch.parameters };
+        const animation = animationSchema.parse({ ...a, ...command.patch, parameters });
         const conflict = intervalConflict(animation, state.settings.durationFrames, "finite");
         if (conflict) return fail(conflict.code, "Animation exceeds project duration", conflict, ["adjustTimeline", "updateAnimation"]);
         return [{ type: "updateAnimation", animationId: a.animationId, animation }];
@@ -82,6 +87,18 @@ export function lowerMotionTool(project: LoadedProject, state: MotionState, inpu
       if (!e) return fail("EFFECT_NOT_FOUND", "No current expression with this ID", { expressionId: command.expressionId }, ["inspectAnimations"]);
       return [{ type: "setExpression", expression: expressionSchema.parse({ ...e, ...Object.fromEntries(Object.entries(command.patch).filter(([, value]) => value !== undefined)), parameters: { ...e.parameters, ...command.patch.parameters } }) }];
     }
+    case "removeAnimation": {
+      const a = state.animations.find(a => a.animationId === command.animationId);
+      const t = state.objectTransitions?.find(t => t.transitionId === command.animationId);
+      if (!a && !t) return fail("ANIMATION_NOT_FOUND", "Animation identity no longer exists", { animationId: command.animationId });
+      const dependent = (state.expressions ?? []).filter(e => e.transitionId === command.animationId || "sourceAnimationId" in e && e.sourceAnimationId === command.animationId);
+      if (dependent.length && command.dependentPolicy !== "removeDependents") return fail("DEPENDENT_EFFECTS_REQUIRE_POLICY", "Choose explicit dependent deletion or preserve the base", { expressionIds: dependent.map(e => e.expressionId) }, ["removeAnimation:removeDependents", "inspectDependencies"]);
+      return [
+        ...dependent.map(e => ({ type: "removeExpression" as const, expressionId: e.expressionId })),
+        ...(state.timingDependencies ?? []).filter(d => d.animationId === command.animationId || d.anchorAnimationId === command.animationId).map(d => ({ type: "removeTimingDependency" as const, dependencyId: d.dependencyId })),
+        t ? { type: "removeObjectStateTransition" as const, transitionId: t.transitionId } : { type: "removeAnimation" as const, animationId: a!.animationId },
+      ];
+    }
     case "removeEffect":
       if (!state.expressions?.some(e => e.expressionId === command.expressionId)) return fail("EFFECT_NOT_FOUND", "No current expression with this ID", { expressionId: command.expressionId });
       return [{ type: "removeExpression", expressionId: command.expressionId }];
@@ -95,6 +112,7 @@ export function lowerMotionTool(project: LoadedProject, state: MotionState, inpu
     case "adjustTimeline": {
       if (command.policy === "rejectOverflow" && command.durationFrames !== state.settings.durationFrames) return fail("TIMELINE_POLICY_REJECTED", "Timeline changes were not authorized", { requested: command.durationFrames }, ["adjustTimeline:extendProject"]);
       if (command.durationFrames < state.settings.durationFrames) return fail("TIMELINE_SHRINK_UNSUPPORTED", "This tool never truncates existing work", { current: state.settings.durationFrames });
+      if (command.preserveBlocks) return [{ type: "setProjectSettings", settings: { ...state.settings, durationFrames: command.durationFrames, tailPolicy: "holdLastScene" } }];
       const blocks = structuredClone(state.blocks), last = [...blocks].sort((a, b) => a.startFrame - b.startFrame).at(-1)!;
       last.durationFrames += command.durationFrames - state.settings.durationFrames;
       return [{ type: "setProjectDuration", durationFrames: command.durationFrames }, { type: "setBlocks", blocks }];
@@ -112,7 +130,7 @@ export function prepareMotionTools(project: LoadedProject, state: MotionState, c
     }
     return { ok: true as const, candidate, batches, beforeDigest: motionStateDigest(state) };
   } catch (error) {
-    return { ok: false as const, issue: error instanceof MotionToolError ? error.issue : { code: error instanceof z.ZodError ? "INVALID_TOOL_ARGUMENT" : "TECHNICAL_INVARIANT_FAILED", message: String(error), details: {}, allowedActions: ["inspectAnimations"] } };
+    return { ok: false as const, issue: error instanceof MotionToolError ? error.issue : error instanceof TimelineConstraintError ? { code: error.code, message: error.message, details: { requiredDurationFrames: error.requiredDurationFrames, requiredAdditionalFrames: error.requiredDurationFrames - error.actualDurationFrames, affectedIds: error.affectedIds }, allowedActions: ["adjustProjectDuration", "retimeAnimation"] } : { code: error instanceof z.ZodError ? "INVALID_TOOL_ARGUMENT" : "TECHNICAL_INVARIANT_FAILED", message: String(error), details: {}, allowedActions: ["inspectAnimations"] } };
   }
 }
 /** Resolve a logical state pair without encoding a Figma scene as a video interval. */
@@ -123,4 +141,14 @@ export function transitionForTarget(project: LoadedProject, state: MotionState, 
   if (matches.length > 1) return fail("AMBIGUOUS_TRANSITION", "Choose the exact transition to edit", { transitionIds: matches.map(t => t.transitionId) }, ["inspectAnimations"]);
   return matches[0];
 }
-export const motionToolCatalog = ["findObject", "inspectAnimations", "createAnimation", "updateAnimation", "addEffect", "updateEffect", "removeEffect", "createStateTransition", "adjustTimeline", "validatePreview", "commitChanges"] as const;
+export const motionToolCatalog = ["findObject", "inspectObject", "inspectTimeline", "inspectDependencies", "inspectAnimations", "removeAnimation", "retimeAnimation", "adjustProjectDuration", "validateChanges", "createAnimation", "updateAnimation", "addEffect", "updateEffect", "removeEffect", "createStateTransition", "adjustTimeline", "validatePreview", "commitChanges"] as const;
+
+export const inspectObject = findObject;
+export const inspectTimeline = (state: MotionState) => structuredClone({ settings: state.settings, blocks: state.blocks });
+export function inspectDependencies(state: MotionState, animationId: string) {
+  return structuredClone({ expressions: state.expressions?.filter(e => e.transitionId === animationId || "sourceAnimationId" in e && e.sourceAnimationId === animationId) ?? [], timing: state.timingDependencies?.filter(d => d.animationId === animationId || d.anchorAnimationId === animationId) ?? [] });
+}
+// Aliases deliberately reuse canonical tools and candidate admission.
+export const validateChanges = prepareMotionTools;
+export const retimeAnimation = (project: LoadedProject, state: MotionState, animationId: string, timing: {startFrame?: number; durationFrames?: number}) => state.expressions?.some(e => e.expressionId === animationId) ? lowerMotionTool(project, state, { tool: "updateEffect", expressionId: animationId, patch: timing }) : lowerMotionTool(project, state, { tool: "updateAnimation", animationId, patch: timing });
+export const adjustProjectDuration = (project: LoadedProject, state: MotionState, durationFrames: number) => lowerMotionTool(project, state, { tool: "adjustTimeline", policy: "extendProject", durationFrames, preserveBlocks: true });

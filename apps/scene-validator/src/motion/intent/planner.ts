@@ -252,6 +252,15 @@ export function validateIntentPlan(
 ): IntentPlan {
   const plan = intentPlanSchema.parse(input),
     ids = new Set<string>();
+  // Policy authority is distinct from an animation's timing. A model cannot invent
+  // a global restriction from the current clip length or legacy strictDuration.
+  const projectDurationRestriction = (text: string) => /(?:общая|полная|total|overall)\s*(?:длительность|duration)|не\s+(?:удлиняй|продлевай)\s+(?:(?:весь|этот)\s+)?(?:ролик|видео|проект)|(?:ролик|видео|проект|video|project)[^.!?\n]{0,100}(?:длится|длительность|фиксир|строго|не длиннее|duration|fixed|must end)/iu.test(text);
+  const citedRestriction = plan.timelineConstraintSource && request.includes(plan.timelineConstraintSource) && projectDurationRestriction(plan.timelineConstraintSource);
+  if (projectDurationRestriction(request)) plan.timelineExtension = "fixed";
+  else if (plan.timelineExtension === "fixed" && !citedRestriction) {
+    plan.timelineExtension = "safeExtend";
+    plan.assumptions.push("Unsubstantiated total-duration restriction was rejected; object timing remains exact and canonical project policy remains authoritative.");
+  }
   for (const r of plan.requirements) {
     if (!r.parameters.text) continue;
     const original = r.parameters.text;
@@ -354,6 +363,7 @@ export function validateIntentPlan(
   );
   const currentState = resolutionContext?.state ?? defaultMotion(project);
   for (const r of plan.requirements) {
+    if (r.kind === "unsupported" && r.unresolvedReason === "RESOLVED") r.unresolvedReason = "UNSUPPORTED_EFFECT_OPERATION: resolved identity requires an executable action";
     if (r.sceneId && !sceneIds.has(r.sceneId)) {
       r.unresolvedReason = "UNKNOWN_SCENE";
       continue;
@@ -548,7 +558,7 @@ export function validateIntentPlan(
       if (missingTargetUnsupported)
         r.unresolvedReason =
           result.status === "RESOLVED"
-            ? (lookup?.status ?? "EXISTING_ANIMATION_NOT_FOUND")
+            ? (lookup?.status === "RESOLVED" ? "UNSUPPORTED_EFFECT_OPERATION" : lookup?.status ?? "EXISTING_ANIMATION_NOT_FOUND")
             : result.status;
       continue;
     }

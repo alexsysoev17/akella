@@ -23,6 +23,7 @@ const response = JSON.parse(
     "utf8",
   ),
 );
+const resolution = args.includes("--resolution-file") ? JSON.parse(await readFile(path.resolve(arg("resolution-file")), "utf8")) : undefined;
 const root = await mkdtemp(
   path.join(process.env.TMPDIR ?? "/tmp", "akella-replay-"),
 );
@@ -110,7 +111,7 @@ const stop = registerProvider("saved-run-reference", () => ({
   generate: async () => {
     calls++;
     return {
-      output: response,
+      output: calls === 1 || !resolution ? response : resolution,
       usage: null,
       estimatedCost: null,
       latencyMs: 0,
@@ -129,7 +130,7 @@ try {
         settings: { provider: "saved-run-reference", model: "" },
       },
       () => {},
-      { config: { maxLLMCalls: 1, maxRepairAttempts: 0 } },
+      { config: { maxLLMCalls: resolution ? 2 : 1, maxRepairAttempts: resolution ? 1 : 0 } },
     );
   await writeFile(
     path.join(root, "replay-result.json"),

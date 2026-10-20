@@ -191,6 +191,8 @@ export const settingsSchema = z
     height: z.number().int().min(2).max(4096),
     durationFrames: duration,
     strictDuration: z.boolean(),
+    tailPolicy: z.literal("holdLastScene").optional(),
+    timelineExtensionPolicy: z.enum(["safeExtend", "fixed"]).optional(),
   })
   .strict();
 export const objectTransitionSchema = z

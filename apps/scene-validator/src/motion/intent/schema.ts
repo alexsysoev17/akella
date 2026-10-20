@@ -115,7 +115,7 @@ export const intentRequirementSchema = z
     expressionAction: z.enum(["update", "remove", "enable", "disable"]).optional(),
     effectOperation: z
       .discriminatedUnion("storage", [
-        z.object({ storage: z.literal("transition"), action: z.literal("update") }).strict(),
+        z.object({ storage: z.literal("transition"), action: z.enum(["update", "remove", "updateTiming"]) }).strict(),
         z
           .object({
             storage: z.literal("animation"),
@@ -130,6 +130,7 @@ export const intentRequirementSchema = z
           .strict(),
       ])
       .optional(),
+    dependentPolicy: z.enum(["reject", "removeDependents"]).optional(),
     animationIds: z.array(z.string()).max(5000).optional(),
     parameters: z
       .object({
@@ -202,6 +203,8 @@ export const intentRequirementSchema = z
 export const intentPlanSchema = z
   .object({
     schemaVersion: z.literal("1.0.0"),
+    timelineExtension: z.enum(["safeExtend", "fixed"]).optional(),
+    timelineConstraintSource: z.string().min(1).max(2000).optional(),
     sourceClauses: z
       .array(
         z
