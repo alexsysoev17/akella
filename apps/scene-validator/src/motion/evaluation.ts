@@ -6,7 +6,7 @@ import {
   evaluateEasing,
   type Easing,
 } from "../motion-library/easings/registry.js";
-import { composeExpressions } from "./expressions.js";
+import { expressionValue, composeExpressions } from "./expressions.js";
 import type { Animation, MotionState } from "./schema.js";
 export type Values = {
   x?: number;
@@ -191,7 +191,13 @@ export function evaluateMotion(state: MotionState, frame: number) {
     }
     visible[b.blockId] = clamp(opacity);
   }
-  return { frame, nodes, blocks: visible };
+  const transitionEffects: Record<string, Values> = {};
+  for (const e of [...(state.expressions ?? [])].sort((a, b) => a.expressionId.localeCompare(b.expressionId))) {
+    if (!e.transitionId || !e.enabled) continue;
+    const v = transitionEffects[e.transitionId] ??= {};
+    v[e.property] = (v[e.property] ?? 0) + expressionValue(e, frame, state.settings.fps, state.animations, evaluateAnimation);
+  }
+  return { frame, nodes, blocks: visible, transitionEffects };
 }
 /** Public base-track sampling shared by expressions, diagnostics and tools. */
 export const valueAtTime = (

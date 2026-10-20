@@ -147,6 +147,7 @@ export function composeExpressions(
   )) {
     if (
       !e.enabled ||
+      Boolean(e.transitionId) ||
       frame < e.startFrame ||
       frame > e.startFrame + e.durationFrames
     )

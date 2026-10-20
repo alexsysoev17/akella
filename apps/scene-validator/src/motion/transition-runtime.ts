@@ -80,6 +80,34 @@ export function resetTransitionOpacity(root: Document) {
   for (const el of root.querySelectorAll("[data-logical-object]"))
     el.removeAttribute("data-logical-object");
 }
+/** Render-only source trees for reference states absent from the authored video blocks.
+ * These view IDs are never persisted or used as object identity. */
+export function presentationBlocks(state: MotionState): MotionState["blocks"] {
+  const blocks = [...state.blocks];
+  for (const t of state.objectTransitions ?? []) {
+    if (t.timelinePolicy !== "referenceStates") continue;
+    for (const sceneId of [t.fromSceneId, t.toSceneId]) {
+      if (blocks.some(b => b.sceneId === sceneId)) continue;
+      let blockId = "reference:" + sceneId;
+      while (blocks.some(b => b.blockId === blockId)) blockId += ":view";
+      blocks.push({ blockId, sceneId, name: sceneId, startFrame: 0, durationFrames: state.settings.durationFrames, transition: { type: "cut", durationFrames: 0 } });
+    }
+  }
+  return blocks;
+}
+export function presentedTransitions(state: MotionState, frame: number) {
+  const started = (state.objectTransitions ?? []).filter(t => frame >= t.startFrame);
+  const latest = Math.max(-1, ...started.map(t => t.startFrame));
+  return started.filter(t => {
+    if (t.startFrame !== latest) return false;
+    const end = t.startFrame + t.durationFrames;
+    if (t.timelinePolicy !== "referenceStates") return frame <= end;
+    // Hold the target after arrival, but never suppress a later unrelated authored scene.
+    const nextScene = Math.min(Infinity, ...state.blocks.filter(b => ![t.fromSceneId, t.toSceneId].includes(b.sceneId) && b.startFrame >= end).map(b => b.startFrame));
+    return frame < nextScene;
+  });
+}
+
 /** Keep the selected source/target tree intact. One scene composite owns the entire pair
  * while a transition is active. This explicit cut fallback avoids flattening masks/groups. */
 export function applyObjectTransitions(
@@ -87,10 +115,9 @@ export function applyObjectTransitions(
   state: MotionState,
   frame: number,
   presentation: StatePresentation,
+  effects: Record<string, { x?: number; y?: number }> = {},
 ) {
-  let active = (state.objectTransitions ?? []).filter(
-    (t) => frame >= t.startFrame && frame <= t.startFrame + t.durationFrames,
-  );
+  let active = presentedTransitions(state, frame);
   if (!active.length) return;
   const latest = Math.max(...active.map((t) => t.startFrame));
   active = active.filter((t) => t.startFrame === latest);
@@ -104,6 +131,7 @@ export function applyObjectTransitions(
     "[data-motion-block]",
   )) {
     if (
+      first.timelinePolicy === "referenceStates" ||
       block.dataset.motionScene === first.fromSceneId ||
       block.dataset.motionScene === first.toSceneId
     ) {
@@ -130,8 +158,10 @@ export function applyObjectTransitions(
       if (scene !== host || node.dataset.motionTarget !== current.sourceNodeId)
         continue;
       // Parent * wrapper * local = interpolated canvas transform / geometry dimensions.
+      const offset = effects[t.transitionId] ?? {};
+      const visual = multiply([[1, 0, offset.x ?? 0], [0, 1, offset.y ?? 0]], v.matrix);
       const wrapper = multiply(
-        multiply(multiply(inverse(current.parentCanvas), v.matrix), [
+        multiply(multiply(inverse(current.parentCanvas), visual), [
           [1 / current.width, 0, 0],
           [0, 1 / current.height, 0],
         ]),

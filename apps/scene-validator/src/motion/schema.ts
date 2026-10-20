@@ -196,6 +196,7 @@ export const settingsSchema = z
 export const objectTransitionSchema = z
   .object({
     transitionId: id,
+    timelinePolicy: z.enum(["storyboardBoundary", "referenceStates"]).optional(),
     logicalObjectId: id,
     fromSceneId: id,
     toSceneId: id,

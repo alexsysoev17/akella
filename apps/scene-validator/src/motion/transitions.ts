@@ -1,3 +1,4 @@
+import { intervalConflict } from "./intervals.js";
 import type { LoadedProject } from "../types.js";
 import type { MotionState } from "./schema.js";
 import { buildRegistry, resolveState } from "./registry.js";
@@ -81,27 +82,27 @@ export function validateObjectTransitions(
       throw new Error("Переход требует ненулевых размеров и обратимых матриц");
     const fromBlocks = state.blocks.filter((b) => b.sceneId === t.fromSceneId),
       toBlocks = state.blocks.filter((b) => b.sceneId === t.toSceneId);
-    if (fromBlocks.length !== 1 || toBlocks.length !== 1)
-      throw new Error("Состояние должно иметь ровно один блок на timeline");
+    if (t.timelinePolicy === "referenceStates" ? fromBlocks.length > 1 || toBlocks.length > 1 : fromBlocks.length !== 1 || toBlocks.length !== 1)
+      throw new Error(t.timelinePolicy === "referenceStates" ? "AMBIGUOUS_PRESENTATION: несколько video blocks ссылаются на одно reference state" : "Состояние должно иметь ровно один блок на timeline");
     const a = fromBlocks[0],
       b = toBlocks[0],
       end = t.startFrame + t.durationFrames;
     const blocks = [...state.blocks].sort(
       (a, b) => a.startFrame - b.startFrame,
     );
-    if (blocks.indexOf(b) !== blocks.indexOf(a) + 1)
+    if (t.timelinePolicy !== "referenceStates" && blocks.indexOf(b) !== blocks.indexOf(a) + 1)
       throw new Error(
         "Переходы поддерживают соседние состояния timeline; разбейте длинный путь на последовательные переходы",
       );
     if (
-      t.startFrame < a.startFrame ||
+      (t.timelinePolicy !== "referenceStates" && (t.startFrame < a.startFrame ||
       t.startFrame >= a.startFrame + a.durationFrames ||
       end < b.startFrame ||
-      end >= b.startFrame + b.durationFrames ||
-      end >= state.settings.durationFrames
+      end >= b.startFrame + b.durationFrames)) ||
+      intervalConflict(t, state.settings.durationFrames, "transition")
     )
       throw new Error(
-        "Переход начинается в исходном блоке и заканчивается в целевом, включая его первый кадр. Конечный кадр должен существовать.",
+        t.timelinePolicy === "referenceStates" ? "TIMELINE_CONFLICT: reference transition endpoint must be within the project" : "Переход начинается в исходном блоке и заканчивается в целевом, включая его первый кадр. Конечный кадр должен существовать.",
       );
     if (
       Math.sign(
@@ -129,7 +130,8 @@ export function validateObjectTransitions(
       if (
         (state.expressions ?? []).some(
           (e) =>
-            e.enabled && e.sceneId === s.sceneId && related.has(e.targetId),
+            e.enabled && e.sceneId === s.sceneId && related.has(e.targetId) &&
+            !(e.transitionId === t.transitionId && e.targetId === s.sourceNodeId && e.type === "wiggle"),
         )
       )
         throw new Error(
@@ -145,6 +147,13 @@ export function validateObjectTransitions(
           `«${object.name}»: отдельная анимация экземпляра/родителя/потомка конфликтует с переходом; перенесите характер движения в proceduralEffects`,
         );
     }
+  }
+  for (const e of state.expressions ?? []) {
+    if (!e.transitionId) continue;
+    const t = ts.find(t => t.transitionId === e.transitionId)!;
+    const object = registry.objects.find(o => o.logicalObjectId === t.logicalObjectId)!;
+    const ref = resolveState(project.inspection.document, object, e.sceneId);
+    if (ref.sourceNodeId !== e.targetId) throw new Error("EFFECT_TARGET_MISMATCH: transition-bound expression must target its logical object root");
   }
   for (let i = 0; i < ts.length; i++)
     for (let j = i + 1; j < ts.length; j++) {

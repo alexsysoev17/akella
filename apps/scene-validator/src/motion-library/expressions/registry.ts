@@ -12,6 +12,7 @@ export const propertySchema = z.enum([
 ]);
 const common = {
   expressionId: id,
+  transitionId: id.optional(),
   sceneId: id,
   targetId: id,
   property: propertySchema,

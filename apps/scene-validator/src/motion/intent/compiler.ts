@@ -22,6 +22,7 @@ import type {
 import type { MotionState, Plan, Animation } from "../schema.js";
 import { channels, applyOperations } from "../operations.js";
 import { objectsIn } from "../context.js";
+import { lowerMotionTool, transitionForTarget } from "../tools.js";
 import { editExpression } from "../effect-edit.js";
 import { resolveBaseMotion } from "../base-motion.js";
 import { inertiaIntensityDefaults, wiggleIntensityDefaults } from "../../motion-library/expressions/registry.js";
@@ -41,6 +42,7 @@ export interface IntentTask {
   repairHistory: unknown[];
   error?: string;
   operationCoverage?: unknown;
+  compilationSource?: "validated-preflight" | "compiled";
   primaryFailureReason?: string;
 }
 const stable = (v: unknown) =>
@@ -303,7 +305,8 @@ export function compileRequirement(
     });
   else {
     const r = reqs[0],
-      block = state.blocks.find((b) => b.sceneId === r.sceneId);
+      block = state.blocks.find((b) => b.sceneId === r.sceneId) ??
+        (r.techniques.includes("objectStateTransition") ? { ...state.blocks[0], sceneId: r.sceneId!, startFrame: 0, durationFrames: state.settings.durationFrames } : undefined);
     if (!block) throw new Error("Scene interval missing");
     const own = (a: { sceneId: string; targetId: string }) =>
       a.sceneId === r.sceneId && a.targetId === r.target.sourceNodeId;
@@ -452,57 +455,42 @@ export function compileRequirement(
       }
     }
     const hasInertia = r.techniques.includes("inertialOvershoot");
-    if (
-      r.techniques.includes("objectStateTransition") &&
-      r.timing.startSeconds === null
-    ) {
-      const nextBlock =
-        state.blocks.find((b) => b.sceneId === r.parameters.toSceneId) ??
-        state.blocks[state.blocks.indexOf(block) + 1];
-      if (!nextBlock) throw new Error("Transition requires next source state");
-      start = nextBlock.startFrame - duration;
+    const stateTransition = r.techniques.includes("objectStateTransition");
+    if (!stateTransition) {
+      if (r.timing.relation === "sceneEnd") start = block.startFrame + block.durationFrames - duration;
+      if (r.timing.relation === "beforeRequirement") start = anchor!.startFrame - duration + Math.round(r.timing.delaySeconds * fps);
+      if (start < block.startFrame || start >= block.startFrame + block.durationFrames)
+        throw new Error("Requested action outside its scene");
+      const remaining = block.startFrame + block.durationFrames - start;
+      if (remaining < duration + (hasInertia ? 4 : 0)) {
+        if (r.parameters.durationSeconds !== null) throw new Error("Explicit duration does not fit scene");
+        duration = Math.max(1, Math.floor(remaining * (hasInertia ? 0.35 : 0.8)));
+        warnings.push("Default entrance shortened to fit the scene");
+      }
     }
-    if (r.timing.relation === "sceneEnd")
-      start = block.startFrame + block.durationFrames - duration;
-    if (r.timing.relation === "beforeRequirement")
-      start =
-        anchor!.startFrame - duration + Math.round(r.timing.delaySeconds * fps);
-    if (
-      start < block.startFrame ||
-      start >= block.startFrame + block.durationFrames
-    )
-      throw new Error("Requested action outside its scene");
-    const remaining = block.startFrame + block.durationFrames - start;
-    if (remaining < duration + (hasInertia ? 4 : 0)) {
-      if (r.parameters.durationSeconds !== null)
-        throw new Error("Explicit duration does not fit scene");
-      duration = Math.max(1, Math.floor(remaining * (hasInertia ? 0.35 : 0.8)));
-      warnings.push("Default entrance shortened to fit the scene");
-    }
-    if (r.techniques.includes("objectStateTransition")) {
-      const object = buildRegistry(
-        project.inspection.document,
-        project.inspection.fingerprint,
-      ).objects.find((o) => o.logicalObjectId === r.target.logicalObjectId);
-      if (!object) throw new Error("LOGICAL_OBJECT_UNRESOLVED");
-      const toSceneId =
-        r.parameters.toSceneId ??
-        state.blocks[state.blocks.indexOf(block) + 1]?.sceneId;
-      if (!toSceneId) throw new Error("TARGET_STATE_MISSING");
-      operations.push({
-        type: "animateObjectStateTransition",
-        transitionId:
-          "intent_transition_" +
-          stable([object.logicalObjectId, r.sceneId, toSceneId]),
-        logicalObjectId: object.logicalObjectId,
-        fromSceneId: r.parameters.fromSceneId ?? r.sceneId!,
-        toSceneId,
-        startFrame: start,
-        durationFrames: duration,
-        easing: r.parameters.easing ?? "easeInOutCubic",
-        proceduralEffects: [],
-        layerPolicy: { type: "switch", switchProgress: 1 },
-      });
+    if (stateTransition) {
+      const existing = transitionForTarget(project, state, r.sceneId!, r.target.sourceNodeId!);
+      if (r.kind === "editAnimation") {
+        if (!existing) throw new Error("ANIMATION_NOT_FOUND: no existing logical state transition");
+        operations.push(...lowerMotionTool(project, state, { tool: "updateAnimation", animationId: existing.transitionId, patch: {
+          ...(r.parameters.easing != null ? { easing: r.parameters.easing } : {}),
+          ...(r.parameters.durationSeconds != null ? { durationFrames: duration } : r.parameters.durationFactor != null ? { durationFrames: Math.max(1, Math.round(existing.durationFrames * r.parameters.durationFactor)) } : {}),
+          ...(r.timing.startSeconds != null ? { startFrame: start } : {}),
+        } }));
+      } else {
+        const object = buildRegistry(project.inspection.document, project.inspection.fingerprint).objects.find(o => o.logicalObjectId === r.target.logicalObjectId);
+        if (!object) throw new Error("LOGICAL_OBJECT_UNRESOLVED");
+        const sourceIndex = project.inspection.document.scenes.findIndex(s => s.sceneId === r.sceneId);
+        const toSceneId = r.parameters.toSceneId ?? project.inspection.document.scenes[sourceIndex + 1]?.sceneId;
+        if (!toSceneId) throw new Error("TARGET_STATE_MISSING");
+        operations.push(...lowerMotionTool(project, state, { tool: "createStateTransition", transition: {
+          transitionId: "intent_transition_" + stable([object.logicalObjectId, r.sceneId, toSceneId]),
+          timelinePolicy: "referenceStates", logicalObjectId: object.logicalObjectId,
+          fromSceneId: r.parameters.fromSceneId ?? r.sceneId!, toSceneId,
+          startFrame: start, durationFrames: duration, easing: r.parameters.easing ?? "easeInOutCubic",
+          proceduralEffects: [], layerPolicy: { type: "switch", switchProgress: 1 },
+        }}));
+      }
     } else if (
       r.effectOperation?.storage === "animation" &&
       r.effectOperation.action === "remove"
@@ -665,10 +653,7 @@ export function compileRequirement(
       }
       for (const e of expressions) {
         if (r.expressionAction === "remove") {
-          operations.push({
-            type: "removeExpression",
-            expressionId: e.expressionId,
-          });
+          operations.push(...lowerMotionTool(project, state, { tool: "removeEffect", expressionId: e.expressionId }));
           continue;
         }
         const updated = [...operations]
@@ -681,7 +666,8 @@ export function compileRequirement(
         const next = structuredClone(
           updated?.type === "setExpression" ? updated.expression : e,
         );
-        operations.push({ type: "setExpression", expression: editExpression(next, r, state, !targets.length) });
+        const edited = editExpression(next, r, state, !targets.length);
+        operations.push(...lowerMotionTool(project, state, { tool: "updateEffect", expressionId: e.expressionId, patch: { startFrame: edited.startFrame, durationFrames: edited.durationFrames, enabled: edited.enabled, parameters: edited.parameters } }));
       }
       if (
         hasInertia &&
@@ -950,7 +936,7 @@ export function compileRequirement(
           });
       }
       if (r.techniques.includes("wiggle")) {
-        operations.push(...compileWiggle(state, r, start, duration));
+        operations.push(...compileWiggle(project, state, r, start, duration));
       }
       if (hasInertia) {
         const candidate = applyOperations(state, operations, project);
@@ -967,14 +953,15 @@ export function compileRequirement(
   };
 }
 /** Seeded additive X/Y expressions; an explicit property scopes editing to one channel. */
-function compileWiggle(state: MotionState, r: IntentRequirement, start: number, duration: number): Plan["operations"] {
+function compileWiggle(project: LoadedProject, state: MotionState, r: IntentRequirement, start: number, duration: number): Plan["operations"] {
   const block = state.blocks.find(b => b.sceneId === r.sceneId)!;
+  const transition = transitionForTarget(project, state, r.sceneId!, r.target.sourceNodeId!);
   const old = (state.expressions ?? []).filter(e => e.type === "wiggle" && e.sceneId === r.sceneId && e.targetId === r.target.sourceNodeId && (!r.parameters.property || e.property === r.parameters.property));
   if (new Set(old.map(e => e.property)).size !== old.length) throw new Error("AMBIGUOUS_EFFECT_MATCH: multiple Wiggles write the same channel");
   const properties = r.parameters.property ? [r.parameters.property] : old.length ? old.map(e => e.property) : ["x", "y"] as const;
-  return properties.map(property => {
+  return properties.flatMap(property => {
     const existing = old.find(e => e.property === property);
-    const end = r.parameters.lifetime === "project" ? state.settings.durationFrames : block.startFrame + block.durationFrames;
+    const end = r.parameters.lifetime === "project" || transition ? state.settings.durationFrames : block.startFrame + block.durationFrames;
     const frames = r.parameters.lifetime ? end - start : Math.min(duration, end - start);
     if (frames < 1) throw new Error("INVALID_LIFECYCLE_INTERVAL: Wiggle has no visible interval");
     if (existing?.type === "wiggle") {
@@ -985,16 +972,17 @@ function compileWiggle(state: MotionState, r: IntentRequirement, start: number, 
       if (next.type === "wiggle" && r.parameters.lifetime) {
         next.startFrame = start; next.durationFrames = frames;
       }
-      return { type: "setExpression", expression: next } as const;
+      return lowerMotionTool(project, state, { tool: "updateEffect", expressionId: next.expressionId, patch: { startFrame: next.startFrame, durationFrames: next.durationFrames, enabled: next.enabled, parameters: next.parameters } });
     }
-    return { type: "setExpression", expression: {
+    return lowerMotionTool(project, state, { tool: "addEffect", expression: {
       expressionId: "intent_wiggle_" + stable([r.sceneId, r.target.sourceNodeId, property]),
+      ...(transition ? { transitionId: transition.transitionId } : {}),
       sceneId: r.sceneId!, targetId: r.target.sourceNodeId!, type: "wiggle", property,
       startFrame: start, durationFrames: frames, enabled: true,
       parameters: { temporalMode: "continuous", amplitude: r.parameters.amplitude ?? wiggleIntensityDefaults[r.parameters.intensity ?? "normal"].amplitude,
         frequency: r.parameters.frequency ?? wiggleIntensityDefaults[r.parameters.intensity ?? "normal"].frequency,
         seed: r.parameters.seed ?? parseInt(stable([r.sceneId, r.target.sourceNodeId, property]).slice(0, 7), 16) },
-    }} as const;
+    }});
   });
 }
 /** Shared creation path for standalone and compound edits, evaluated after base edits. */
@@ -1095,7 +1083,7 @@ export function validateRequirement(state: MotionState, r: IntentRequirement) {
         ? state.objectTransitions?.some(
             (t) =>
               t.logicalObjectId === r.target.logicalObjectId &&
-              t.fromSceneId === r.sceneId &&
+              [t.fromSceneId, t.toSceneId].includes(r.sceneId!) &&
               (!r.parameters.toSceneId ||
                 t.toSceneId === r.parameters.toSceneId),
           )

@@ -4,13 +4,13 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-20 (Europe/Moscow) — universal effect editing/lifecycle and existing-motion instance resolution; targeted update, not a full re-audit |
+| Last Updated | 2026-10-20 (Europe/Moscow) — post-semantic typed tools, shared admission/interval contracts and logical-state transition slice; targeted update, not a full re-audit |
 | Last Full Audit | 2026-10-13 — структурный аудит исходников перечисленных подсистем; не полный production E2E и не формальная верификация каждой ветви |
-| Git Commit | Native quality committed `7713e05`; current task checkpoint `b1349b0`. Effect lifecycle changes are uncommitted at this documentation update. |
+| Git Commit | Effect lifecycle committed `b0e378d`; current task checkpoint `12e2a04`. Typed-tool migration changes are uncommitted at this documentation update. |
 | Git Branch | `main`; локальный репозиторий создан после первоначального аудита |
-| Working Tree Status | main; effect resolution/compiler/schema/validation/tests/docs uncommitted at this update. Canonical user projects are unchanged; execution checks use temporary copies. |
-| Documentation Version | 1.0.23 |
-| Scope of Last Update | Logical-instance applicability, continuous versus settling expression lifecycle, shared parameter edits, Wiggle upsert/X/Y scope, enable/disable, schema compatibility, preflight diagnostics and isolated real-run replays. |
+| Working Tree Status | main; typed-tool execution/schema/transition/renderer adapters/tests/docs uncommitted at this update. User projects are unchanged; live and deterministic checks use synthetic temporary projects. |
+| Documentation Version | 1.0.24 |
+| Scope of Last Update | Targeted post-semantic audit; typed tool façade and canonical inspection view, shared interval/admission rules, preflight reuse, reference-state transitions and bound X/Y Wiggle, real-provider five-turn qualification. |
 | Code snapshot SHA-256 | NOT RECALCULATED for this update; use component version digests in actual run artifacts and subsequent Git commit. |
 
 Git 2.54.0 (Apple Git-157): локальная история на main, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
@@ -1275,6 +1275,8 @@ Verified reproduction on the current original source/state/request: `codeVersion
 
 ## ARCHITECTURE CHANGE HISTORY
 
+- 2026-10-20 — v1.0.24: incremental typed Motion Tools; canonical entry view and shared temporal/admission contracts; preflight compilation reuse; reference-state transitions independent of video blocks; logical X/Y Wiggle composition; two live-discovered contract fixes. Verification/limits are recorded in the corresponding section below.
+
 - 2026-10-20 — v1.0.23: existing-motion logical-instance resolution; typed veryStrong intensity; expression lifecycle categories and continuous Wiggle; shared deterministic parameter editor and enable/disable. See verification below; no live provider calls or canonical project edits.
 
 - 2026-10-19 — v1.0.22: native Premul resource ownership and decoded-image normalization, cubic/mipmap sampling, transform-aware glyph planes and high-quality DPR display downsampling. Full232+2+30 tests/build/typecheck PASS; additional3 quality tests PASS after final Premul assertion. Real test21 all240-frame asset audit and16-frame production-settings MP4 comparison; no project-state edits or AI calls.
@@ -1410,3 +1412,71 @@ Actual verification: final full `npm run check` exit0: **237/237** base/compatib
 Original saved provider outputs replayed through `executeMotion` on separate real test22 copies, not synthesized replacement plans. Inertia run: SUCCESS1/1,1setExpression on source10:3707,10.043s local execution. Wiggle run: SUCCESS4/4,5setExpression operations on sources63:1467,63:1472,63:1471,63:1462,55.800s local execution. Existing Y Wiggles keep IDs; newly affected parsley2 has independent X/Y. Historical ribbon63:1463 is unchanged. One mock provider call each, no semantic repair; native QA1and4reports respectively are WARNING with zero failed checks (font fidelity warnings). These are elapsed saved-replay timings, not live provider latency. An earlier Wiggle replay reached motion-QA EXECUTION_TIMEOUT; the subsequent rebuilt-worker replay passed without raising timeouts. The original timeout mechanism is NOT VERIFIED as independently fixed; heavy real-scene QA latency remains a limitation.
 
 The native regression actually runs production frame transport and FFmpeg export over24frames; final-frame RGBA digest matches export input, direct seek repeats exactly, a render with Wiggle removed has different pixels, numeric/native QA pass, and Undo/Redo restores exact expression state. This is a synthetic rendering regression, not a complete real-project movie. Full real test22 MP4 export and fresh live-provider semantics were NOT executed. Copy source inventories are byte-identical to original; canonical current Motion State equals each replay's before snapshot, and base tracks remain deep-equal after both replays. Ignored engineering summary: artifacts/effect-lifecycle-repair/verification.json. Saved-answer replay is a mock-provider production-path test, NOT fresh semantic model evaluation. No external provider request was made in this task. Existing rendering, typography, Trim Paths and motion mathematics outside the Wiggle lifecycle branch are unchanged.
+
+
+## Post-semantic typed motion tools — 2026-10-20 (v1.0.24)
+
+### Targeted audit: verified conflicts and duplication
+
+This is an incremental execution audit, not a full architecture re-audit. Source remains authoritative.
+
+| Layer | Verified issue before this change | Disposition |
+|---|---|---|
+| `intent/compiler.ts` | A transition duration was shortened/rejected against the FROM scene block even though it crosses states. A transition easing edit entered the creation branch and reset timing/procedural fields. | New transition slice lowers to typed create/update tools; easing is a minimal patch over the actual transition ID. |
+| `transitions.ts` | Required adjacent timeline blocks and an endpoint in the TO block for every transition. These were storyboard-composition assumptions, not global frame/geometry invariants. | Kept for old `storyboardBoundary` states; explicit new `referenceStates` policy uses global bounds and source references. |
+| Storage/capability routing | A live provider correctly returned `objectStateTransition` plus `effectOperation.storage=animation/action=update`; node-track routing rejected it as unsupported. | Adds explicit transition/update storage; legacy animation/update is normalized only for a uniquely transition-bound technique. No generic guessing among storage kinds. |
+| Expression selectors | Another live provider correctly supplied an explicit logical object selector with target.name/logicalObjectId but no targetIds. Selector code filtered exclusively by targetIds and returned zero matches despite two current Wiggles. | Canonical object resolver binds such selectors once to real current instance IDs before querying effects. Ambiguity remains diagnostic. |
+| Preflight versus task execution | Both compiled the same plan independently and separately repeated scope/requirement admission code. | One `admitCompiledTask`; bounded per-run prepared Plans are reused when the before-state digest is identical. Otherwise compile against current candidate. Actual compilationSource is traced. |
+| Semantic wire schema | Generic key/value parameters advertised arbitrary strings for intensity/lifetime even though the canonical schema accepted enums. | Reuses canonical schemas for these two enum values in the graph wire. Other generic parameter values still undergo canonical normalization; not all schema-repair possibilities are eliminated. |
+| Store/worker/QA | Multiple validation calls appeared redundant but protect different boundaries: transaction freshness, deserialized renderer state, computed motion/render. | Retained. Source/revision locks, canonical state admission, scope/intent completeness and real rendered QA are not interchangeable. |
+
+The earlier BASE_POSITION_ANIMATION_MISSING instance-selection and universal Wiggle-settling errors were fixed in v1.0.23. This update reuses those resolvers/lifecycle definitions, rather than introducing another resolver or relaxing settling checks. General legacy compiler branches, direct/manual compatibility operations and semantic coverage remain; this task does NOT remove the whole compiler or introduce a second planner/orchestrator.
+
+### Actual flow and canonical contract
+
+```mermaid
+flowchart LR
+  AI[Replaceable AI Provider] --> IR[Existing Semantic Graph / IntentPlan]
+  IR --> A[Compiler adapter]
+  A --> T[Typed Motion Tools]
+  T --> P[Shared admission / candidate state]
+  P --> Q[Native motion QA]
+  Q --> C[commitChanges / existing changeMotion]
+  C --> S[Canonical MotionState]
+  S --> E[Existing evaluator]
+  E --> R[Skia]
+  R --> V[Preview pixels]
+  R --> F[FFmpeg]
+```
+
+`motion/tools.ts::CanonicalMotionEntry` is the typed **inspection view over the existing canonical MotionState**, not a fourth persisted state or a replacement scene schema. `inspectAnimations(project,state,filter)` returns cloned data with stable entry ID/storage, sourceNodeId/sceneId/logicalObjectId or state-pair identity, property channels, timing, easing, effect parameters, lifecycle/composition and original typed payload. Instance animations, expressions and logical transitions retain their original IDs and storage arrays. The same `animationSchema`, `expressionSchema`, `objectTransitionSchema` are reused by the tool argument schemas and normal state validator.
+
+Public command tools: createAnimation, updateAnimation (node track OR logical transition), addEffect, updateEffect, removeEffect, createStateTransition, adjustTimeline. Read tools: findObject (existing canonical resolver), inspectAnimations. Runtime tools in `motion/tool-runtime.ts`: validatePreview delegates to existing motionQA; commitChanges delegates to existing changeMotion. The existing Harness owns QA admission/order and atomic publication; these aliases are not a second QA/store implementation or an external unauthenticated tool endpoint. Native LLM tool-calling is not required: the same semantic response is lowered through tools in the current pipeline. No arbitrary JS is accepted.
+
+`lowerMotionTool` resolves actual IDs and minimal patches. Creation collisions return ID_ALREADY_EXISTS/EFFECT_ALREADY_EXISTS with update suggestions; compatible effects are edited by updateEffect, not silently replaced. `prepareMotionTools` returns `{ok,candidate,batches,beforeDigest}` or a structured `{ok:false,issue:{code,message,details,allowedActions}}` and never persists partial candidates. Timeline create/update conflicts carry requiredDurationFrames and actualDurationFrames. `adjustTimeline` supports explicit extendProject or rejectOverflow; it never silently truncates existing work. Preflight exports toolIssue for actual tool failures. Some legacy validator errors still use generic technical invariant diagnostics; this is an incremental migration, not a claim that every historic error has been reclassified.
+
+`motion/intervals.ts::intervalConflict` is the shared global bound rule for tools and canonical animation/expression/transition validators: finite tracks and continuous effects may occupy the last visible frame; settling effects and state transitions require a renderable endpoint. It does not replace schema checks for finite numbers, positive durations, valid IDs or geometry. Explicit lifecycle rules replace an invalid universal settled-end assumption.
+
+`intent/execution.ts::admitCompiledTask` applies existing operations, enforces task scope and checks actual requirement coverage. Preflight stores typed compiled Plans in a local Map keyed by taskId/beforeDigest; task runner reuses them only on an exact current-state digest match. Compiled maps are not permanent project memory or serialized project snapshots. Preflight reports contain actual preparedPlanCount; tasks record compilationSource. Persistence still revalidates under lock using expectedRevision/source fingerprint/expectedCandidate: that validation is required, not removed for speed. Deterministic preflight/operation failures do not trigger another semantic-planning call.
+
+### Reference-state rendering and compatibility
+
+New semantic state transitions use `timelinePolicy=referenceStates`. Figma from/to scenes are immutable visual references; transition start/duration are global frames. Either reference can be absent from authored video blocks. `transition-runtime.ts::presentationBlocks` creates render-only source-tree entries for missing references, without persisting fabricated timeline blocks or object IDs. Native and explicit browser-compat render adapters use the same reference view and `presentedTransitions` ownership rule. Interpolation mathematics is unchanged. After arrival the target holds until a newer transition or the next unrelated authored scene; unrelated future scenes are not suppressed indefinitely.
+
+Omitted timelinePolicy preserves historical storyboardBoundary adjacency/block interval rules. Existing stored states load without migration. New optional expression.transitionId binds an additive logical effect to a transition root; current supported binding is **Wiggle on X/Y only**. Evaluator returns transitionEffects, separately from instance node offsets, and both adapters apply them in canvas space after immutable state interpolation. This prevents root-override code from dropping Wiggle and prevents double application when source/target hierarchy switches. Frame seeking is absolute/deterministic; source geometry/IDs/base movement do not change.
+
+Root/ancestor/descendant competing base animations, unrelated expressions on a managed subtree, unsupported geometry/reflection and incompatible concurrent scene owners remain rejected. State-transition scene contents, masks and parent hierarchy still switch as a whole at layerPolicy.switchProgress: this is not arbitrary vector/content morphing, nor independent overlapping scene compositing. Multiple same-logical transitions require an explicit ID/disambiguation; the semantic adapter is not a general scheduler for arbitrary chains. Transition-bound inertia/scale/rotation/text segmentation are NOT implemented by this slice and must not be advertised as equivalent Wiggle. Older strict application versions may reject newly written optional fields; compatibility means the new version reads old projects, not a guarantee that old executables read new contracts.
+
+### Verification and live-provider evidence
+
+`tests/native-motion-tools.test.ts` exercises the **production executeMotion path** over an artificial circle in two Figma-like states. Five natural-language prompts have prepared semantic responses: linear one-second transition; easing-only edit; continuous smooth Wiggle; halve amplitude; remove Wiggle. It asserts one mock call and one Undo entry per turn, preflight reuse, preservation of the same transition and base geometry, actual native QA, direct-seek equality, visible final-frame Wiggle, actual48-frame FFmpeg export with matching Preview/export RGBA digest, and Undo/Redo. Additional checks cover machine-readable conflicts, explicit extension, immutable failed candidates, reference state without any target video block, later-scene ownership, legacy boundary rejection and canonical enum values. Prepared model responses are not a semantic language-understanding score.
+
+`npm run eval:motion-tools` / `node --import tsx scripts/eval-motion-tools.ts --live` is an explicit opt-in live qualification command, not part of ordinary tests or user requests. It sends only generated Circle scenes to Codex and retains an isolated synthetic project. Optional --resume/--from continue developer qualification and label it PASSED_RESUMED; they do not fabricate an uninterrupted five-turn success.
+
+Actual live qualification completed all5successful turns on one persisted synthetic project, with actual native QA and a48-frame FFmpeg export/Preview digest check. It required7total provider calls: two real preflight rejections discovered the storage and selector contract defects described above, then the same project was resumed after deterministic code repairs. The rejected attempts did not commit edits. Do NOT describe this as an uninterrupted first-pass5/5 run. Each successful turn used1provider call, no per-object call or semantic execution repair. Measured successful input tokens17,548–19,727, output232–387; total successful run durations11.44–17.19s. These are small-sample measurements, not a latency improvement claim or a production success rate. Prompt size remains high; graph JSON schema grows9,826→10,271bytes (+445) to advertise real enum constraints, not a claimed context-size reduction. Costs were unavailable. Evidence is ignored under artifacts/motion-tools-live/combined-report.json; source fixtures/run traces remain temporary. No client scenes or assets were sent and no existing user project was changed.
+
+Final local verification: TypeScript/build PASS, **34/34 native** tests PASS and **2/2 Chromium/WebKit placement** PASS. After the final decoder assertion, the3new vertical-slice tests separately PASS, including actual decoded MP4 comparison. Latest full `npm run check` is NOT GREEN: **237/238** base/compat tests passed, with the Retina shaped-multiline transport sample failing its unchanged0.125px threshold; that runner stops before its native/build stages, so those were explicitly executed separately. A full archived b0e378d baseline compatibility run passed238/238+2/2, and an isolated current Retina test passed1/1. Do not label the cause as definitively pre-existing or fixed: full-suite/environment interaction still REQUIRES REVIEW. No tolerances or typography workarounds were modified.
+
+Actual live48-frame MP4 was decoded at frame47 and compared to the native frame reconstructed from that turn's saved authoritative state:96,000RGBA bytes each, export input digest identical, mean decoded RGBA error **0.8385104/255**. Decoded-video evidence is artifacts/motion-tools-live/decoded-video.json; the permanent regression additionally decodes its own exported frame with the normal lossy-codec allowance. This checks actual rendering/encoding beyond JSON/compilation alone.
+
+ Earlier full worktree check passed238base+2placement+33native before the final refinements. Subsequent full attempts hit the unchanged browser-compat Retina text sample at its original0.125px tolerance; the baseline b0e378d full compatibility suite and current isolated text test both passed. The cause of that intermittent full-suite failure is NOT VERIFIED; it must not be hidden by weakening tolerances or claimed as a fixed rendering issue. Native checks remain independent of the browser compatibility path.

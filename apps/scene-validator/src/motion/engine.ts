@@ -98,6 +98,6 @@ export function applyFrame(
       );
     }
   }
-  applyObjectTransitions(root, state, result.frame, presentation);
+  applyObjectTransitions(root, state, result.frame, presentation, result.transitionEffects);
   return result;
 }

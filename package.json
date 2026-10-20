@@ -33,6 +33,7 @@
     "benchmark:report": "node --import tsx scripts/benchmark-report.ts",
     "diagnose:text": "node --import tsx scripts/diagnose-text.ts",
     "benchmark:qualify": "node --import tsx scripts/benchmark.ts --live --qualify",
+    "eval:motion-tools": "node --import tsx scripts/eval-motion-tools.ts --live",
     "test:text-placement": "node --import tsx --test apps/scene-validator/tests/text-placement.browser.ts",
     "test:compat": "node scripts/test.mjs --compat",
     "test:native": "node --import tsx --test --test-concurrency=1 apps/scene-validator/tests/native-*.test.ts",

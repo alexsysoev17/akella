@@ -25,8 +25,8 @@ export function editExpression(existing: Expression, request: IntentRequirement,
     if (p.seed != null) next.parameters.seed = p.seed;
     if (p.lifetime) {
       const block = state.blocks.find(b => b.sceneId === next.sceneId);
-      if (!block) throw new Error(`INVALID_LIFECYCLE_INTERVAL: missing scene ${next.sceneId}`);
-      next.durationFrames = (p.lifetime === "project" ? state.settings.durationFrames : block.startFrame + block.durationFrames) - next.startFrame;
+      if (!block && !next.transitionId) throw new Error(`INVALID_LIFECYCLE_INTERVAL: missing scene ${next.sceneId}`);
+      next.durationFrames = (p.lifetime === "project" || next.transitionId ? state.settings.durationFrames : block!.startFrame + block!.durationFrames) - next.startFrame;
       next.parameters.temporalMode = "continuous";
     }
   }

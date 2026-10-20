@@ -1,3 +1,4 @@
+import { commitChanges } from "./tool-runtime.js";
 import { duringStage } from "../harness/failure.js";
 import { renderingMode } from "../native/client.js";
 import { qaAdmission } from "./qa/policy.js";
@@ -457,6 +458,7 @@ export async function proposeMotion(
           });
           runQA = new RunQA(harness);
         }
+        let preparedPlans: ReturnType<typeof preflightIntentPlan>["preparedPlans"] | undefined;
         if (
           contract.requirements.some(
             (r) => r.semanticActionId || r.effectOperation,
@@ -464,11 +466,14 @@ export async function proposeMotion(
         ) {
           try {
             const preflight = preflightIntentPlan(project, doc.state, contract);
+            preparedPlans = preflight.preparedPlans;
+            const { preparedPlans: runtimeOnlyPlans, ...preflightReport } = preflight;
+            const report = { ...preflightReport, preparedPlanCount: runtimeOnlyPlans.size };
             await atomicJson(
               path.join(directory, "compilation-preflight.json"),
-              preflight,
+              report,
             );
-            await harness?.diagnostic("compilation-preflight", preflight);
+            await harness?.diagnostic("compilation-preflight", report);
           } catch (error) {
             await atomicJson(
               path.join(directory, "compilation-preflight.json"),
@@ -486,6 +491,7 @@ export async function proposeMotion(
         }
         let committed = doc;
         const generated = await runIntentTasks(project, doc.state, contract, {
+          preparedPlans,
           repair: async (ctx, text, task, attempt) => {
             onStage("repairing");
             if (harness) harness.repairAttempts++;
@@ -573,7 +579,7 @@ export async function proposeMotion(
         if (generated.reconciliation.completed) {
           harness?.checkpoint();
           onStage("applying");
-          const publication = await changeMotion(project.root, {
+          const publication = await commitChanges(project.root, {
             expectedRevision: doc.revision,
             expectedSourceFingerprint: project.inspection.fingerprint,
             operationBatches: generated.operationBatches,

@@ -1,3 +1,4 @@
+import { intervalConflict } from "./intervals.js";
 import { retimeScenes, resolveTimingDependencies } from "./intent/retime.js";
 import { instantiatePreset } from "../motion-library/presets/registry.js";
 import { validateExpressions } from "./validate-expressions.js";
@@ -65,7 +66,7 @@ export function validateMotion(
         throw new Error("TEXT_SEGMENT_EFFECT_UNSUPPORTED: " + a.effect);
     }
     if (o.mask) throw new Error("Анимация масок пока не поддерживается.");
-    if (a.startFrame + a.durationFrames > state.settings.durationFrames)
+    if (intervalConflict(a, state.settings.durationFrames, "finite"))
       throw new Error(
         `Анимация ${a.animationId} выходит за длительность ролика.`,
       );

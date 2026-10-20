@@ -205,6 +205,25 @@ export function resolveIntentSelectors(
     if (selector && !selector.property && r.parameters.property)
       selector = { ...selector, property: r.parameters.property };
     const requestedSelector = r.selector;
+    if (selector?.type === "explicitObject" && !selector.targetIds?.length &&
+        (r.target.sourceNodeId || r.target.logicalObjectId || r.target.name)) {
+      const found = resolveObjectReference(project, state, {
+        referenceText: r.sourceText, name: r.target.name, sourceNodeId: r.target.sourceNodeId,
+        logicalObjectId: r.target.logicalObjectId, sceneId: selector.sceneId ?? r.sceneId,
+        selectedObjectId: context.selectedObjectId, activeSceneId: context.activeSceneId,
+        techniques: r.techniques, preferExisting: true,
+      });
+      if (!found.target) {
+        r.kind = "unsupported";
+        r.unresolvedReason = found.status;
+        expanded.push(r);
+        onResolution?.({ event: "EXPLICIT_SELECTOR_BINDING", requirementId: r.requirementId, ...found });
+        continue;
+      }
+      selector = { ...selector, sceneId: found.target.sceneId, targetIds: [found.target.sourceNodeId] };
+      onResolution?.({ event: "EXPLICIT_SELECTOR_BINDING", requirementId: r.requirementId, ...found });
+    }
+
     if (
       selector &&
       explicitProjectFilter(r.sourceText) &&
@@ -522,6 +541,13 @@ function resolveTrackLifecycle(
   onResolution?: (v: unknown) => void,
 ): IntentRequirement[] | false {
   const kinds = new Set(r.techniques.map((t) => semanticBindings[t]));
+  // A logical state transition is a canonical animation entry, not a node animation track.
+  if (kinds.size === 1 && kinds.has("transition")) {
+    if (r.effectOperation?.action === "update" && r.effectOperation.storage === "animation")
+      r.effectOperation = { storage: "transition", action: "update" };
+    if (r.effectOperation?.storage === "transition") return false;
+  }
+
   if (r.effectOperation?.storage === "expression") {
     if (kinds.has("animation")) {
       r.kind = "unsupported";

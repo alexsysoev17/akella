@@ -1,3 +1,4 @@
+import { intervalConflict } from "./intervals.js";
 import { expressionLifecycles } from "../motion-library/expressions/registry.js";
 import type { MotionState } from "./schema.js";
 import { evaluateAnimation } from "./engine.js";
@@ -13,10 +14,15 @@ export function validateExpressions(
     const target = objects.get(`${e.sceneId}/${e.targetId}`);
     if (!target || target.mask)
       throw new Error("Expression target missing or is a mask");
-    const end = e.startFrame + e.durationFrames;
-    if (expressionLifecycles[e.type] === "settling" && end >= state.settings.durationFrames)
+    if (e.transitionId) {
+      const t = state.objectTransitions?.find(t => t.transitionId === e.transitionId);
+      if (!t || e.type !== "wiggle" || !["x", "y"].includes(e.property) || ![t.fromSceneId, t.toSceneId].includes(e.sceneId))
+        throw new Error(`UNSUPPORTED_EFFECT_BINDING: ${e.expressionId} requires a current transition and additive Wiggle`);
+    }
+    const conflict = intervalConflict(e, state.settings.durationFrames, expressionLifecycles[e.type]);
+    if (expressionLifecycles[e.type] === "settling" && conflict)
       throw new Error(`INVALID_LIFECYCLE_INTERVAL: ${e.expressionId} ${e.type} on ${e.sceneId}/${e.targetId} must finish before final project frame so its settled endpoint is rendered`);
-    if (expressionLifecycles[e.type] === "continuous" && end > state.settings.durationFrames)
+    if (expressionLifecycles[e.type] === "continuous" && conflict)
       throw new Error(`INVALID_LIFECYCLE_INTERVAL: ${e.expressionId} ${e.type} exceeds project duration`);
     if ("sourceAnimationId" in e) {
       const a = state.animations.find(

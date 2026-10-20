@@ -5,7 +5,7 @@ import { chromium, type Browser } from "playwright";
 import { readFile, readdir, cp, rm } from "node:fs/promises";
 import path from "node:path";
 import { atomicJson, noSymlinkPath, safeDirectory } from "../files.js";
-import { motionQA } from "../motion/qa/render.js";
+import { validatePreview as motionQA } from "../motion/tool-runtime.js";
 import type { MotionState } from "../motion/schema.js";
 import type { IntentTask } from "../motion/intent/compiler.js";
 import type { HarnessRun } from "./runtime.js";

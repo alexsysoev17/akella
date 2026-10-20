@@ -164,7 +164,8 @@ const catalog = [
     kind: "transition",
     parameterSchema: z.toJSONSchema(objectTransitionSchema),
     description:
-      "One logical object transitions between its immutable source states",
+      "One logical object transitions between immutable Figma reference states, independently of video-block boundaries. Update existing easing/timing through updateAnimation without replacement.",
+    lifecycle: { storage: "transition", remove: undefined, create: "createStateTransition", update: "updateAnimation", semanticSupport: "objectStateTransition; effectOperation storage transition/action update" },
     supportedObjectTypes: [
       "TEXT",
       "RECTANGLE",

@@ -7,7 +7,8 @@
     "scripts/replay-agent-run.ts",
     "scripts/harness-fixtures.ts",
     "scripts/benchmark-report.ts",
-    "scripts/diagnose-text.ts"
+    "scripts/diagnose-text.ts",
+    "scripts/eval-motion-tools.ts"
   ],
   "exclude": [],
   "compilerOptions": {

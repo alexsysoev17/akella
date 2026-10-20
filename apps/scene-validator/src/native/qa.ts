@@ -1,3 +1,4 @@
+import { presentedTransitions } from "../motion/transition-runtime.js";
 import { failureCategory } from "../motion/qa/failure.js";
 import type { LoadedProject } from "../types.js";
 import type { MotionState } from "../motion/schema.js";
@@ -41,7 +42,7 @@ export async function nativeMotionQA(
             expressions: state.expressions?.filter((e) =>
               scope(e.sceneId, e.targetId),
             ),
-            objectTransitions: [],
+            objectTransitions: state.objectTransitions?.filter(t => state.expressions?.some(e => e.transitionId === t.transitionId && scope(e.sceneId, e.targetId))),
           }
         : state,
       request,
@@ -59,7 +60,7 @@ export async function nativeMotionQA(
               b.sceneId === targetScope.sceneId &&
               frame >= b.startFrame &&
               frame < b.startFrame + b.durationFrames,
-          ),
+          ) || (state.expressions ?? []).some(e => e.transitionId && scope(e.sceneId, e.targetId) && presentedTransitions(state, frame).some(t => t.transitionId === e.transitionId)),
       )
       .slice(0, 24);
   const report = {

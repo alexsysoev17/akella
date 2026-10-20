@@ -1,3 +1,4 @@
+import { motionToolCatalog } from "../motion/tools.js";
 import { capabilityCatalog } from "./registry/capabilities.js";
 import { retrieveTechniques } from "./techniques/registry.js";
 import { readFile } from "node:fs/promises";
@@ -23,7 +24,8 @@ export async function motionKnowledge(request: string, textSelected: boolean) {
     ].includes(e.id),
   );
   return {
-    version: "1.1.0",
+    version: "1.2.0",
+    agentTools: motionToolCatalog,
     techniques: retrieveTechniques(request),
     capabilities: capabilityCatalog().filter(
       (c) =>

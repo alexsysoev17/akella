@@ -104,6 +104,7 @@ export function semanticContext(context: unknown): unknown {
     motionKnowledge: knowledge
       ? {
           version: knowledge.version,
+          agentTools: knowledge.agentTools,
           techniques: rows(knowledge.techniques, [
             "id",
             "name",

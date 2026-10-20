@@ -115,6 +115,7 @@ export const intentRequirementSchema = z
     expressionAction: z.enum(["update", "remove", "enable", "disable"]).optional(),
     effectOperation: z
       .discriminatedUnion("storage", [
+        z.object({ storage: z.literal("transition"), action: z.literal("update") }).strict(),
         z
           .object({
             storage: z.literal("animation"),

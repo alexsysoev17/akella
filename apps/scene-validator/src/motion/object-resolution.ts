@@ -17,6 +17,7 @@ export interface ObjectCandidate {
   resolutionMethod: string;
   existingAnimationIds: string[];
   existingExpressionIds: string[];
+  existingTransitionIds: string[];
 }
 export interface ObjectResolution {
   status: "RESOLVED" | "AMBIGUOUS_TARGET" | "TARGET_UNRESOLVED";
@@ -90,6 +91,7 @@ export function resolveObjectReference(
             : (nameMatch ??
               objectNameMatch(o.name, reference) ??
               "morphological"),
+          existingTransitionIds: (state.objectTransitions ?? []).filter(t => t.logicalObjectId === logical?.logicalObjectId && (!input.techniques?.length || input.techniques.includes("objectStateTransition"))).map(t => t.transitionId),
           existingAnimationIds: state.animations
             .filter(
               (a) =>
@@ -151,17 +153,17 @@ export function resolveObjectReference(
     restrict(
       "selected-object",
       (c) => c.sourceNodeId === input.selectedObjectId && (!input.preferExisting ||
-        Boolean(c.existingAnimationIds.length || c.existingExpressionIds.length)),
+        Boolean(c.existingAnimationIds.length || c.existingExpressionIds.length || c.existingTransitionIds.length)),
     );
   if (candidates.length > 1 && input.preferExisting)
     restrict("existing-motion", (c) =>
-      Boolean(c.existingAnimationIds.length || c.existingExpressionIds.length),
+      Boolean(c.existingAnimationIds.length || c.existingExpressionIds.length || c.existingTransitionIds.length),
     );
   if (candidates.length > 1 && input.activeSceneId && !input.allowLogicalFallback)
     restrict("active-scene", (c) => c.sceneId === input.activeSceneId);
   if (candidates.length > 1 && input.techniques?.length)
     restrict("existing-technique", (c) =>
-      Boolean(c.existingAnimationIds.length || c.existingExpressionIds.length),
+      Boolean(c.existingAnimationIds.length || c.existingExpressionIds.length || c.existingTransitionIds.length),
     );
   const status =
     candidates.length === 1
@@ -200,8 +202,11 @@ export function resolveExistingAnimation(
       e.targetId === target.sourceNodeId &&
       techniques.includes(e.type),
   );
+  const transitions = (state.objectTransitions ?? []).filter(t => t.logicalObjectId === target.logicalObjectId && techniques.includes("objectStateTransition"));
   return {
+    transitions,
     status:
+      transitions.length === 1 ||
       (animations.length === 0 && expressions.length > 0 &&
        new Set(expressions.map(e => `${e.type}/${e.property}`)).size === expressions.length) ||
       animations.length + expressions.length === 1

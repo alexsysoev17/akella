@@ -23,7 +23,7 @@ import {
   type Matrix,
 } from "../motion/geometry.js";
 import { statePresentation } from "../motion/transitions.js";
-import { interpolateState } from "../motion/transition-runtime.js";
+import { interpolateState, presentedTransitions, presentationBlocks } from "../motion/transition-runtime.js";
 import { within, noSymlinkPath } from "../files.js";
 import { fonts, projectFonts, type FontResources } from "./fonts.js";
 import {
@@ -508,9 +508,7 @@ export class NativeRenderer {
     const presentation = statePresentation(this.project, state),
       overrides = new Map<string, { wrapper: Matrix; opacity: number }>(),
       blocks = { ...evaluation.blocks };
-    let transitions = (state.objectTransitions ?? []).filter(
-      (t) => frame >= t.startFrame && frame <= t.startFrame + t.durationFrames,
-    );
+    let transitions = presentedTransitions(state, frame);
     if (transitions.length) {
       const latest = Math.max(...transitions.map((t) => t.startFrame));
       transitions = transitions.filter((t) => t.startFrame === latest);
@@ -520,8 +518,8 @@ export class NativeRenderer {
           first.layerPolicy.switchProgress
             ? first.toSceneId
             : first.fromSceneId;
-      for (const b of state.blocks)
-        if ([first.fromSceneId, first.toSceneId].includes(b.sceneId))
+      for (const b of presentationBlocks(state))
+        if (first.timelinePolicy === "referenceStates" || [first.fromSceneId, first.toSceneId].includes(b.sceneId))
           blocks[b.blockId] = b.sceneId === host ? 1 : 0;
       for (const t of transitions) {
         const refs = presentation[t.logicalObjectId],
@@ -537,8 +535,10 @@ export class NativeRenderer {
             t,
             frame,
           ),
+          offset = evaluation.transitionEffects[t.transitionId] ?? {},
+          visual = multiply([[1, 0, offset.x ?? 0], [0, 1, offset.y ?? 0]], v.matrix),
           wrapper = multiply(
-            multiply(multiply(inverse(current.parentCanvas), v.matrix), [
+            multiply(multiply(inverse(current.parentCanvas), visual), [
               [1 / current.width, 0, 0],
               [0, 1 / current.height, 0],
             ]),
@@ -1254,7 +1254,7 @@ export class NativeRenderer {
       canvas.restore();
     };
     try {
-      for (const block of [...state.blocks].sort(
+      for (const block of presentationBlocks(state).sort(
         (a, b) => a.startFrame - b.startFrame,
       )) {
         const opacity = blocks[block.blockId] ?? 0;

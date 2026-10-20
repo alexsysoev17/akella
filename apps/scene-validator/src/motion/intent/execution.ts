@@ -1,3 +1,4 @@
+import { MotionToolError, motionStateDigest } from "../tools.js";
 import { failureCategory, infrastructureFailure } from "../qa/failure.js";
 import { taskRepairContext } from "./repair-context.js";
 import { qaAdmission } from "../qa/policy.js";
@@ -123,7 +124,7 @@ export function assertIntentScope(
       t: NonNullable<MotionState["objectTransitions"]>[number],
     ) =>
       t.logicalObjectId === r.target.logicalObjectId &&
-      t.fromSceneId === r.sceneId &&
+      [t.fromSceneId, t.toSceneId].includes(r.sceneId!) &&
       (!r.parameters.toSceneId || t.toSceneId === r.parameters.toSceneId);
     baseline.objectTransitions = [
       ...(before.objectTransitions ?? []).filter((t) => !allowedTransition(t)),
@@ -154,6 +155,10 @@ export function requirementChecks(
   plan: IntentPlan,
   previous?: MotionState,
 ) {
+  if (r.techniques.includes("objectStateTransition")) {
+    const matches = (state.objectTransitions ?? []).filter(t => t.logicalObjectId === r.target.logicalObjectId && [t.fromSceneId, t.toSceneId].includes(r.sceneId!) && (!r.parameters.toSceneId || t.toSceneId === r.parameters.toSceneId));
+    return [{ name: "stateTransitionContract", requirementId: r.requirementId, status: matches.length === 1 && (r.parameters.easing == null || JSON.stringify(matches[0].easing) === JSON.stringify(r.parameters.easing)) && (r.parameters.durationSeconds == null || matches[0].durationFrames === Math.round(r.parameters.durationSeconds * state.settings.fps)) ? "PASSED" : "FAILED" }];
+  }
   if (
     r.effectOperation?.storage === "animation" &&
     r.effectOperation.action === "remove"
@@ -595,6 +600,7 @@ export async function runIntentTasks(
     trace: (tasks: IntentTask[], entry?: unknown) => Promise<void>;
     checkpoint?: () => void;
     maxAttempts?: number;
+    preparedPlans?: Map<string, { beforeDigest: string; compiled: Plan }>;
   },
 ) {
   const preflightStarted = performance.now();
@@ -646,7 +652,11 @@ export async function runIntentTasks(
       try {
         if (attempt === 1) {
           try {
-            generated = compileRequirement(project, current, plan, task);
+            const prepared = hooks.preparedPlans?.get(task.taskId);
+            task.compilationSource = prepared?.beforeDigest === motionStateDigest(current) ? "validated-preflight" : "compiled";
+            generated = task.compilationSource === "validated-preflight"
+              ? structuredClone(prepared!.compiled)
+              : compileRequirement(project, current, plan, task);
           } catch (error) {
             throw new Error("COMPILER_COVERAGE_ERROR: " + String(error));
           }
@@ -663,8 +673,9 @@ export async function runIntentTasks(
           throw new Error("Requirement produced no executable operations");
         task.generatedOperations = generated.operations;
         let next: MotionState;
+        let checks: ReturnType<typeof requirementChecks>;
         try {
-          next = applyOperations(current, generated.operations, project);
+          ({ next, checks } = admitCompiledTask(project, current, plan, task, generated));
         } catch (error) {
           throw new Error(
             (attempt === 1
@@ -672,10 +683,7 @@ export async function runIntentTasks(
               : "MODEL_OPERATION_VALIDATION_ERROR: ") + String(error),
           );
         }
-        assertIntentScope(project, current, next, plan, task);
-        const checks = plan.requirements
-          .filter((r) => task.requirementIds.includes(r.requirementId))
-          .flatMap((r) => requirementChecks(next, r, plan, current));
+
         task.generatedOperations = generated.operations;
         task.validationResult = {
           status: checks.some((c) => c.status === "FAILED")
@@ -1011,6 +1019,13 @@ export async function runIntentTasks(
   };
 }
 
+/** The same admission rules are used by preflight and execution. Schema/geometry writes remain in applyOperations. */
+export function admitCompiledTask(project: LoadedProject, before: MotionState, plan: IntentPlan, task: IntentTask, compiled: Plan) {
+  const next = applyOperations(before, compiled.operations, project);
+  assertIntentScope(project, before, next, plan, task);
+  const checks = plan.requirements.filter(r => task.requirementIds.includes(r.requirementId)).flatMap(r => requirementChecks(next, r, plan, before));
+  return { next, checks };
+}
 /** Full deterministic candidate preflight; no persistence, renderer or provider call. */
 export function preflightIntentPlan(
   project: LoadedProject,
@@ -1023,6 +1038,7 @@ export function preflightIntentPlan(
     done = new Set<string>();
   let candidate = structuredClone(state);
   const reports: unknown[] = [];
+  const preparedPlans = new Map<string, { beforeDigest: string; compiled: Plan }>();
   while (done.size < tasks.length) {
     const task = tasks.find(
       (t) => !done.has(t.taskId) && t.dependencies.every((id) => done.has(id)),
@@ -1037,11 +1053,8 @@ export function preflightIntentPlan(
         throw new Error(task.error ?? "UNSUPPORTED_REQUIREMENT");
       const compilationStarted = performance.now();
       const compiled = compileRequirement(project, candidate, plan, task),
-        next = applyOperations(candidate, compiled.operations, project);
-      assertIntentScope(project, candidate, next, plan, task);
-      const checks = plan.requirements
-        .filter((r) => task.requirementIds.includes(r.requirementId))
-        .flatMap((r) => requirementChecks(next, r, plan, candidate));
+        { next, checks } = admitCompiledTask(project, candidate, plan, task, compiled);
+      preparedPlans.set(task.taskId, { beforeDigest: motionStateDigest(candidate), compiled });
       if (checks.some((c) => c.status === "FAILED"))
         throw Object.assign(new Error("REQUIREMENT_OPERATIONS_INCOMPLETE"), {
           checks,
@@ -1074,6 +1087,7 @@ export function preflightIntentPlan(
             taskId: task.taskId,
             reports,
             failure: String(error),
+            toolIssue: error instanceof MotionToolError ? error.issue : undefined,
             diagnostic: { target: task.targetReference, techniques: task.techniques, code: String(error).replace(/^Error: /, "").split(":")[0], invariant: String(error) },
             checks: (error as { checks?: unknown }).checks,
           },
@@ -1084,6 +1098,7 @@ export function preflightIntentPlan(
   return {
     status: "PASSED",
     durationMs: performance.now() - preflightStarted,
+    preparedPlans,
     graphDiff: {
       before: state.timingDependencies ?? [],
       after: candidate.timingDependencies ?? [],
