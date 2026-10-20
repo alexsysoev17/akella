@@ -1,3 +1,4 @@
+import { statePresentation } from "../motion/transitions.js";
 import { presentedTransitions } from "../motion/transition-runtime.js";
 import { failureCategory } from "../motion/qa/failure.js";
 import type { LoadedProject } from "../types.js";
@@ -46,6 +47,7 @@ export async function nativeMotionQA(
           }
         : state,
       request,
+      statePresentation(project, state),
     ),
     checks: Check[] = [...numeric.checks],
     samples: { frame: number; file: string }[] = [],
@@ -60,7 +62,9 @@ export async function nativeMotionQA(
               b.sceneId === targetScope.sceneId &&
               frame >= b.startFrame &&
               frame < b.startFrame + b.durationFrames,
-          ) || (state.expressions ?? []).some(e => e.transitionId && scope(e.sceneId, e.targetId) && presentedTransitions(state, frame).some(t => t.transitionId === e.transitionId)),
+          ) || (state.expressions ?? []).some(e => scope(e.sceneId, e.targetId) && (
+            e.ownership?.scope === "logicalObject" && frame >= e.startFrame && frame < e.startFrame + e.durationFrames ||
+            e.transitionId && presentedTransitions(state, frame).some(t => t.transitionId === e.transitionId))),
       )
       .slice(0, 24);
   const report = {

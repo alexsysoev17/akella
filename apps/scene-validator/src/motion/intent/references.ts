@@ -8,7 +8,7 @@ export function resolveTemporalReference(
   state: MotionState,
   r: IntentRequirement,
   recentActions?: RecentAction[],
-): Animation | undefined {
+): Pick<Animation, "animationId" | "sceneId" | "targetId" | "startFrame" | "durationFrames"> | undefined {
   const ref = r.timing.reference;
   if (!ref) return undefined;
   if (
@@ -64,7 +64,12 @@ export function resolveTemporalReference(
       (!ref.effect || a.effect === ref.effect) &&
       (!ref.animationId || a.animationId === ref.animationId),
   );
-  if (!candidates.length)
+  if (!candidates.length) {
+    const transitions = state.objectTransitions?.filter(t => t.logicalObjectId === found.target!.logicalObjectId && (!ref.animationId || t.transitionId === ref.animationId) && (!ref.effect || ref.effect === "objectStateTransition"));
+    if (transitions?.length === 1) {
+      const t = transitions[0]; ref.resolvedAnimationId = t.transitionId;
+      return { animationId: t.transitionId, sceneId: found.target.sceneId, targetId: found.target.sourceNodeId, startFrame: t.startFrame, durationFrames: t.durationFrames };
+    }
     throw new Error(
       "MISSING_TEMPORAL_ANCHOR: " +
         JSON.stringify({
@@ -74,6 +79,7 @@ export function resolveTemporalReference(
           animationId: ref.animationId,
         }),
     );
+  }
   if (candidates.length !== 1)
     throw new Error(
       "AMBIGUOUS_TEMPORAL_ANCHOR: " +
@@ -98,6 +104,6 @@ export function referenceDiagnostics(plan: IntentPlan, state: MotionState) {
       reference: r.timing.reference,
       projectAnimationPresent: state.animations.some(
         (a) => a.animationId === r.timing.reference!.resolvedAnimationId,
-      ),
+      ) || Boolean(state.objectTransitions?.some(t => t.transitionId === r.timing.reference!.resolvedAnimationId)),
     }));
 }

@@ -495,7 +495,8 @@ export class NativeRenderer {
         `${width}x${height}`,
       );
     let canvas = surface.getCanvas();
-    const evaluation = evaluateMotion(state, requestedFrame),
+    const presentation = statePresentation(this.project, state);
+    const evaluation = evaluateMotion(state, requestedFrame, presentation),
       frame = evaluation.frame,
       warnings = [...this.assetWarnings],
       fallbacks: NativeFrame["fallbacks"] = [],
@@ -505,8 +506,7 @@ export class NativeRenderer {
       usedFonts = new Set<string>();
     canvas.clear(options.transparent ? k.TRANSPARENT : k.BLACK);
     canvas.scale(scale, scale);
-    const presentation = statePresentation(this.project, state),
-      overrides = new Map<string, { wrapper: Matrix; opacity: number }>(),
+    const overrides = new Map<string, { wrapper: Matrix; opacity: number }>(),
       blocks = { ...evaluation.blocks };
     let transitions = presentedTransitions(state, frame);
     if (transitions.length) {

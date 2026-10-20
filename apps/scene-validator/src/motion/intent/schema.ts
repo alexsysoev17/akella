@@ -109,7 +109,7 @@ export const intentRequirementSchema = z
       })
       .strict()
       .optional(),
-    targetScope: z.enum(["instance", "logicalObject"]).optional(),
+    targetScope: z.enum(["instance", "sceneInstance", "transition", "logicalObject"]).optional(),
     selectionRequirementId: z.string().optional(),
     expressionIds: z.array(z.string()).max(5000).optional(),
     expressionAction: z.enum(["update", "remove", "enable", "disable"]).optional(),
@@ -139,7 +139,7 @@ export const intentRequirementSchema = z
           .enum(["x", "y", "rotation", "scaleX", "scaleY", "opacity"])
           .nullable()
           .optional(),
-        lifetime: z.enum(["scene", "project"]).nullable().optional(),
+        lifetime: z.enum(["scene", "transition", "project"]).nullable().optional(),
         seed: z.number().int().min(0).max(2147483647).nullable().optional(),
         fromSceneId: z.string().nullable().default(null),
         toSceneId: z.string().nullable().default(null),

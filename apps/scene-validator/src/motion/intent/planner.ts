@@ -358,6 +358,7 @@ export function validateIntentPlan(
       r.unresolvedReason = "UNKNOWN_SCENE";
       continue;
     }
+    if (r.targetScope === "sceneInstance") r.targetScope = "instance";
     if (r.kind === "sceneTiming") continue;
     if (
       r.effectOperation &&
@@ -420,6 +421,7 @@ export function validateIntentPlan(
       r.techniques[0] === "inertialOvershoot"
         ? resolveBaseMotion(state, target.sceneId, target.sourceNodeId)
         : undefined;
+    const baseTransition = target && r.targetScope !== "instance" ? state.objectTransitions?.filter(t => t.logicalObjectId === target.logicalObjectId) : [];
     const attachInertia = Boolean(
       baseMotion &&
         r.kind !== "editAnimation" &&
@@ -427,7 +429,7 @@ export function validateIntentPlan(
         r.parameters.amplitudeFactor == null &&
         r.parameters.frequencyFactor == null,
     );
-    if (attachInertia && target && baseMotion?.status === "RESOLVED") {
+    if (attachInertia && target && (baseMotion?.status === "RESOLVED" || baseTransition?.length === 1)) {
       r.kind = "objectAnimation";
       r.sceneId = target.sceneId;
       r.target = {
@@ -450,11 +452,11 @@ export function validateIntentPlan(
       resolutionContext?.onResolution?.({
         requirementId: r.requirementId,
         ...result,
-        baseMotion: {
+        baseMotion: baseTransition?.length === 1 ? { kind: "transition", transitionId: baseTransition[0].transitionId, endFrame: baseTransition[0].startFrame + baseTransition[0].durationFrames } : {
           ...baseMotion,
-          tracks: baseMotion.tracks.map(({ valueAtTime: _, ...t }) => t),
+          tracks: baseMotion!.tracks.map(({ valueAtTime: _, ...t }) => t),
         },
-        event: "BASE_POSITION_RESOLVED",
+        event: baseTransition?.length === 1 ? "BASE_TRANSITION_RESOLVED" : "BASE_POSITION_RESOLVED",
       });
       continue;
     }

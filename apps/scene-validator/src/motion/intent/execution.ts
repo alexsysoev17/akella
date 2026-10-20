@@ -532,11 +532,18 @@ export function requirementChecks(
       requirementId: r.requirementId,
       status: ok ? "PASSED" : "FAILED",
     });
+    if (e.type === "wiggle" && r.targetScope === "logicalObject" && (r.kind !== "editAnimation" || r.parameters.lifetime != null || r.parameters.durationSeconds != null)) {
+      const expectedEnd = r.parameters.lifetime === "scene" ? (block ? block.startFrame + block.durationFrames : -1)
+        : r.parameters.lifetime === "transition" ? state.objectTransitions?.find(t => t.transitionId === e.transitionId)?.startFrame! + state.objectTransitions?.find(t => t.transitionId === e.transitionId)?.durationFrames!
+        : r.parameters.durationSeconds != null ? e.startFrame + Math.round(r.parameters.durationSeconds * state.settings.fps) : state.settings.durationFrames;
+      checks.push({ name: "requestedLogicalEffectScope", requirementId: r.requirementId,
+        status: e.ownership?.scope === "logicalObject" && e.ownership.logicalObjectId === r.target.logicalObjectId && e.startFrame + e.durationFrames === expectedEnd ? "PASSED" : "FAILED" });
+    }
     if (e.type === "wiggle" && r.kind !== "editAnimation") {
       const expected =
         r.timing.startSeconds !== null
           ? Math.round(r.timing.startSeconds * state.settings.fps)
-          : block?.startFrame;
+          : e.ownership?.scope === "logicalObject" && r.parameters.lifetime !== "scene" ? 0 : block?.startFrame;
       if (r.timing.relation === "sceneStart" && expected !== undefined)
         checks.push({
           name: "expressionTiming",
@@ -559,7 +566,7 @@ export function requirementChecks(
     );
     const source =
       e && "sourceAnimationId" in e
-        ? state.animations.find((a) => a.animationId === e.sourceAnimationId)
+        ? state.animations.find((a) => a.animationId === e.sourceAnimationId) ?? state.objectTransitions?.find(t => t.transitionId === e.transitionId && t.transitionId === e.sourceAnimationId)
         : undefined;
     checks.push({
       name: "afterPosition",

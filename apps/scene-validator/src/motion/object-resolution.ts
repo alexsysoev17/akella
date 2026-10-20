@@ -91,7 +91,7 @@ export function resolveObjectReference(
             : (nameMatch ??
               objectNameMatch(o.name, reference) ??
               "morphological"),
-          existingTransitionIds: (state.objectTransitions ?? []).filter(t => t.logicalObjectId === logical?.logicalObjectId && (!input.techniques?.length || input.techniques.includes("objectStateTransition"))).map(t => t.transitionId),
+          existingTransitionIds: (state.objectTransitions ?? []).filter(t => t.logicalObjectId === logical?.logicalObjectId && (!input.techniques?.length || input.techniques.some(t => ["objectStateTransition", "inertialOvershoot", "wiggle"].includes(t)))).map(t => t.transitionId),
           existingAnimationIds: state.animations
             .filter(
               (a) =>
@@ -109,8 +109,7 @@ export function resolveObjectReference(
             .filter(
               (e) =>
                 e.enabled &&
-                e.sceneId === o.sceneId &&
-                e.targetId === o.targetId &&
+                ((e.sceneId === o.sceneId && e.targetId === o.targetId) || e.ownership?.scope === "logicalObject" && e.ownership.logicalObjectId === logical?.logicalObjectId) &&
                 (!input.techniques?.length ||
                   input.techniques.includes(e.type)),
             )
@@ -165,6 +164,15 @@ export function resolveObjectReference(
     restrict("existing-technique", (c) =>
       Boolean(c.existingAnimationIds.length || c.existingExpressionIds.length || c.existingTransitionIds.length),
     );
+  // Collapse references to ONE authoritative transition, never independent same-name tracks.
+  if (candidates.length > 1 && !input.sceneId && !input.sourceNodeId &&
+      candidates.every(c => c.logicalObjectId === candidates[0].logicalObjectId && c.existingTransitionIds.length === 1) &&
+      new Set(candidates.flatMap(c => c.existingTransitionIds)).size === 1 &&
+      candidates.every(c => !c.existingAnimationIds.length)) {
+    const t = state.objectTransitions!.find(t => t.transitionId === candidates[0].existingTransitionIds[0])!;
+    const representative = candidates.find(c => c.sceneId === t.fromSceneId)!;
+    candidates = [{ ...representative, resolutionMethod: "unique-logical-transition" }];
+  }
   const status =
     candidates.length === 1
       ? "RESOLVED"

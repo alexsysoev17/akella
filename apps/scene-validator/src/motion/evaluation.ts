@@ -1,3 +1,6 @@
+import { inverse } from "./geometry.js";
+import { scopedExpressionValue } from "./transition-effects.js";
+import type { StatePresentation } from "./transition-runtime.js";
 import {
   valueAtTime as sampleValue,
   velocityAtTime as sampleVelocity,
@@ -115,7 +118,7 @@ export function evaluateAnimation(a: Animation, frame: number): Values {
     }
   }
 }
-export function evaluateMotion(state: MotionState, frame: number) {
+export function evaluateMotion(state: MotionState, frame: number, presentation: StatePresentation = {}) {
   frame = Math.max(
     0,
     Math.min(state.settings.durationFrames - 1, Math.floor(frame)),
@@ -193,9 +196,26 @@ export function evaluateMotion(state: MotionState, frame: number) {
   }
   const transitionEffects: Record<string, Values> = {};
   for (const e of [...(state.expressions ?? [])].sort((a, b) => a.expressionId.localeCompare(b.expressionId))) {
-    if (!e.transitionId || !e.enabled) continue;
-    const v = transitionEffects[e.transitionId] ??= {};
-    v[e.property] = (v[e.property] ?? 0) + expressionValue(e, frame, state.settings.fps, state.animations, evaluateAnimation);
+    if ((!e.transitionId && e.ownership?.scope !== "logicalObject") || !e.enabled) continue;
+    const bindings = e.ownership?.scope === "logicalObject"
+      ? (state.objectTransitions ?? []).filter(t => t.logicalObjectId === e.ownership!.logicalObjectId).map(t => t.transitionId)
+      : e.transitionId ? [e.transitionId] : [];
+    const offset = scopedExpressionValue(state, e, frame, presentation);
+    if (e.ownership?.scope === "logicalObject") {
+      const states = presentation[e.ownership.logicalObjectId!];
+      if (!states) throw new Error("MISSING_LOGICAL_EFFECT_GEOMETRY");
+      for (const [sceneId, s] of Object.entries(states)) {
+        const parent = inverse(s.parentCanvas);
+        const x = e.property === "x" ? offset : 0, y = e.property === "y" ? offset : 0;
+        const v = nodes[JSON.stringify([sceneId, s.sourceNodeId])] ??= {};
+        v.x = (v.x ?? 0) + parent[0][0] * x + parent[0][1] * y;
+        v.y = (v.y ?? 0) + parent[1][0] * x + parent[1][1] * y;
+      }
+    }
+    for (const id of bindings) {
+      const v = transitionEffects[id] ??= {};
+      v[e.property] = (v[e.property] ?? 0) + offset;
+    }
   }
   return { frame, nodes, blocks: visible, transitionEffects };
 }

@@ -47,7 +47,7 @@ export const techniques = [
       "incomingImpulse",
     ],
     limits: [
-      "Needs source base track",
+      "Needs a finite Position track or a unique cross-scene transition; transition inertia supports canvas-space X/Y and anchors to its endpoint",
       "incomingImpulse is explicit additive velocity, not silently invented",
       "frame rate must resolve frequency",
     ],

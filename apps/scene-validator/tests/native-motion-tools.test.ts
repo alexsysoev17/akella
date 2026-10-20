@@ -145,3 +145,100 @@ test("semantic enum parameters are advertised from canonical schemas, preventing
   assert.equal(semanticGraphSchema.safeParse(graph(prompt, "inertialOvershoot", "objectAnimation", [{ key: "intensity", value: "extreme-unregistered" }])).success, false);
   assert.equal(semanticGraphSchema.safeParse(graph(prompt, "wiggle", "objectAnimation", [{ key: "lifetime", value: "unbounded" }])).success, false);
 });
+
+test("cross-scene identity and additive transition inertia persist through nine production turns", async () => {
+  const f = await circleFixture();
+  let response: unknown;
+  const stop = registerProvider("cross-circle", () => ({ id: "cross-circle", mode: "mock", capabilities: () => ({ structuredOutput: true, nativeToolCalling: false, cancellation: true, usage: false, nativeOutputTokenLimit: false }), generate: async () => ({ output: response, usage: null, estimatedCost: null, latencyMs: 0, diagnostics: ["prepared semantics; production execution and native QA"], toolCalls: [] }) }));
+  const turn = async (prompt: string, output: unknown) => {
+    response = output; const before = await readMotion(f.project);
+    const result = await executeMotion(f.project, { mode: "edit", request: prompt, expectedRevision: before.revision, settings: { provider: "cross-circle", model: "" } }, () => {}, { config: { maxLLMCalls: 1, maxRepairAttempts: 0 } });
+    assert.equal(result.reconciliation?.status, "SUCCESS", JSON.stringify(result.reconciliation));
+    const after = await readMotion(f.project); assert.equal(after.cursor, before.cursor + 1); return after;
+  };
+  const action = (prompt: string, technique: string, kind: string, parameters: { key: string; value: string | number }[] = [], extra: object = {}) => graph(prompt, technique, kind, parameters, { scene: null, targets: ["Circle"], targetScope: "logicalObject", ...extra });
+  try {
+    let text = "Circle в начале видео за секунду перемещается в положение как на сцене 2 - анимация линейная";
+    let doc = await turn(text, action(text, "objectStateTransition", "objectAnimation", [{ key: "durationSeconds", value: 1 }, { key: "easing", value: "linear" }, { key: "toSceneId", value: "s1" }], { scene: "s0", targets: ["c0"], start: { unit: "frames", value: 0 } }));
+    const base = structuredClone(doc.state.objectTransitions![0]);
+    for (const easing of ["easeInOutCubic", "linear"]) {
+      text = easing === "linear" ? "пусть Circle двигается линейно" : "сделай очень медленное начало и конец, резко в середине";
+      doc = await turn(text, action(text, "objectStateTransition", "editAnimation", [{ key: "easing", value: easing }], { effectOperation: { storage: "transition", action: "update" } }));
+      assert.deepEqual(doc.state.objectTransitions, [{ ...base, easing }]);
+    }
+    text = "добавь затухающие колебания после конца движения";
+    doc = await turn(text, action(text, "inertialOvershoot", "objectAnimation", [], { temporalReference: { kind: "existingAnimation", target: { name: "Circle" }, effect: "objectStateTransition", endpoint: "end" } }));
+    assert.equal(doc.state.expressions!.length, 2);
+    assert.ok(doc.state.expressions!.every(e => e.type === "inertialOvershoot" && e.startFrame === 12 && e.transitionId === base.transitionId));
+    const before = structuredClone(doc.state.expressions!);
+    text = "сделай колебания сильнее";
+    doc = await turn(text, action(text, "inertialOvershoot", "editAnimation", [{ key: "amplitudeFactor", value: 1.6 }], { selector: { type: "recentSuccessfulTargets", effect: "inertialOvershoot" }, effectOperation: { storage: "expression", action: "update" }, relation: "unchanged" }));
+    assert.deepEqual(doc.state.expressions!.map(e => e.expressionId), before.map(e => e.expressionId));
+    assert.ok(doc.state.expressions!.every((e, i) => e.parameters.amplitude === before[i].parameters.amplitude * 1.6));
+    const inertia = structuredClone(doc.state.expressions);
+    text = "добавь к Circle эффект wiggle";
+    doc = await turn(text, action(text, "wiggle", "objectAnimation"));
+    const wiggles = doc.state.expressions!.filter(e => e.type === "wiggle");
+    assert.equal(wiggles.length, 2); assert.ok(wiggles.every(e => e.ownership?.scope === "logicalObject" && e.durationFrames === 48));
+    const { evaluateMotion } = await import("../src/motion/evaluation.js");
+    const presentation = statePresentation(f.project, doc.state);
+    for (const frame of [11, 23, 24, 28, 47]) {
+      const evaluated = evaluateMotion(doc.state, frame, presentation).transitionEffects[base.transitionId];
+      assert.ok(Number.isFinite(evaluated.x) && Number.isFinite(evaluated.y));
+      const image = await renderNativeFrame(f.project, doc.state, frame, { encoding: "rgba" });
+      const plain = await renderNativeFrame(f.project, { ...doc.state, expressions: inertia }, frame, { encoding: "rgba" });
+      assert.notDeepEqual(image.png, plain.png, `Wiggle is visible at ${frame}`);
+      assert.deepEqual(image.png, (await renderNativeFrame(f.project, doc.state, frame, { encoding: "rgba" })).png);
+    }
+    const { scopedExpressionValue } = await import("../src/motion/transition-effects.js");
+    for (const e of doc.state.expressions!) assert.ok(Math.abs(scopedExpressionValue(doc.state, e, 24 - 1e-5, presentation) - scopedExpressionValue(doc.state, e, 24 + 1e-5, presentation)) < .001);
+    text = "сделай wiggle медленнее и слабее";
+    doc = await turn(text, action(text, "wiggle", "editAnimation", [{ key: "frequencyFactor", value: .5 }, { key: "amplitudeFactor", value: .5 }], { effectOperation: { storage: "expression", action: "update" }, relation: "unchanged" }));
+    assert.deepEqual(doc.state.expressions!.filter(e => e.type === "inertialOvershoot"), inertia);
+    text = "убери wiggle, но сохрани всю остальную анимацию";
+    doc = await turn(text, action(text, "wiggle", "editAnimation", [], { effectOperation: { storage: "expression", action: "remove" }, relation: "unchanged" }));
+    assert.deepEqual(doc.state.expressions, inertia); assert.deepEqual(doc.state.objectTransitions, [base]);
+    text = "пусть Circle двигается линейно также пусть у него будут затухающие колебания инерция после конца движения";
+    const compound = action(text, "objectStateTransition", "editAnimation", [{ key: "easing", value: "linear" }], { effectOperation: { storage: "transition", action: "update" } });
+    compound.actions.push({ ...compound.actions[0], actionId: "post", techniques: ["inertialOvershoot"], kind: "objectAnimation", parameters: [], effectOperation: undefined, relation: "afterRequirement", dependsOn: "a" } as typeof compound.actions[number]);
+    doc = await turn(text, compound);
+    assert.equal(doc.state.expressions!.length, 2); assert.deepEqual(doc.state.objectTransitions, [base]);
+    const video = await exportVideo(f.project.root, () => {}, { renderer: "native" });
+    assert.ok("frameDigests" in video);
+    const image = await renderNativeFrame(f.project, doc.state, 24, { encoding: "rgba" });
+    assert.equal(video.frameDigests.find(d => d.frame === 24)?.sha256, hash(image.png));
+  } finally { stop(); await closeNativeRenderer(); await f.cleanup(); }
+});
+
+test("logical ownership validates source identity, preserves absolute noise phase without transitions and retimes transition inertia", async () => {
+  const f = await circleFixture();
+  try {
+    let doc = await readMotion(f.project);
+    const effect = { expressionId: "logical-noise", sceneId: "s0", targetId: "c0", type: "wiggle" as const, property: "x" as const, startFrame: 0, durationFrames: 48, enabled: true, ownership: { scope: "logicalObject" as const, logicalObjectId: logicalId("Circle") }, parameters: { amplitude: 5, frequency: .7, seed: 42, temporalMode: "continuous" as const } };
+    const state = applyOperations(doc.state, [{ type: "setExpression", expression: effect }], f.project);
+    const { evaluateMotion } = await import("../src/motion/evaluation.js");
+    const p = statePresentation(f.project, state);
+    for (const frame of [0, 23, 24, 47]) {
+      const values = evaluateMotion(state, frame, p).nodes;
+      assert.equal(values['["s0","c0"]'].x, values['["s1","c1"]'].x, "one owner and one global noise phase");
+      const animated = await renderNativeFrame(f.project, state, frame, { encoding: "rgba" });
+      const original = await renderNativeFrame(f.project, doc.state, frame, { encoding: "rgba" });
+      assert.notDeepEqual(animated.png, original.png);
+    }
+    assert.throws(() => applyOperations(doc.state, [{ type: "setExpression", expression: { ...effect, ownership: { ...effect.ownership, logicalObjectId: "unknown" } } }], f.project), /EFFECT_OWNER_MISMATCH/);
+    const t = { transitionId: "test-base", timelinePolicy: "referenceStates" as const, logicalObjectId: logicalId("Circle"), fromSceneId: "s0", toSceneId: "s1", startFrame: 0, durationFrames: 12, easing: "linear" as const, proceduralEffects: [], layerPolicy: { type: "switch" as const, switchProgress: 1 } };
+    let withInertia = applyOperations(doc.state, [{ type: "animateObjectStateTransition", ...t }, { type: "setExpression", expression: { expressionId: "inertia", transitionId: t.transitionId, ownership: { scope: "transition", logicalObjectId: t.logicalObjectId }, sceneId: "s0", targetId: "c0", type: "inertialOvershoot", property: "x", sourceAnimationId: t.transitionId, startFrame: 12, durationFrames: 14, enabled: true, parameters: { mode: "ae", amplitude: .25, frequency: 2.5, decay: 3, velocityLookbackFrames: 6 } } }], f.project);
+    const original = structuredClone(withInertia);
+    withInertia = applyOperations(withInertia, lowerMotionTool(f.project, withInertia, { tool: "updateAnimation", animationId: t.transitionId, patch: { durationFrames: 18 } }), f.project);
+    assert.equal(withInertia.expressions![0].startFrame, 18);
+    assert.equal(original.expressions![0].startFrame, 12);
+    const { timelinePolicy, ...legacyTransition } = { ...t, startFrame: 18 };
+    const legacyEffect = { ...original.expressions![0], startFrame: 30 };
+    const legacyState = applyOperations(doc.state, [{ type: "animateObjectStateTransition", ...legacyTransition }, { type: "setExpression", expression: legacyEffect }], f.project);
+    assert.ok(presentedTransitions(legacyState, 32).length, "legacy reference transition remains presented during attached inertia");
+    const legacyPixels = await renderNativeFrame(f.project, legacyState, 32, { encoding: "rgba" });
+    const legacyBase = await renderNativeFrame(f.project, { ...legacyState, expressions: [] }, 32, { encoding: "rgba" });
+    assert.notDeepEqual(legacyPixels.png, legacyBase.png);
+    assert.throws(() => applyOperations(withInertia, [{ type: "removeObjectStateTransition", transitionId: t.transitionId }], f.project), /DEPENDENT_EXPRESSION/);
+  } finally { await closeNativeRenderer(); await f.cleanup(); }
+});

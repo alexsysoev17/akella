@@ -101,7 +101,7 @@ export function presentedTransitions(state: MotionState, frame: number) {
   return started.filter(t => {
     if (t.startFrame !== latest) return false;
     const end = t.startFrame + t.durationFrames;
-    if (t.timelinePolicy !== "referenceStates") return frame <= end;
+    if (t.timelinePolicy !== "referenceStates") return frame <= end || (state.expressions ?? []).some(e => e.enabled && e.type === "inertialOvershoot" && e.transitionId === t.transitionId && frame >= e.startFrame && frame < e.startFrame + e.durationFrames);
     // Hold the target after arrival, but never suppress a later unrelated authored scene.
     const nextScene = Math.min(Infinity, ...state.blocks.filter(b => ![t.fromSceneId, t.toSceneId].includes(b.sceneId) && b.startFrame >= end).map(b => b.startFrame));
     return frame < nextScene;

@@ -52,6 +52,11 @@ export function validateObjectTransitions(
 ) {
   const ts = state.objectTransitions ?? [],
     registry = buildRegistry(project.inspection.document,project.inspection.fingerprint);
+  for (const e of state.expressions ?? []) {
+    if (e.ownership?.scope !== "logicalObject") continue;
+    const owner = registry.objects.find(o => o.logicalObjectId === e.ownership!.logicalObjectId);
+    if (!owner?.sourceInstances.some(i => i.sceneId === e.sceneId && i.sourceNodeId === e.targetId)) throw new Error("EFFECT_OWNER_MISMATCH: logical owner must contain the source reference");
+  }
   if (!ts.length) return;
   const presentation = statePresentation(project, state),
     ids = new Set<string>();
@@ -131,7 +136,7 @@ export function validateObjectTransitions(
         (state.expressions ?? []).some(
           (e) =>
             e.enabled && e.sceneId === s.sceneId && related.has(e.targetId) &&
-            !(e.transitionId === t.transitionId && e.targetId === s.sourceNodeId && e.type === "wiggle"),
+            !((e.transitionId === t.transitionId || e.ownership?.scope === "logicalObject" && e.ownership.logicalObjectId === t.logicalObjectId) && e.targetId === s.sourceNodeId && ["wiggle", "inertialOvershoot"].includes(e.type)),
         )
       )
         throw new Error(

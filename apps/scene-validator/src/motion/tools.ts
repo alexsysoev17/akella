@@ -16,7 +16,7 @@ export const motionToolSchema = z.discriminatedUnion("tool", [
   z.object({ tool: z.literal("createAnimation"), animation: animationSchema }).strict(),
   z.object({ tool: z.literal("updateAnimation"), animationId: id, patch: z.object({ ...timingPatch, easing: easingSchema.optional(), enabled: z.boolean().optional(), parameters: parameters.optional() }).strict() }).strict(),
   z.object({ tool: z.literal("addEffect"), expression: expressionSchema }).strict(),
-  z.object({ tool: z.literal("updateEffect"), expressionId: id, patch: z.object({ ...timingPatch, enabled: z.boolean().optional(), parameters: parameters.optional() }).strict() }).strict(),
+  z.object({ tool: z.literal("updateEffect"), expressionId: id, patch: z.object({ ...timingPatch, enabled: z.boolean().optional(), ownership: expressionSchema.options[0].shape.ownership, transitionId: id.optional(), parameters: parameters.optional() }).strict() }).strict(),
   z.object({ tool: z.literal("removeEffect"), expressionId: id }).strict(),
   z.object({ tool: z.literal("createStateTransition"), transition: objectTransitionSchema }).strict(),
   z.object({ tool: z.literal("adjustTimeline"), policy: z.enum(["extendProject", "rejectOverflow"]), durationFrames: z.number().int().positive() }).strict(),
@@ -36,7 +36,7 @@ export function inspectAnimations(project: LoadedProject, state: MotionState, ta
   const matches = (e: { sceneId: string; targetId: string }) => (!target?.logicalObjectId || identity(e) === target.logicalObjectId) && (!target?.sceneId || e.sceneId === target.sceneId) && (!target?.targetId || e.targetId === target.targetId);
   return structuredClone([
     ...state.animations.filter(matches).map(a => ({ id: a.animationId, storage: "animation" as const, identity: { sceneId: a.sceneId, sourceNodeId: a.targetId, logicalObjectId: identity(a) }, properties: channels(a), parameters: a.parameters, timing: { startFrame: a.startFrame, durationFrames: a.durationFrames }, easing: a.easing, lifecycle: "finite" as const, composition: "replace" as const, data: a })),
-    ...(state.expressions ?? []).filter(matches).map(e => ({ id: e.expressionId, storage: "expression" as const, identity: { sceneId: e.sceneId, sourceNodeId: e.targetId, logicalObjectId: identity(e), transitionId: e.transitionId }, parameters: e.parameters, properties: [e.property], timing: { startFrame: e.startFrame, durationFrames: e.durationFrames }, easing: null, lifecycle: expressionLifecycles[e.type] === "settling" ? "finite" as const : "continuous" as const, requiresSettledEndpoint: expressionLifecycles[e.type] === "settling", composition: "add" as const, data: e })),
+    ...(state.expressions ?? []).filter(matches).map(e => ({ id: e.expressionId, storage: "expression" as const, identity: { sceneId: e.sceneId, sourceNodeId: e.targetId, logicalObjectId: identity(e), transitionId: e.transitionId, ownership: e.ownership ?? { scope: e.transitionId ? "transition" : "sceneInstance" } }, parameters: e.parameters, properties: [e.property], timing: { startFrame: e.startFrame, durationFrames: e.durationFrames }, easing: null, lifecycle: expressionLifecycles[e.type] === "settling" ? "finite" as const : "continuous" as const, requiresSettledEndpoint: expressionLifecycles[e.type] === "settling", composition: "add" as const, data: e })),
     ...(state.objectTransitions ?? []).filter(t => (!target?.logicalObjectId || t.logicalObjectId === target.logicalObjectId) && (!target?.sceneId || [t.fromSceneId, t.toSceneId].includes(target.sceneId)) && (!target?.targetId || registry.objects.some(o => o.logicalObjectId === t.logicalObjectId && o.sourceInstances.some(i => i.sourceNodeId === target.targetId)))).map(t => ({ id: t.transitionId, storage: "transition" as const, identity: { logicalObjectId: t.logicalObjectId, fromSceneId: t.fromSceneId, toSceneId: t.toSceneId }, properties: ["transform", "opacity"], parameters: t.proceduralEffects, timing: { startFrame: t.startFrame, durationFrames: t.durationFrames }, easing: t.easing, lifecycle: "transition" as const, composition: "state" as const, data: t })),
   ]);
 }
@@ -80,7 +80,7 @@ export function lowerMotionTool(project: LoadedProject, state: MotionState, inpu
     case "updateEffect": {
       const e = state.expressions?.find(e => e.expressionId === command.expressionId);
       if (!e) return fail("EFFECT_NOT_FOUND", "No current expression with this ID", { expressionId: command.expressionId }, ["inspectAnimations"]);
-      return [{ type: "setExpression", expression: expressionSchema.parse({ ...e, ...command.patch, parameters: { ...e.parameters, ...command.patch.parameters } }) }];
+      return [{ type: "setExpression", expression: expressionSchema.parse({ ...e, ...Object.fromEntries(Object.entries(command.patch).filter(([, value]) => value !== undefined)), parameters: { ...e.parameters, ...command.patch.parameters } }) }];
     }
     case "removeEffect":
       if (!state.expressions?.some(e => e.expressionId === command.expressionId)) return fail("EFFECT_NOT_FOUND", "No current expression with this ID", { expressionId: command.expressionId });

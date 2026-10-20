@@ -442,10 +442,10 @@ export function applyOperations(
       )
     )
       continue;
-    const before = previous.animations.find(
+    const before = [...previous.animations, ...(previous.objectTransitions ?? []).map(t => ({ ...t, animationId: t.transitionId }))].find(
         (a) => a.animationId === e.sourceAnimationId,
       ),
-      after = state.animations.find(
+      after = [...state.animations, ...(state.objectTransitions ?? []).map(t => ({ ...t, animationId: t.transitionId }))].find(
         (a) => a.animationId === e.sourceAnimationId,
       );
     if (
@@ -463,7 +463,8 @@ export function applyOperations(
     state.expressions?.some(
       (e) =>
         "sourceAnimationId" in e &&
-        !state.animations.some((a) => a.animationId === e.sourceAnimationId),
+        !state.animations.some((a) => a.animationId === e.sourceAnimationId) &&
+        !(e.type === "inertialOvershoot" && state.objectTransitions?.some(t => t.transitionId === e.transitionId && t.transitionId === e.sourceAnimationId)),
     )
   )
     throw new Error(

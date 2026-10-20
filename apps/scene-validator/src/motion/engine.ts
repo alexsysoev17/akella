@@ -25,7 +25,7 @@ export function applyFrame(
   presentation: StatePresentation = {},
 ) {
   resetTransitionOpacity(root);
-  const result = evaluateMotion(state, frame);
+  const result = evaluateMotion(state, frame, presentation);
   for (const element of root.querySelectorAll<HTMLElement>(
     "[data-motion-block]",
   )) {
@@ -57,7 +57,7 @@ export function applyFrame(
       (visibility?.visible ?? node.dataset.baseVisible !== "false")
         ? ""
         : "none";
-    applyTextAnimation(node, state, result.frame, evaluateMotion);
+    applyTextAnimation(node, state, result.frame, (s, f) => evaluateMotion(s, f, presentation));
     const reveals = state.animations
       .filter(
         (a) =>

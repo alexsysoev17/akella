@@ -125,7 +125,7 @@ export function expressionValue(
   }
   const result =
     value *
-    (continuous || (e.type === "inertialOvershoot" && e.parameters.mode === "ae")
+    (continuous || (e.type === "inertialOvershoot" && e.parameters.mode === "ae" && e.parameters.settlingEnvelope !== "smoothTail")
       ? 1
       : math.windowOffset(
           time,
@@ -147,7 +147,7 @@ export function composeExpressions(
   )) {
     if (
       !e.enabled ||
-      Boolean(e.transitionId) ||
+      (Boolean(e.transitionId) || e.ownership?.scope === "logicalObject") ||
       frame < e.startFrame ||
       frame > e.startFrame + e.durationFrames
     )

@@ -1,3 +1,4 @@
+import { buildRegistry } from "../registry.js";
 import type { LoadedProject } from "../../types.js";
 import type {
   IntentPlan,
@@ -82,6 +83,9 @@ export function inspectSemanticCoverage(
   const report: CoverageReport = { status: "PASSED", issues: [], clauses: [] };
   const scenes = project.inspection.document.scenes;
   const roots = new Set(scenes.map((s) => s.figmaNodeId));
+  const registry = buildRegistry(project.inspection.document, project.inspection.fingerprint);
+  const coversTarget = (r: IntentRequirement, id: string) => r.sceneId + "/" + r.target.sourceNodeId === id ||
+    (r.targetScope === "logicalObject" && !r.unresolvedReason && registry.objects.some(o => o.logicalObjectId === r.target.logicalObjectId && o.sourceInstances.some(i => i.sceneId + "/" + i.sourceNodeId === id)));
   const objects = scenes
     .flatMap(objectsIn)
     .filter((o) => o.parentId && !roots.has(o.targetId));
@@ -299,7 +303,7 @@ export function inspectSemanticCoverage(
         r.kind !== "sceneTiming" &&
         belongs(r, start, end) &&
         (!sceneId || !r.sceneId || r.sceneId === sceneId) &&
-        (targetIds.includes(r.sceneId + "/" + r.target.sourceNodeId) ||
+        (targetIds.some(id => coversTarget(r, id)) ||
           unresolvedMention(r)),
     );
     if (!targetIds.length)
@@ -322,7 +326,7 @@ export function inspectSemanticCoverage(
         if (
           !rs.some(
             (r) =>
-              r.sceneId + "/" + r.target.sourceNodeId === id ||
+              coversTarget(r, id) ||
               unresolvedMention(r, id),
           )
         )
@@ -391,7 +395,8 @@ export function inspectSemanticCoverage(
             r.timing.reference.effect !== t ||
             r.techniques.includes(t as (typeof r.techniques)[number]),
         ))
-          if (!have.has(technique))
+          if (!have.has(technique) && !rs.some(sibling => sibling !== r && !sibling.unresolvedReason && sibling.sourceClauseId === r.sourceClauseId && sibling.sourceClauseId &&
+              ((r.target.logicalObjectId && sibling.target.logicalObjectId === r.target.logicalObjectId && r.targetScope === "logicalObject" && sibling.targetScope === "logicalObject") || sibling.sceneId === r.sceneId && sibling.target.sourceNodeId === r.target.sourceNodeId) && effective(sibling).has(technique)))
             issue("MISSING_EXPLICIT_TECHNIQUE", text, [r], technique, [
               ...have,
             ]);

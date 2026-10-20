@@ -4,13 +4,13 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-20 (Europe/Moscow) — post-semantic typed tools, shared admission/interval contracts and logical-state transition slice; targeted update, not a full re-audit |
+| Last Updated | 2026-10-20 (Europe/Moscow) — cross-scene motion ownership, identity, transition inertia and persistent Wiggle; targeted update, not a full re-audit |
 | Last Full Audit | 2026-10-13 — структурный аудит исходников перечисленных подсистем; не полный production E2E и не формальная верификация каждой ветви |
-| Git Commit | Effect lifecycle committed `b0e378d`; current task checkpoint `12e2a04`. Typed-tool migration changes are uncommitted at this documentation update. |
+| Git Commit | Typed tools baseline `2332d8d`; current task checkpoint `be891bc`. Cross-scene ownership changes are uncommitted at this documentation update. |
 | Git Branch | `main`; локальный репозиторий создан после первоначального аудита |
-| Working Tree Status | main; typed-tool execution/schema/transition/renderer adapters/tests/docs uncommitted at this update. User projects are unchanged; live and deterministic checks use synthetic temporary projects. |
-| Documentation Version | 1.0.24 |
-| Scope of Last Update | Targeted post-semantic audit; typed tool façade and canonical inspection view, shared interval/admission rules, preflight reuse, reference-state transitions and bound X/Y Wiggle, real-provider five-turn qualification. |
+| Working Tree Status | main; cross-scene resolver/schema/compiler/evaluator/QA/tests/docs changes uncommitted at this update. User projects unchanged; saved-answer replays use verified historical copies, live tests use synthetic scenes. |
+| Documentation Version | 1.0.25 |
+| Scope of Last Update | Three saved-run root causes; expression ownership, unique transition resolution, transition-velocity inertia, logical Wiggle scope, numerical/native scope checks and live qualification limits. |
 | Code snapshot SHA-256 | NOT RECALCULATED for this update; use component version digests in actual run artifacts and subsequent Git commit. |
 
 Git 2.54.0 (Apple Git-157): локальная история на main, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
@@ -1275,6 +1275,7 @@ Verified reproduction on the current original source/state/request: `codeVersion
 
 ## ARCHITECTURE CHANGE HISTORY
 
+- 2026-10-20 — v1.0.25: cross-scene identity/ownership, additive transition-velocity inertia, logical Wiggle lifetime and exact saved-run replay. Actual verification and provider quota limitation recorded below.
 - 2026-10-20 — v1.0.24: incremental typed Motion Tools; canonical entry view and shared temporal/admission contracts; preflight compilation reuse; reference-state transitions independent of video blocks; logical X/Y Wiggle composition; two live-discovered contract fixes. Verification/limits are recorded in the corresponding section below.
 
 - 2026-10-20 — v1.0.23: existing-motion logical-instance resolution; typed veryStrong intensity; expression lifecycle categories and continuous Wiggle; shared deterministic parameter editor and enable/disable. See verification below; no live provider calls or canonical project edits.
@@ -1480,3 +1481,50 @@ Final local verification: TypeScript/build PASS, **34/34 native** tests PASS and
 Actual live48-frame MP4 was decoded at frame47 and compared to the native frame reconstructed from that turn's saved authoritative state:96,000RGBA bytes each, export input digest identical, mean decoded RGBA error **0.8385104/255**. Decoded-video evidence is artifacts/motion-tools-live/decoded-video.json; the permanent regression additionally decodes its own exported frame with the normal lossy-codec allowance. This checks actual rendering/encoding beyond JSON/compilation alone.
 
  Earlier full worktree check passed238base+2placement+33native before the final refinements. Subsequent full attempts hit the unchanged browser-compat Retina text sample at its original0.125px tolerance; the baseline b0e378d full compatibility suite and current isolated text test both passed. The cause of that intermittent full-suite failure is NOT VERIFIED; it must not be hidden by weakening tolerances or claimed as a fixed rendering issue. Native checks remain independent of the browser compatibility path.
+
+
+## Cross-scene motion ownership and composition — 2026-10-20 (v1.0.25)
+
+This targeted update supersedes the v1.0.24 limitation that transition-bound inertia is unavailable. It does not replace the Harness, registry, MotionState, Skia renderer or transaction store.
+
+### Verified failures and repairs
+
+All three runs were found in `projects/testkrug1/motion/ai/`. Source exports and user motion history were not modified.
+
+| Saved run | Verified cause | Current change |
+|---|---|---|
+| `010f5992-f83a-4687-a14b-38beda95b510` | Both circle source instances exposed the **same** existing transition ID, but `object-resolution.ts` counted instances rather than animation identities and returned AMBIGUOUS_TARGET. | Collapse only one logical identity/one shared transition after explicit constraints. Different applicable tracks/transitions remain ambiguous. Easing updates retain transition ID, timing and state geometry. |
+| `0b800168-431e-4f13-946f-d9959c78ac95` | The original graph correctly separated transition easing and dependent inertia. The resolver could not unify their target; temporal references searched only node animations; inertia creation required a node Position track. Repair proposed per-scene inertia and then lacked a valid temporal anchor. | Existing transition lookup, temporal-reference resolution and requirement anchors accept the actual canonical transition. One X/Y attachment uses its endpoint and incoming canvas velocity; no fabricated instance tracks. |
+| `6b500d19-f2e5-490a-b362-993f6b8d57be` | Stored expressions **already had transitionId**. The actual defect was `frames=min(defaultDuration,end-start)` when lifetime was omitted: both channels lasted21frames. QA checked bounded noise/interval validity without comparing requested logical lifetime. | Logical Wiggle defaults to the project interval, with a single stable expression/seed per channel. Compilation admission explicitly verifies requested logical owner/end. QA includes scene-boundary and destination samples. |
+
+### Canonical ownership and evaluator boundary
+
+The existing expression schema adds optional `ownership={scope:sceneInstance|transition|logicalObject,logicalObjectId?}`. Existing expressionId/sceneId/targetId remain canonical source references, not new group IDs. `transitionId` still names the real base transition. Old states without ownership retain their previous interpretation and timing; no automatic user-project migration occurs. Intent targetScope accepts `sceneInstance` (normalized to legacy `instance`), `transition`, and `logicalObject`. Lifetime accepts scene/transition/project; a supplied start and duration expresses a custom interval. Explicit scene lifetime is preserved. Old executables may reject newly written fields; compatibility is new-app reads old-state, not old-app reads new-state.
+
+`motion/tools.ts` reuses the same expression schema. updateEffect can explicitly upgrade ownership/binding when a new logical-scope creation request finds an existing compatible effect; it preserves expression identity/seed/parameters. Undefined optional patches are omitted, preserving idempotent canonical states. Ordinary parameter edits do not recreate expressions. Unsupported owner/type/property combinations and missing owner references are rejected.
+
+`motion/transition-effects.ts::scopedExpressionValue` samples immutable `interpolateState` canvas matrices. It uses the shared numerical derivative at incoming endpoint minus0.1frame and the existing damped-sine implementation. New transition inertia supports **additive X/Y position**, owns one transition, and stores that same transitionId as sourceAnimationId under this explicit discriminator. `applyOperations` reanchors its start after transition timing edits and rejects base deletion while it has dependents. No source geometry, base coordinates or easing is rewritten.
+
+New transition inertia declares `parameters.settlingEnvelope=smoothTail`: the shared C1 smooth tail over the final25% of its finite interval removes a real cutoff jump observed in the first replay (4.2265canvas-pixel residual). Incoming velocity/frequency/early exponential decay remain authoritative. Existing AE/legacy expressions without this field retain their original cutoff/window behavior. QA checks the declared finite envelope; no tolerances were increased. If fewer than4settling frames are available, compilation returns TIMELINE_CONFLICT requiring an explicit supported timeline extension; it does not silently extend unrelated timing.
+
+`evaluateMotion(state,frame,presentation?)` receives authoritative StatePresentation geometry from native/browser adapters and numerical QA. It evaluates additive effects in stable expression-ID order, separately from immutable base transition interpolation. For logical Wiggle it uses one absolute noise phase across source instances and transitions. Canvas offsets are converted through each parent's inverse linear transform when no transition override owns the tree. Native and browser adapters consume the same transitionEffects. Missing required geometry is an explicit error, not an ignored effect. Numeric frame selection still uses project FPS and deterministic absolute seeking.
+
+Reference-state transitions hold their target as before. Legacy storyboard-bound transitions remain presented during a finite attached inertia interval, then return to their authored scene composition. This preserves the destination offset instead of discarding inertia on the first post-transition frame. A logical Wiggle can also operate on linked source states without a state transition; it remains one expression per channel, not duplicated timed instances.
+
+### Semantic/QA contracts and scope safeguards
+
+`intent/references.ts` and `requirementAnchor` resolve transition endpoints for both existing-animation references and same-request dependencies. Coverage accepts several actions sharing one source clause only when they target the same canonical instance or explicitly proven logical identity; their combined techniques must still cover the clause. It does not infer missing techniques or combine unrelated targets. Canonical logical coverage avoids demanding duplicate per-scene inertia requirements for one logical target.
+
+Wiggle admission checks requested owner and lifetime separately from mathematical noise validity. Native selective QA includes relevant scene boundaries and destination/final-frame samples for logical effects, rather than limiting checks to the source block. The existing Skia frame contribution checks remain. Explicit frame/duration/scene constraints are not broadened to a global request. Ambiguous multiple motion transitions, unsupported properties and insufficient settling intervals remain real failures.
+
+### Actual verification and limitations
+
+Permanent `tests/native-motion-tools.test.ts` adds a nine-command persistent production-execution regression: create linear transition, easing edit, return to linear, attach inertia, strengthen inertia, add unqualified logical Wiggle, weaken/slow Wiggle, remove only Wiggle, then combined linear+dependent inertia. Prepared semantic responses exercise real compiler, candidate admission, native QA, atomic history and FFmpeg. They are **not live language-understanding evidence**. It checks source transition/IDs, independent effects, deterministic seeks, scene-boundary subframe continuity and Preview/export frame digests. A second regression checks logical effects without transitions, owner validation, transition retiming and legacy post-transition rendering. Existing video test additionally decodes MP4 against native pixels.
+
+All three saved model answers were replayed through production executeMotion on isolated copies with the recorded pre-state uniquely verified against authoritative history using `scripts/replay-agent-run.ts --recorded-state`. Linear1/1, Wiggle1/1 and combined transition/inertia2/2 completed. The final inertia replay has native QA PASSED for both tasks after the explicit smooth-tail correction. Saved replays do not invoke a live model.
+
+`node --import tsx scripts/eval-motion-tools.ts --live --cross-scene` is an opt-in qualification command. Actual Codex qualification completed **7successful sequential turns** on one synthetic two-scene project, one provider call each, no semantic repair calls. Successful reported input tokens17,695–19,889; output196–346; provider latency9.48–14.51s. Cost unavailable. The diagnostic script initially stopped after successful turn1 because it assumed expressions already existed; it was fixed and resumed at turn2. At turn8 the provider returned its account usage limit. Turn8 removal and turn9 combined instruction were therefore **NOT VERIFIED live**; no false full-E2E claim. All8actual calls (7success+quota rejection), including the initial successful turn1, are retained in ignored `artifacts/cross-scene-live/all-runs.json`. No client materials were sent externally. Continuous-provider qualification remains incomplete, and the latest finite-envelope extension was subsequently verified locally, not with another live call.
+
+Local verification before final small legacy/sampling refinements passed typecheck/build,238base/compat tests,2Chromium/WebKit placement tests and36native tests. The final5-test vertical slice also passed after those refinements, including Skia and FFmpeg. Final `npm run check` PASS: TypeScript,238/238base tests,2/2Chromium/WebKit placement tests,36/36native tests and build; no tolerance changes. The final5-test vertical slice independently PASS. The earlier v1.0.24 intermittent Retina compatibility failure was not reproduced in these successful runs; its historical cause remains NOT VERIFIED.
+
+Remaining limits: transition inertia currently supports position X/Y, not scale/rotation/text-segment inertia. Multiple competing transitions require disambiguation. Scene-tree switching remains the existing layerPolicy cut, not content morphing. A later transition can supersede an earlier transition's finite inertia; general overlapping/chained procedural trajectory handoff is not implemented. Existing short user effects are not silently rewritten on opening a project; reissuing the logical Wiggle creation request can upgrade an existing compatible effect. Input context remains roughly18–20k tokens; this task does not claim context-cost optimization or artistic approval.

@@ -13,6 +13,7 @@ export const propertySchema = z.enum([
 const common = {
   expressionId: id,
   transitionId: id.optional(),
+  ownership: z.object({ scope: z.enum(["sceneInstance", "transition", "logicalObject"]), logicalObjectId: id.optional() }).strict().optional(),
   sceneId: id,
   targetId: id,
   property: propertySchema,
@@ -57,6 +58,7 @@ export const expressionSchema = z.discriminatedUnion("type", [
           decay,
           velocityLookbackFrames: finite(0.01, 30).default(6),
           mode: z.enum(["legacy", "ae"]).optional(),
+          settlingEnvelope: z.literal("smoothTail").optional(),
           incomingImpulse: finite(-100000, 100000).nullable().optional(),
         })
         .strict(),

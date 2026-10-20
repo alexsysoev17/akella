@@ -1,3 +1,4 @@
+import { statePresentation } from "../transitions.js";
 import { renderingMode } from "../../native/client.js";
 import { nativeMotionQA } from "../../native/qa.js";
 import { qaAdmission } from "./policy.js";
@@ -76,15 +77,16 @@ export async function browserMotionQA(
                 e.sceneId === targetScope.sceneId &&
                 e.targetId === targetScope.targetId,
             ),
-            objectTransitions: [],
+            objectTransitions: state.objectTransitions,
           }
         : state,
       request,
+      statePresentation(project, state),
     ),
     checks: Check[] = [...numeric.checks];
   await atomicJson(
     path.join(directory, "numeric-samples.json"),
-    numeric.frames.map((frame) => evaluateMotion(state, frame)),
+    numeric.frames.map((frame) => evaluateMotion(state, frame, statePresentation(project, state))),
   );
   const report = {
     scope: "objective checks only; inspect per-check NOT_TESTED coverage",

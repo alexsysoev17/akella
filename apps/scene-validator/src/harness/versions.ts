@@ -15,6 +15,7 @@ const components = [
   "motion/effect-edit",
   "motion/validate-expressions",
   "motion/transition-runtime",
+  "motion/transition-effects",
   "motion/service",
   "motion/geometry",
   "motion/intent/retime",
