@@ -418,6 +418,7 @@ export function compileRequirement(
 
     if (
       r.effectOperation?.action === "updateTiming" &&
+      r.parameters.durationFactor == null && r.parameters.durationSeconds == null &&
       !r.timing.reference &&
       !r.timing.anchorRequirementId &&
       r.timing.startSeconds === null &&
@@ -546,7 +547,7 @@ export function compileRequirement(
           r.timing.reference ||
           r.timing.anchorRequirementId ||
           r.timing.startSeconds !== null ||
-          r.effectOperation?.action === "updateTiming"
+          (r.effectOperation?.action === "updateTiming" && r.timing.relation !== "unchanged")
         ) {
           next.startFrame = start;
           if (anchor)

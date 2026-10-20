@@ -4,13 +4,13 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-20 (Europe/Moscow) — recoverable preflight, typed lifecycle and transactional timeline recovery; targeted update, not a full re-audit |
+| Last Updated | 2026-10-20 (Europe/Moscow) — compound track timing edits; targeted update, not a full re-audit |
 | Last Full Audit | 2026-10-13 — структурный аудит исходников перечисленных подсистем; не полный production E2E и не формальная верификация каждой ветви |
-| Git Commit | Cross-scene baseline `3e9fea0`; current checkpoint `174add3`. Recoverable-preflight changes are uncommitted at this documentation update. |
+| Git Commit | Baseline `460aae5`; checkpoint `19d9b8e`. Compound timing changes are uncommitted at this documentation update. |
 | Git Branch | `main`; локальный репозиторий создан после первоначального аудита |
-| Working Tree Status | main; typed lifecycle/preflight/policy/schema/tests/docs uncommitted at this update. User projects unchanged; historical replays use isolated copies; live test uses synthetic scenes. |
-| Documentation Version | 1.0.26 |
-| Scope of Last Update | Two additional saved-run diagnoses; structured preflight classifications; deterministic extension; bounded agent tool decision; lifecycle deletion and exact timing; native/video and live qualification. |
+| Working Tree Status | main; compound resolution/compiler/checks/tests/docs uncommitted at this update. User projects unchanged; saved provider response replay uses an isolated historical copy. |
+| Documentation Version | 1.0.27 |
+| Scope of Last Update | test30 saved-run diagnosis; synchronized compound timing groups; independent duration/start semantics; real-project saved-response replay and native production regression. |
 | Code snapshot SHA-256 | NOT RECALCULATED for this update; use component version digests in actual run artifacts and subsequent Git commit. |
 
 Git 2.54.0 (Apple Git-157): локальная история на main, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
@@ -1573,3 +1573,20 @@ Actual Codex live retime qualification used synthetic two-scene circle data only
 Verification: full npm run check passed238base/compat +2Chromium/WebKit placement +38native tests and build. After final lifecycle/video assertions, the affected12-test suite independently passed with real browser/Skia/FFmpeg. Final policy-guard `npm run check` also PASSED:238/238base tests,2/2Chromium/WebKit placement,38/38native tests and build. Typecheck passed. No tolerances, subjective artistic ratings or renderer fallbacks were relaxed.
 
 Remaining limits: deterministic repair supports safe timeline extension, not arbitrary timeline re-layout or artistic duration tradeoffs. Agent decision repair currently covers transition removal/dependent deletion only. Unsupported effect/property/geometry combinations remain unsupported; fixed-duration requests that leave no settling interval remain unresolved conflicts. General transition chains, transition scale/rotation inertia and arbitrary content morphing retain v1.0.25 limits. All-history semantic understanding and broad provider/model qualification are not established by these tests.
+
+
+## Compound timing edits — 2026-10-20 (v1.0.27)
+
+Architecture Change History: targeted correction of resolver/compiler/check contracts, reusing the existing semantic planner, operation pipeline and native QA. No new engine, provider, persisted schema or expanded LLM budget.
+
+Verified run `d76e61a0-19c6-4343-857f-4c22f7c13bba` (test30): provider correctly produced two grouped actions, durationFactor=.8 and amplitudeFactor=.8, expanded into eight requirements. `contextual-resolution.ts` rejected each timing action with empty techniques because it required exactly ONE node track. Each target actually had synchronized slide+fade tracks. This was not object identity ambiguity or invalid animation. Preflight surfaced the earlier resolver error. Once that restriction was corrected, `compiler.ts` exposed a second defect: updateTiming required a new start relation even for duration-only edits. Its lowering would also replace start/dependency merely because the action was updateTiming.
+
+`isSynchronizedTrackSet` admits an implicit timing group only for one target/scene, equal start and duration, same enabled state and disjoint property channels. The resolver persists all canonical animationIds and derives supported techniques for the group. Different intervals, competing channels and mixed enabled states still reject as ambiguous; generic deletion/update do not inherit this new permission. This is deliberately conservative, not automatic inference of arbitrary staggered groups. Explicit technique selection continues through existing paths.
+
+Compiler accepts duration-only updateTiming and preserves start/dependencies for relation=unchanged. Explicit start/anchor/scene relation continues to invoke scheduling. Requirement checks enforce unchanged start rather than waiving it for every timing edit. Existing canonical retiming moves attached inertia to the new base endpoint; separate amplitude edits preserve identity and other parameters.
+
+Historical replay used the original saved provider output and authoritative historical state verified against history, on an isolated copy. Eight requirements completed, sixteen operations in one transaction: eight slide/fade tracks duration21→17, start30 retained; four inertia amplitudes.25→.20, anchors51→47. Other project data were not changed. One fixture provider response, zero live calls; measured local replay75.737s including real native QA, not an LLM latency improvement. Render status WARNING: existing font weight590 maps to Skia600 (variable-axis fidelity requires review). No objective FAILED checks; do not describe the real-project render as pixel-perfect.
+
+Permanent tests cover safe synchronized group admission and rejection for interval/channel/enabled conflicts, plus production executeMotion compound creation/edit, preserved timing dependency, IDs and parameters, atomic history, native QA and matching Preview/FFmpeg final-frame input digest on synthetic data. This is prepared-provider execution, not live language qualification. Verification: full npm run check PASSED (239 base/compat tests, 2 Chromium/WebKit text-placement tests, 39 native tests, TypeScript and build). Final dependency-preservation production test also passed separately; final TypeScript check passed. Real-project state diff additionally confirmed unchanged blocks/settings/dependencies and every unrelated animation/expression, with one committed transaction in the copy.
+
+Remaining limitations: synchronized grouping does not resolve multiple independent episodes or artistic scope ambiguity. General agent-directed recovery of arbitrary ambiguous node-track sets is not implemented; existing bounded transition decision remains separate. Original request used25,119 input/640 output tokens and18.356s provider time; this patch does not claim token optimization. Passing this regression does not establish reliability of all natural-language edits.

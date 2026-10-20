@@ -313,7 +313,7 @@ export function requirementChecks(
           (r.timing.reference ||
             r.timing.anchorRequirementId ||
             r.timing.startSeconds !== null ||
-            r.effectOperation?.action === "updateTiming" ||
+            (r.effectOperation?.action === "updateTiming" && r.timing.relation !== "unchanged") ||
             now.startFrame === old.startFrame) &&
           (r.parameters.durationFactor === null ||
             now.durationFrames ===
@@ -470,7 +470,7 @@ export function requirementChecks(
       r.timing.reference ||
       r.timing.anchorRequirementId ||
       r.timing.startSeconds !== null ||
-      r.effectOperation?.action === "updateTiming")
+      (r.effectOperation?.action === "updateTiming" && r.timing.relation !== "unchanged"))
   ) {
     const anchorReq = plan.requirements.find(
       (x) => x.requirementId === r.timing.anchorRequirementId,

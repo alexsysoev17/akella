@@ -301,3 +301,47 @@ test("one bounded agent tool decision repairs a stale unsupported transition-rem
     const decision=JSON.parse(await readFile(path.join(f.project.root,"motion/ai",result.id,"preflight-resolution.json"),"utf8"));assert.equal(decision.action,"removeAnimation");
   } finally {stop();await closeNativeRenderer();await f.cleanup();}
 });
+
+test("compound entrance retiming and inertia edit preserve IDs, start and unrelated motion through production execution", async () => {
+  const f = await circleFixture();
+  let response: unknown;
+  const stop = registerProvider("compound-edit-fixture", () => ({ id: "compound-edit-fixture", mode: "mock", capabilities: () => ({ structuredOutput: true, nativeToolCalling: false, cancellation: true, usage: false, nativeOutputTokenLimit: false }), generate: async () => ({ output: response, usage: null, estimatedCost: null, latencyMs: 0, diagnostics: ["prepared semantics"], toolCalls: [] }) }));
+  async function turn(prompt: string, output: unknown) {
+    response = output;
+    const before = await readMotion(f.project);
+    const result = await executeMotion(f.project, { mode: "edit", request: prompt, expectedRevision: before.revision, settings: { provider: "compound-edit-fixture", model: "" } }, () => {}, { config: { maxLLMCalls: 1, maxRepairAttempts: 0 } });
+    assert.equal(result.reconciliation?.status, "SUCCESS", JSON.stringify(result.reconciliation));
+    return readMotion(f.project);
+  }
+  try {
+    const create = "Circle появляется снизу через fade линейно с затухающей инерцией.";
+    const initialGraph = graph(create, "slideUp", "objectAnimation", [{ key: "easing", value: "linear" }, { key: "durationSeconds", value: .5 }], { start: { unit: "frames", value: 3 } });
+    initialGraph.actions[0].techniques = ["slideUp", "fadeIn", "inertialOvershoot"];
+    let before = await turn(create, initialGraph);
+    const slide = before.state.animations.find(a => a.effect === "slideUp")!;
+    const fade = before.state.animations.find(a => a.effect === "fadeIn")!;
+    await changeMotion(f.project.root, { expectedRevision: before.revision, request: "fixture synchronized timing dependency", operations: [{ type: "setTimingDependency", dependency: { dependencyId: "entrance-sync", animationId: fade.animationId, anchorAnimationId: slide.animationId, relation: "with", offsetFrames: 0 } }] });
+    before = await readMotion(f.project);
+    const prompt = "Появление Circle быстрее, колебания чуть слабее.";
+    const edit = graph(prompt, "", "editAnimation", [{ key: "durationFactor", value: .8 }], { effectOperation: { storage: "animation", action: "updateTiming" } });
+    edit.actions[0].techniques = [];
+    edit.actions.push({ ...edit.actions[0], actionId: "b", techniques: ["inertialOvershoot"], parameters: [{ key: "amplitudeFactor", value: .8 }], effectOperation: { storage: "expression", action: "update" } } as typeof edit.actions[number]);
+    const after = await turn(prompt, edit);
+    assert.equal(after.cursor, before.cursor + 1);
+    for (const track of before.state.animations) {
+      assert.deepEqual(after.state.animations.find(a => a.animationId === track.animationId), { ...track, durationFrames: Math.round(track.durationFrames * .8) });
+    }
+    for (const effect of before.state.expressions ?? []) {
+      const current = after.state.expressions!.find(e => e.expressionId === effect.expressionId)!;
+      assert.equal(current.parameters.amplitude, Number(effect.parameters.amplitude) * .8);
+      assert.deepEqual(current.parameters, { ...effect.parameters, amplitude: Number(effect.parameters.amplitude) * .8 });
+      assert.equal(current.startFrame, 3 + Math.round(6 * .8));
+    }
+    assert.deepEqual(after.state.timingDependencies, before.state.timingDependencies);
+    const finalFrame = after.state.settings.durationFrames - 1;
+    const preview = await renderProjectFrame(f.project, finalFrame, { encoding: "rgba" });
+    const video = await exportVideo(f.project.root, () => {}, { renderer: "native" });
+    assert.ok("frameDigests" in video);
+    assert.equal(video.frameDigests.find(d => d.frame === finalFrame)?.sha256, hash(preview.png));
+  } finally { stop(); await closeNativeRenderer(); await f.cleanup(); }
+});

@@ -7,6 +7,23 @@ import type { IntentPlan, IntentRequirement } from "./intent/schema.js";
 import { objectsIn } from "./context.js";
 import { objectMentionRanges } from "./object-aliases.js";
 import { resolveObjectReference } from "./object-resolution.js";
+import { channels } from "./operations.js";
+/** A single synchronized action may span independent property tracks (e.g. slide + fade).
+ * Distinct intervals or competing writers still require an explicit effect selection. */
+export function isSynchronizedTrackSet(tracks: MotionState["animations"]): boolean {
+  if (!tracks.length) return false;
+  const first = tracks[0], written = new Set<string>();
+  return tracks.every(track => {
+    if (track.sceneId !== first.sceneId || track.targetId !== first.targetId ||
+        track.startFrame !== first.startFrame ||
+        track.durationFrames !== first.durationFrames ||
+        track.enabled !== first.enabled) return false;
+    const properties = channels(track);
+    if (!properties.length || properties.some(property => written.has(property))) return false;
+    properties.forEach(property => written.add(property));
+    return true;
+  });
+}
 export interface RecentAction {
   actionId: string;
   editIds: string[];
@@ -737,7 +754,9 @@ function resolveTrackLifecycle(
     )
       return fail("AMBIGUOUS_EFFECT_MATCH");
     if (!r.techniques.length) {
-      if (tracks.length !== 1) return fail("AMBIGUOUS_EFFECT_MATCH");
+      if (tracks.length !== 1 &&
+          !(r.effectOperation?.action === "updateTiming" && isSynchronizedTrackSet(tracks)))
+        return fail("AMBIGUOUS_EFFECT_MATCH");
       if (
         !(tracks[0].effect in semanticBindings) &&
         r.effectOperation?.action !== "updateTiming"
@@ -745,10 +764,10 @@ function resolveTrackLifecycle(
         return fail("UNSUPPORTED_EFFECT_OPERATION");
     }
     const member = structuredClone(r);
-    if (!member.techniques.length && tracks[0].effect in semanticBindings)
-      member.techniques = [
-        tracks[0].effect as IntentRequirement["techniques"][number],
-      ];
+    if (!member.techniques.length)
+      member.techniques = [...new Set(tracks
+        .filter(track => track.effect in semanticBindings)
+        .map(track => track.effect as IntentRequirement["techniques"][number]))];
     member.kind = "editAnimation";
     member.unresolvedReason = null;
     member.sceneId = target.sceneId;

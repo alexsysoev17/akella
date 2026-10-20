@@ -377,3 +377,14 @@ test("recent track groups resolve from committed actions; dependent expressions 
     await inertia.cleanup();
   }
 });
+
+test("implicit timing groups require equal intervals and independent channels", async () => {
+  const { isSynchronizedTrackSet } = await import("../src/motion/contextual-resolution.js");
+  const slide = { animationId: "slide", sceneId: "s0", targetId: "p", effect: "slideUp" as const, startFrame: 9, durationFrames: 20, easing: "linear" as const, enabled: true, parameters: { distance: 100, mode: "in" as const } };
+  const fade = { ...slide, animationId: "fade", effect: "fadeIn" as const, parameters: { from: 0, to: 1 } };
+  assert.equal(isSynchronizedTrackSet([slide, fade]), true);
+  assert.equal(isSynchronizedTrackSet([slide, { ...fade, startFrame: 10 }]), false);
+  assert.equal(isSynchronizedTrackSet([slide, { ...fade, durationFrames: 30 }]), false);
+  assert.equal(isSynchronizedTrackSet([slide, { ...slide, animationId: "another" }]), false);
+  assert.equal(isSynchronizedTrackSet([slide, { ...fade, enabled: false }]), false);
+});
