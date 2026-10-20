@@ -37,6 +37,16 @@ export function numericQA(state: MotionState, request = "") {
       add(f);
   }
   for (const e of state.expressions ?? []) {
+    if (!e.enabled || e.type !== "wiggle") continue;
+    const count = Math.min(4000, Math.max(32, Math.ceil(e.durationFrames / state.settings.fps * e.parameters.frequency * 16)));
+    const values = Array.from({ length: count }, (_, i) => expressionValue(e, e.startFrame + e.durationFrames * (i + .5) / count, state.settings.fps, state.animations, evaluateAnimation));
+    checks.push({ name: "wiggleBoundedDeterministic", target: e.expressionId, category: "mathematics", required: true,
+      status: values.every((v, i) => Number.isFinite(v) && Math.abs(v) <= e.parameters.amplitude + 1e-8 && v === expressionValue(e, e.startFrame + e.durationFrames * (i + .5) / count, state.settings.fps, state.animations, evaluateAnimation)) ? "PASSED" : "FAILED",
+      metrics: { samples: count, frequency: e.parameters.frequency, maximumOffset: Math.max(...values.map(Math.abs)), temporalMode: e.parameters.temporalMode ?? "legacyWindow" } });
+    if (e.parameters.temporalMode === "continuous") checks.push({ name: "wiggleContinuousInterval", target: e.expressionId, category: "mathematics", required: true,
+      status: e.startFrame + e.durationFrames <= state.settings.durationFrames ? "PASSED" : "FAILED" });
+  }
+  for (const e of state.expressions ?? []) {
     if (!e.enabled || e.type !== "inertialOvershoot") continue;
     const duration = e.durationFrames / state.settings.fps,
       hz = e.parameters.frequency;

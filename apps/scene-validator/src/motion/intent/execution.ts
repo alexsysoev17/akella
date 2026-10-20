@@ -199,6 +199,12 @@ export function requirementChecks(
       },
     ];
   }
+  if (r.effectOperation?.action === "enable" || r.effectOperation?.action === "disable") {
+    const enabled = r.effectOperation.action === "enable";
+    const ids = r.effectOperation.storage === "animation" ? r.animationIds ?? [] : r.expressionIds ?? previous?.expressions?.filter(e => e.sceneId === r.sceneId && e.targetId === r.target.sourceNodeId && r.techniques.includes(e.type as (typeof r.techniques)[number])).map(e => e.expressionId) ?? [];
+    const actual = r.effectOperation.storage === "animation" ? state.animations.filter(a => ids.includes(a.animationId)) : state.expressions?.filter(e => ids.includes(e.expressionId)) ?? [];
+    return [{ name: "effectEnabledState", requirementId: r.requirementId, status: ids.length > 0 && actual.length === ids.length && actual.every(e => e.enabled === enabled) ? "PASSED" : "FAILED" }];
+  }
   // Disabled tracks remain editable; presence checks must not imply enabling or visible playback.
   const presenceState =
     r.effectOperation?.storage === "animation"
@@ -211,7 +217,8 @@ export function requirementChecks(
           ),
         }
       : state;
-  const checks = validateRequirement(presenceState, r).map((c) => ({
+  const checkState = r.effectOperation?.storage === "expression" ? { ...presenceState, expressions: presenceState.expressions?.map(e => e.sceneId === r.sceneId && e.targetId === r.target.sourceNodeId && r.techniques.includes(e.type as (typeof r.techniques)[number]) && (!r.expressionIds || r.expressionIds.includes(e.expressionId)) ? { ...e, enabled: true } : e) } : presenceState;
+  const checks = validateRequirement(checkState, r).map((c) => ({
     ...c,
     requirementId: r.requirementId,
   }));
@@ -264,6 +271,7 @@ export function requirementChecks(
       requirementId: r.requirementId,
       status:
         changed ||
+        (r.effectOperation?.storage === "expression" && r.effectOperation.action === "update") ||
         r.timing.reference ||
         r.timing.anchorRequirementId ||
         r.timing.startSeconds !== null ||
@@ -330,6 +338,7 @@ export function requirementChecks(
     }
   }
   if (
+    r.techniques.includes("inertialOvershoot") &&
     r.parameters.intensity != null &&
     r.parameters.amplitude === null &&
     r.parameters.amplitudeFactor === null
@@ -1065,6 +1074,7 @@ export function preflightIntentPlan(
             taskId: task.taskId,
             reports,
             failure: String(error),
+            diagnostic: { target: task.targetReference, techniques: task.techniques, code: String(error).replace(/^Error: /, "").split(":")[0], invariant: String(error) },
             checks: (error as { checks?: unknown }).checks,
           },
         },

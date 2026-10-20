@@ -284,7 +284,7 @@ export function resolveIntentSelectors(
     }
     let matches = (state.expressions ?? []).filter(
       (e) =>
-        e.enabled &&
+        (e.enabled || r.effectOperation?.storage === "expression") &&
         r.techniques.includes(
           e.type as IntentRequirement["techniques"][number],
         ) &&

@@ -39,6 +39,7 @@ export function resolveObjectReference(
     selectedObjectId?: string;
     techniques?: string[];
     preferExisting?: boolean;
+    allowLogicalFallback?: boolean;
   },
 ): ObjectResolution {
   const registry = buildRegistry(
@@ -115,6 +116,20 @@ export function resolveObjectReference(
         },
       ];
     });
+  if (input.allowLogicalFallback && candidates.length === 1 &&
+      !candidates[0].existingAnimationIds.length && !candidates[0].existingExpressionIds.length &&
+      candidates[0].logicalObjectId) {
+    const logical = candidates[0].logicalObjectId;
+    const alternatives = resolveObjectReference(project, state, {
+      referenceText: input.referenceText, logicalObjectId: logical,
+      techniques: input.techniques, preferExisting: true,
+    });
+    const applicable = alternatives.candidates.filter(c => c.existingAnimationIds.length || c.existingExpressionIds.length);
+    if (applicable.length) {
+      rejected.push({ candidate: candidates[0], reason: "selected-instance-has-no-compatible-motion" });
+      candidates = applicable.map(c => ({ ...c, resolutionMethod: "logical-existing-motion" }));
+    }
+  }
   const restrict = (
     reason: string,
     test: (c: ObjectCandidate) => boolean,
@@ -128,20 +143,21 @@ export function resolveObjectReference(
       candidates = matched;
     }
   };
-  if (input.sceneId)
+  if (input.sceneId && !input.allowLogicalFallback)
     restrict("requested-scene", (c) => c.sceneId === input.sceneId, true);
   // Never use registry order or spelling similarity to guess among canonical instances.
   // Alias-equivalent canonical spellings remain ambiguous unless state/selection disambiguates.
   if (candidates.length > 1 && input.selectedObjectId)
     restrict(
       "selected-object",
-      (c) => c.sourceNodeId === input.selectedObjectId,
+      (c) => c.sourceNodeId === input.selectedObjectId && (!input.preferExisting ||
+        Boolean(c.existingAnimationIds.length || c.existingExpressionIds.length)),
     );
   if (candidates.length > 1 && input.preferExisting)
     restrict("existing-motion", (c) =>
       Boolean(c.existingAnimationIds.length || c.existingExpressionIds.length),
     );
-  if (candidates.length > 1 && input.activeSceneId)
+  if (candidates.length > 1 && input.activeSceneId && !input.allowLogicalFallback)
     restrict("active-scene", (c) => c.sceneId === input.activeSceneId);
   if (candidates.length > 1 && input.techniques?.length)
     restrict("existing-technique", (c) =>
@@ -186,6 +202,8 @@ export function resolveExistingAnimation(
   );
   return {
     status:
+      (animations.length === 0 && expressions.length > 0 &&
+       new Set(expressions.map(e => `${e.type}/${e.property}`)).size === expressions.length) ||
       animations.length + expressions.length === 1
         ? "RESOLVED"
         : animations.length + expressions.length

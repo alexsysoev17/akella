@@ -22,8 +22,9 @@ import type {
 import type { MotionState, Plan, Animation } from "../schema.js";
 import { channels, applyOperations } from "../operations.js";
 import { objectsIn } from "../context.js";
+import { editExpression } from "../effect-edit.js";
 import { resolveBaseMotion } from "../base-motion.js";
-import { inertiaIntensityDefaults } from "../../motion-library/expressions/registry.js";
+import { inertiaIntensityDefaults, wiggleIntensityDefaults } from "../../motion-library/expressions/registry.js";
 export interface IntentTask {
   taskId: string;
   requirementIds: string[];
@@ -532,7 +533,7 @@ export function compileRequirement(
         state.expressions?.filter(
           (e) =>
             own(e) &&
-            e.enabled &&
+            (e.enabled || r.effectOperation?.storage === "expression") &&
             r.techniques.includes(e.type as IntentTechnique) &&
             (!r.expressionIds || r.expressionIds.includes(e.expressionId)) &&
             (!r.parameters.property || e.property === r.parameters.property),
@@ -543,6 +544,11 @@ export function compileRequirement(
         );
       for (const a of targets) {
         const next = structuredClone(a);
+        if (r.effectOperation?.action === "enable" || r.effectOperation?.action === "disable") {
+          next.enabled = r.effectOperation.action === "enable";
+          operations.push({ type: "updateAnimation", animationId: a.animationId, animation: next });
+          continue;
+        }
         if (r.parameters.text) next.text = r.parameters.text;
         if (
           r.timing.reference ||
@@ -675,46 +681,11 @@ export function compileRequirement(
         const next = structuredClone(
           updated?.type === "setExpression" ? updated.expression : e,
         );
-        if (r.parameters.property) next.property = r.parameters.property;
-        if (next.type === "wiggle" && r.parameters.seed != null)
-          next.parameters.seed = r.parameters.seed;
-        if (!targets.length && r.parameters.durationSeconds !== null)
-          next.durationFrames = Math.max(
-            1,
-            Math.round(r.parameters.durationSeconds * fps),
-          );
-        else if (!targets.length && r.parameters.durationFactor !== null)
-          next.durationFrames = Math.max(
-            1,
-            Math.round(next.durationFrames * r.parameters.durationFactor),
-          );
-        if (r.parameters.amplitudeFactor !== null)
-          next.parameters.amplitude *= r.parameters.amplitudeFactor;
-        else if (
-          next.type === "inertialOvershoot" &&
-          r.parameters.intensity !== null &&
-          r.parameters.intensity !== "normal" &&
-          r.parameters.amplitude === null
-        )
-          next.parameters.amplitude *=
-            inertiaIntensityDefaults[r.parameters.intensity].amplitude /
-            inertiaIntensityDefaults.normal.amplitude;
-        if (r.parameters.amplitude !== null)
-          next.parameters.amplitude = r.parameters.amplitude;
-        if (
-          "frequency" in next.parameters &&
-          r.parameters.frequencyFactor !== null
-        )
-          next.parameters.frequency *= r.parameters.frequencyFactor;
-        if ("frequency" in next.parameters && r.parameters.frequency !== null)
-          next.parameters.frequency = r.parameters.frequency;
-        if ("decay" in next.parameters && r.parameters.decay !== null)
-          next.parameters.decay = r.parameters.decay;
-        operations.push({ type: "setExpression", expression: next });
+        operations.push({ type: "setExpression", expression: editExpression(next, r, state, !targets.length) });
       }
       if (
         hasInertia &&
-        r.expressionAction !== "remove" &&
+        !["remove", "disable", "enable"].includes(r.expressionAction ?? "") &&
         !r.expressionIds &&
         (targets.length > 0 || !expressions.length)
       ) {
@@ -979,49 +950,7 @@ export function compileRequirement(
           });
       }
       if (r.techniques.includes("wiggle")) {
-        const old = state.expressions?.find(
-          (e) =>
-            own(e) &&
-            e.type === "wiggle" &&
-            (!r.parameters.property || e.property === r.parameters.property),
-        );
-        const frames = Math.min(
-          duration,
-          block.startFrame + block.durationFrames - start,
-          state.settings.durationFrames - start - 1,
-        );
-        if (frames < 1)
-          throw new Error("Wiggle requires a finite visible interval");
-        operations.push({
-          type: "setExpression",
-          expression: {
-            expressionId:
-              old?.expressionId ??
-              "intent_wiggle_" +
-                stable([
-                  r.sceneId,
-                  r.target.sourceNodeId,
-                  r.parameters.property ?? "y",
-                ]),
-            sceneId: r.sceneId!,
-            targetId: r.target.sourceNodeId!,
-            type: "wiggle",
-            property: r.parameters.property ?? "y",
-            startFrame: start,
-            durationFrames: frames,
-            enabled: true,
-            parameters: {
-              amplitude: r.parameters.amplitude ?? 10,
-              frequency: r.parameters.frequency ?? 2,
-              seed:
-                r.parameters.seed ??
-                parseInt(
-                  stable([r.sceneId, r.target.sourceNodeId]).slice(0, 7),
-                  16,
-                ),
-            },
-          },
-        });
+        operations.push(...compileWiggle(state, r, start, duration));
       }
       if (hasInertia) {
         const candidate = applyOperations(state, operations, project);
@@ -1037,6 +966,37 @@ export function compileRequirement(
     operations,
   };
 }
+/** Seeded additive X/Y expressions; an explicit property scopes editing to one channel. */
+function compileWiggle(state: MotionState, r: IntentRequirement, start: number, duration: number): Plan["operations"] {
+  const block = state.blocks.find(b => b.sceneId === r.sceneId)!;
+  const old = (state.expressions ?? []).filter(e => e.type === "wiggle" && e.sceneId === r.sceneId && e.targetId === r.target.sourceNodeId && (!r.parameters.property || e.property === r.parameters.property));
+  if (new Set(old.map(e => e.property)).size !== old.length) throw new Error("AMBIGUOUS_EFFECT_MATCH: multiple Wiggles write the same channel");
+  const properties = r.parameters.property ? [r.parameters.property] : old.length ? old.map(e => e.property) : ["x", "y"] as const;
+  return properties.map(property => {
+    const existing = old.find(e => e.property === property);
+    const end = r.parameters.lifetime === "project" ? state.settings.durationFrames : block.startFrame + block.durationFrames;
+    const frames = r.parameters.lifetime ? end - start : Math.min(duration, end - start);
+    if (frames < 1) throw new Error("INVALID_LIFECYCLE_INTERVAL: Wiggle has no visible interval");
+    if (existing?.type === "wiggle") {
+      const upsert = structuredClone(r);
+      if (upsert.parameters.intensity != null && upsert.parameters.amplitude == null && upsert.parameters.amplitudeFactor == null)
+        upsert.parameters.amplitude = wiggleIntensityDefaults[upsert.parameters.intensity].amplitude;
+      const next = editExpression(existing, upsert, state);
+      if (next.type === "wiggle" && r.parameters.lifetime) {
+        next.startFrame = start; next.durationFrames = frames;
+      }
+      return { type: "setExpression", expression: next } as const;
+    }
+    return { type: "setExpression", expression: {
+      expressionId: "intent_wiggle_" + stable([r.sceneId, r.target.sourceNodeId, property]),
+      sceneId: r.sceneId!, targetId: r.target.sourceNodeId!, type: "wiggle", property,
+      startFrame: start, durationFrames: frames, enabled: true,
+      parameters: { temporalMode: "continuous", amplitude: r.parameters.amplitude ?? wiggleIntensityDefaults[r.parameters.intensity ?? "normal"].amplitude,
+        frequency: r.parameters.frequency ?? wiggleIntensityDefaults[r.parameters.intensity ?? "normal"].frequency,
+        seed: r.parameters.seed ?? parseInt(stable([r.sceneId, r.target.sourceNodeId, property]).slice(0, 7), 16) },
+    }} as const;
+  });
+}
 /** Shared creation path for standalone and compound edits, evaluated after base edits. */
 function compileInertiaAttachments(
   state: MotionState,
@@ -1044,7 +1004,7 @@ function compileInertiaAttachments(
   missingOnly = false,
 ): Plan["operations"] {
   const base = resolveBaseMotion(state, r.sceneId!, r.target.sourceNodeId!);
-  if (base.status !== "RESOLVED") throw new Error(base.status);
+  if (base.status !== "RESOLVED") throw new Error(`${base.status}: inertialOvershoot on ${r.sceneId}/${r.target.sourceNodeId} requires an enabled finite Position track; inspected ${base.checkedTracks.map(t => t.animationId).join(", ") || "none"}`);
   const block = state.blocks.find((b) => b.sceneId === r.sceneId)!;
   const operations: Plan["operations"] = [];
   for (const track of base.tracks) {

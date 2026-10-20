@@ -12,7 +12,8 @@ export function expressionValue(
 ): number {
   let time = (frame - e.startFrame) / fps;
   const duration = e.durationFrames / fps;
-  if (!e.enabled || time <= 0 || time >= duration) return 0;
+  const continuous = e.type === "wiggle" && e.parameters.temporalMode === "continuous";
+  if (!e.enabled || (continuous ? time < 0 : time <= 0) || time >= duration) return 0;
   const p = e.parameters,
     source =
       "sourceAnimationId" in e
@@ -124,7 +125,7 @@ export function expressionValue(
   }
   const result =
     value *
-    (e.type === "inertialOvershoot" && e.parameters.mode === "ae"
+    (continuous || (e.type === "inertialOvershoot" && e.parameters.mode === "ae")
       ? 1
       : math.windowOffset(
           time,

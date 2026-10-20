@@ -7,7 +7,7 @@ import {
   objectTransitionSchema,
 } from "../../motion/schema.js";
 import { evaluateAnimation } from "../../motion/engine.js";
-import { expressionSchema, propertySchema } from "../expressions/registry.js";
+import { expressionSchema, propertySchema, expressionLifecycles } from "../expressions/registry.js";
 import { expressionValue } from "../../motion/expressions.js";
 import { easingRegistry } from "../easings/registry.js";
 import { pathReveal } from "../../motion/path-reveal.js";
@@ -58,11 +58,12 @@ export const capabilityRegistry = [
   ...expressionSchema.options.map((s) => ({
     id: s.shape.type.value,
     kind: "expression",
+    temporalLifecycle: expressionLifecycles[s.shape.type.value],
     parameterSchema: z.toJSONSchema(s.shape.parameters),
     evaluator: expressionValue,
     supportedProperties: propertySchema.options,
     constraints: [
-      "finite interval",
+      expressionLifecycles[s.shape.type.value] === "continuous" ? "bounded continuous interval; final project frame allowed" : "settling interval ends before final project frame",
       "base source for inertia/loop",
       "no recursive expressions",
     ],
@@ -97,6 +98,8 @@ const catalog = [
                 data.kind === "animation" ? "addAnimation" : "setExpression",
               update:
                 data.kind === "animation" ? "updateAnimation" : "setExpression",
+              enable: data.kind === "animation" ? "updateAnimation.enabled" : "setExpression.enabled",
+              disable: data.kind === "animation" ? "updateAnimation.enabled" : "setExpression.enabled",
               remove:
                 data.kind === "animation"
                   ? "removeAnimation"

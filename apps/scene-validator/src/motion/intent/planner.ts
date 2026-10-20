@@ -47,7 +47,7 @@ AE Easy Ease is aeEasyEase, a temporal Bezier with zero endpoint speed and 33.33
 Explicit TEXT Mask Reveal uses maskReveal, never fadeIn as a substitute: forward reveals bottom-to-top, reverse top-to-bottom, leftToRight/rightToLeft horizontally. Ordinary Slide + Fade does not create masks.
 "появляется снизу" means slideUp (from positive Y toward its OWN source geometry), "с фейдом" means fadeIn opacity 0 to1, "с колебаниями/инерцией" after entrance means inertialOvershoot after the slide endpoint. "Лого аналогично" inherits all relevant previous entrance techniques, duration/easing and artistic character, NOT another object's position. Record inheritFromRequirementId if source is a requirement in this plan; if from current motion/history, expand techniques/parameters from that context and explain inheritance. A new scene declaration closes previous scene scope even without punctuation. No trim on logo just because next scene contains trim.
 "Лента 1 прорисовывается. Когда она закончится, лента 2 аналогично" creates two trimPath requirements with direction inherited; second timing relation afterRequirement, anchorRequirementId=first ID. Retain relative dependencies; do NOT compute absolute frames. Seconds remain seconds: runtime uses FPS. Start scene at first second means startSeconds=1. Default object entrance timing=sceneStart; afterRequirement waits for the anchor's base action, not its settling inertia. before/with/sceneEnd/delay are explicit. For two ribbons in a scene choose reasonable shared duration that fits both consecutively. Parameters not specified are null: harness computes defaults. direction leftToRight or rightToLeft describes scene-space spatial direction, not SVG authoring direction.
-Adding inertia alone is objectAnimation when the expression is absent. A compound edit (easing/duration plus inertia) uses editAnimation with the existing base technique and inertialOvershoot; the compiler edits the base and creates missing expressions atomically. Use parameters.intensity=subtle|normal|strong for qualitative intensity, including stronger when no expression exists; amplitudeFactor is relative to an existing expression only.
+Adding inertia alone is objectAnimation when the expression is absent. A compound edit (easing/duration plus inertia) uses editAnimation with the existing base technique and inertialOvershoot; the compiler edits the base and creates missing expressions atomically. Use parameters.intensity=subtle|normal|strong|veryStrong for qualitative intensity, including stronger when no expression exists; amplitudeFactor is relative to an existing expression only.
 For follow-ups "сделай её мягче", resolve the actual existing track from selected target, applied history and state; use kind editAnimation with same target/techniques, easing or relative durationFactor/amplitudeFactor, timing unchanged. Do not create a new entrance when editing existing movement. Relative edits preserve unrelated effects. "аналогично, но быстрее" inherits techniques and sets durationFactor<1. Unknown technique remains unsupported with exact reason; never silently drop it.
 For target sets use selector, never put group descriptions into target.name or invent IDs. byExistingEffect means an EXPLICIT project-wide filter only (all objects with inertia); recentSuccessfulTargets means an implicit follow-up on the recent committed effect group, NOT all project expressions. currentSelection uses editor selection; byScene uses an explicitly named canonical sceneId. Resolve no targets yourself for a selector; deterministic code queries full current state. For removal set expressionAction=remove; for parameter changes expressionAction=update and relativeIntensity=slightlyWeaker|weaker|muchWeaker|slightlyStronger|stronger|muchStronger; the harness maps these to bounded factors. Use amplitudeFactor when the user gives an exact numeric factor. Current state always wins over conversation; failed actions do not establish a referent. An undo instruction is unsupported in semantic operations: existing editor Undo is available.
 For relative frequency edits use frequencyFactor ("в полтора раза" =1.5), do not compute the existing value yourself.
@@ -302,6 +302,13 @@ export function validateIntentPlan(
     resolutionContext?.onResolution,
   );
   for (const r of plan.requirements) {
+    if (r.techniques.includes("wiggle") && r.parameters.intensity == null && r.parameters.amplitude == null && /немного|небольш|слегка|subtle|a little/iu.test(r.sourceText))
+      r.parameters.intensity = "subtle";
+    // Compatibility for persisted plans predating typed lifetime/intensity. New providers use the schema.
+    if (r.techniques.includes("wiggle") && r.parameters.lifetime == null && /всегда|постоянно|непрерывно|continuous|always/iu.test(r.sourceText))
+      r.parameters.lifetime = "scene";
+    if (r.techniques.includes("inertialOvershoot") && r.parameters.amplitude == null && r.parameters.amplitudeFactor == null && /очень\s+сильн|very\s+strong/iu.test(r.sourceText))
+      r.parameters.intensity = "veryStrong";
     // Backfill qualitative intensity in historical plans that lacked a typed field.
     if (
       r.techniques.includes("inertialOvershoot") &&
@@ -370,15 +377,34 @@ export function validateIntentPlan(
       activeSceneId: resolutionContext?.activeSceneId,
       selectedObjectId: resolutionContext?.selectedObjectId,
       techniques: r.techniques,
+      allowLogicalFallback:
+        r.targetScope !== "instance" &&
+        !request.includes(r.target.sourceNodeId ?? "\0") &&
+        // Conservative compatibility guard: a scene mentioned in source text is never softened.
+        !/сцен|scene|frame|фрейм/iu.test(r.sourceText) &&
+        (r.kind === "editAnimation" || r.techniques.includes("inertialOvershoot")) &&
+        !r.selector &&
+        (r.targetScope === "logicalObject" ||
+          (r.target.sourceNodeId === resolutionContext?.selectedObjectId &&
+           r.sceneId === resolutionContext?.activeSceneId)),
       preferExisting:
         r.kind === "editAnimation" ||
         r.kind === "unsupported" ||
         r.timing.relation === "unchanged",
     });
+    if (result.status === "AMBIGUOUS_TARGET") {
+      r.unresolvedReason = result.status;
+      resolutionContext?.onResolution?.({ requirementId: r.requirementId, ...result, event: "TARGET_RESOLUTION_FAILED" });
+      continue;
+    }
     const target = result.target;
     const lookup = target
       ? resolveExistingAnimation(state, target, r.techniques)
       : undefined;
+    if (lookup && r.effectOperation?.storage === "expression") {
+      lookup.expressions = (state.expressions ?? []).filter(e => e.sceneId === target!.sceneId && e.targetId === target!.sourceNodeId && r.techniques.includes(e.type as (typeof r.techniques)[number]) && (!r.parameters.property || e.property === r.parameters.property));
+      lookup.status = !lookup.expressions.length ? "EXISTING_ANIMATION_NOT_FOUND" : new Set(lookup.expressions.map(e => `${e.type}/${e.property}`)).size === lookup.expressions.length ? "RESOLVED" : "AMBIGUOUS_ANIMATION";
+    }
     if (lookup && r.expressionIds?.length) {
       lookup.expressions = lookup.expressions.filter((e) =>
         r.expressionIds!.includes(e.expressionId),
@@ -454,7 +480,7 @@ export function validateIntentPlan(
       !r.target.sourceNodeId &&
       !r.target.logicalObjectId &&
       (!r.unresolvedReason ||
-        /context|контекст|target|объект|object|разреш|иденти|sourceNodeId|logicalObjectId|not found|не найден/i.test(
+        /BASE_POSITION_ANIMATION_MISSING|context|контекст|target|объект|object|разреш|иденти|sourceNodeId|logicalObjectId|not found|не найден/i.test(
           r.unresolvedReason,
         )) &&
       !/geometry|геометр|unsupported technique|неподдерживаем.*техник/i.test(
@@ -550,7 +576,7 @@ export function validateIntentPlan(
     }
     const normalizeExistingEdit =
       r.kind === "objectAnimation" &&
-      r.timing.relation === "unchanged" &&
+      (r.timing.relation === "unchanged" || r.techniques.every(t => t === "inertialOvershoot")) &&
       hasEditParameter &&
       lookup?.status === "RESOLVED";
     const recovered = Boolean(recoverEdit);

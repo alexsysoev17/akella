@@ -1,3 +1,4 @@
+import { expressionLifecycles } from "../motion-library/expressions/registry.js";
 import type { MotionState } from "./schema.js";
 import { evaluateAnimation } from "./engine.js";
 import type { MotionObject } from "./context.js";
@@ -12,10 +13,11 @@ export function validateExpressions(
     const target = objects.get(`${e.sceneId}/${e.targetId}`);
     if (!target || target.mask)
       throw new Error("Expression target missing or is a mask");
-    if (e.startFrame + e.durationFrames >= state.settings.durationFrames)
-      throw new Error(
-        "Expression must finish before final project frame so its settled endpoint is rendered",
-      );
+    const end = e.startFrame + e.durationFrames;
+    if (expressionLifecycles[e.type] === "settling" && end >= state.settings.durationFrames)
+      throw new Error(`INVALID_LIFECYCLE_INTERVAL: ${e.expressionId} ${e.type} on ${e.sceneId}/${e.targetId} must finish before final project frame so its settled endpoint is rendered`);
+    if (expressionLifecycles[e.type] === "continuous" && end > state.settings.durationFrames)
+      throw new Error(`INVALID_LIFECYCLE_INTERVAL: ${e.expressionId} ${e.type} exceeds project duration`);
     if ("sourceAnimationId" in e) {
       const a = state.animations.find(
         (a) => a.animationId === e.sourceAnimationId,

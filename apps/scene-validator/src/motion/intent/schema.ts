@@ -109,21 +109,22 @@ export const intentRequirementSchema = z
       })
       .strict()
       .optional(),
+    targetScope: z.enum(["instance", "logicalObject"]).optional(),
     selectionRequirementId: z.string().optional(),
     expressionIds: z.array(z.string()).max(5000).optional(),
-    expressionAction: z.enum(["update", "remove"]).optional(),
+    expressionAction: z.enum(["update", "remove", "enable", "disable"]).optional(),
     effectOperation: z
       .discriminatedUnion("storage", [
         z
           .object({
             storage: z.literal("animation"),
-            action: z.enum(["update", "remove", "updateTiming"]),
+            action: z.enum(["update", "remove", "updateTiming", "enable", "disable"]),
           })
           .strict(),
         z
           .object({
             storage: z.literal("expression"),
-            action: z.enum(["update", "remove"]),
+            action: z.enum(["update", "remove", "enable", "disable"]),
           })
           .strict(),
       ])
@@ -137,6 +138,7 @@ export const intentRequirementSchema = z
           .enum(["x", "y", "rotation", "scaleX", "scaleY", "opacity"])
           .nullable()
           .optional(),
+        lifetime: z.enum(["scene", "project"]).nullable().optional(),
         seed: z.number().int().min(0).max(2147483647).nullable().optional(),
         fromSceneId: z.string().nullable().default(null),
         toSceneId: z.string().nullable().default(null),
@@ -152,7 +154,7 @@ export const intentRequirementSchema = z
           .nullable(),
         amplitude: z.number().min(0).max(10000).nullable(),
         intensity: z
-          .enum(["subtle", "normal", "strong"])
+          .enum(["subtle", "normal", "strong", "veryStrong"])
           .nullable()
           .default(null),
         frequencyFactor: z.number().positive().max(10).nullable().default(null),

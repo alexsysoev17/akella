@@ -32,6 +32,7 @@ export const expressionSchema = z.discriminatedUnion("type", [
           amplitude,
           frequency,
           seed: z.number().int().min(0).max(2147483647),
+          temporalMode: z.enum(["continuous", "legacyWindow"]).optional(),
         })
         .strict(),
     })
@@ -89,8 +90,15 @@ export const expressionSchema = z.discriminatedUnion("type", [
     .strict(),
 ]);
 export type Expression = z.infer<typeof expressionSchema>;
+/** Shared temporal contract; absence of temporalMode preserves old stored Wiggle output. */
+export const expressionLifecycles = {
+  wiggle: "continuous", loop: "continuous",
+  inertialOvershoot: "settling", dampedOscillation: "settling",
+  spring: "settling", bounce: "settling",
+} as const satisfies Record<Expression["type"], "continuous" | "settling">;
 export const expressionRegistry = expressionSchema.options.map((option) => ({
   id: option.shape.type.value,
+  lifecycle: expressionLifecycles[option.shape.type.value],
   parameterSchema: z.toJSONSchema(option.shape.parameters),
   description: {
     wiggle: "Seeded smooth value noise; units/sec frequency.",
@@ -106,6 +114,7 @@ export const inertiaIntensityDefaults = {
   subtle: { amplitude: 0.1, frequency: 2.5, decay: 3 },
   normal: { amplitude: 0.25, frequency: 2.5, decay: 3 },
   strong: { amplitude: 0.4, frequency: 2.5, decay: 3 },
+  veryStrong: { amplitude: 0.8, frequency: 2.5, decay: 3 },
 } as const;
 export const relativeIntensityFactors = {
   slightlyWeaker: 0.8,
@@ -115,3 +124,9 @@ export const relativeIntensityFactors = {
   stronger: 1.6,
   muchStronger: 2,
 } as const;
+
+export const wiggleIntensityDefaults = {
+  subtle: { amplitude: 3, frequency: 0.8 }, normal: { amplitude: 10, frequency: 2 },
+  strong: { amplitude: 20, frequency: 2 }, veryStrong: { amplitude: 40, frequency: 2 },
+} as const;
+export const effectIntensityDefaults = { inertialOvershoot: inertiaIntensityDefaults, wiggle: wiggleIntensityDefaults } as const;
