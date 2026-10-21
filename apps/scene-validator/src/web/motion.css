@@ -17,7 +17,7 @@
   display: flex;
   gap: 10px;
   align-items: center;
-  color: #29292e;
+  color: #292929;
   min-height: 44px;
   padding: 0 10px;
   font-size: 14px;
@@ -35,14 +35,14 @@
   border-radius: 8px;
   width: 28px;
   height: 28px;
-  background: #e8e8ee;
-  color: #73737d;
+  background: #e8e8e8;
+  color: #747474;
   font-size: 20px;
   flex-shrink: 0;
 }
 .project-chevron {
   margin-left: auto;
-  color: #8d8d95;
+  color: #8e8e8e;
 }
 .sidebar-label {
   display: flex;
@@ -51,7 +51,7 @@
   font-size: 10px;
   letter-spacing: 1.2px;
   font-weight: 600;
-  color: #9999a2;
+  color: #9a9a9a;
 }
 .sidebar-label span {
   letter-spacing: 0;
@@ -74,18 +74,18 @@
   width: 100%;
   height: 43px;
   background: transparent;
-  color: #53535c;
+  color: #545454;
   border-radius: 9px;
   padding: 0 66px 0 9px;
   text-align: left;
   white-space: nowrap;
 }
 .scene-row > button:hover {
-  background: #ececf1;
+  background: #ececec;
 }
 .scene-row.active > button {
-  background: #e9edf4;
-  color: #25252c;
+  background: #ededed;
+  color: #262626;
 }
 .disclosure {
   font-size: 20px;
@@ -93,7 +93,7 @@
   line-height: 1;
   transform: rotate(0);
   transition: transform 0.15s;
-  color: #9c9ca5;
+  color: #9d9d9d;
 }
 .scene-row button[aria-expanded="true"] .disclosure {
   transform: rotate(90deg);
@@ -104,7 +104,7 @@
 }
 .scene-name {
   font-size: 10px;
-  color: #9b9ba3;
+  color: #9c9c9c;
   text-overflow: ellipsis;
   overflow: hidden;
 }
@@ -116,7 +116,7 @@
   height: 29px;
   border-radius: 4px;
   pointer-events: none;
-  background: #e7e7ed;
+  background: #e7e7e7;
   box-shadow: 0 0 0 1px #00000007;
 }
 .scene-objects {
@@ -130,7 +130,7 @@
   height: 30px;
   padding: 0 10px 0 calc(26px + var(--depth, 0) * 9px);
   background: transparent;
-  color: #73737d;
+  color: #747474;
   text-align: left;
   font-size: 11px;
   border-radius: 6px;
@@ -141,18 +141,18 @@
   text-overflow: ellipsis;
 }
 .object:hover {
-  background: #ededf2;
+  background: #ededed;
 }
 .object.selected {
-  background: #e2ecfa;
-  color: #2466b4;
+  background: #ebebeb;
+  color: #5e5e5e;
 }
 .object-icon {
   width: 14px;
   flex-shrink: 0;
   font-size: 11px;
   text-align: center;
-  color: #a0a0aa;
+  color: #a1a1a1;
 }
 .settings-launch {
   display: flex;
@@ -160,7 +160,7 @@
   gap: 9px;
   width: 100%;
   text-align: left;
-  color: #777780;
+  color: #787878;
   background: transparent;
   font-size: 12px;
   margin-top: 20px;
@@ -170,7 +170,7 @@
   font-size: 16px;
 }
 .settings-launch:hover {
-  background: #eeeef2;
+  background: #eeeeee;
 }
 .motion-workspace {
   min-width: 0;
@@ -185,7 +185,7 @@
 }
 .viewer-label {
   font-size: 12px;
-  color: #8e8e98;
+  color: #8f8f8f;
 }
 .toolbar-actions {
   display: flex;
@@ -194,22 +194,22 @@
 }
 .quiet {
   background: transparent;
-  color: #777781;
+  color: #787878;
   padding: 8px 11px;
   font-size: 13px;
 }
 .quiet:hover {
-  background: #eaeaf0;
-  color: #373741;
+  background: #eaeaea;
+  color: #383838;
 }
 .secondary {
-  background: #ebebf0;
-  color: #535360;
+  background: #ebebeb;
+  color: #545454;
   font-size: 12px;
   padding: 9px 13px;
 }
 .secondary:hover {
-  background: #e0e0e8;
+  background: #e1e1e1;
 }
 .toolbar-actions .quiet {
   font-size: 20px;
@@ -222,8 +222,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #eeeef2;
-  border: 1px solid #e7e7ee;
+  background: #eeeeee;
+  border: 1px solid #e8e8e8;
   border-radius: 14px;
   overflow: hidden;
   min-height: 180px;
@@ -258,26 +258,26 @@
   padding: 0;
   margin: 0;
   height: 3px;
-  accent-color: #7e92ae;
+  accent-color: #909090;
   border: 0;
   cursor: pointer;
 }
 .transport #m-time {
   font-variant-numeric: tabular-nums;
   font-size: 11px;
-  color: #9898a0;
+  color: #999999;
   white-space: nowrap;
 }
 .prompt-composer {
   background: #fff;
-  border: 1px solid #e5e5eb;
+  border: 1px solid #e5e5e5;
   border-radius: 14px;
   box-shadow: 0 3px 12px #00000002;
   overflow: hidden;
 }
 .prompt-composer:focus-within {
-  border-color: #b4cbed;
-  box-shadow: 0 0 0 3px #0071e308;
+  border-color: #c9c9c9;
+  box-shadow: 0 0 0 3px #61616108;
 }
 #m-ai {
   width: 100%;
@@ -296,7 +296,7 @@
   outline: none;
 }
 #m-ai::placeholder {
-  color: #acacb4;
+  color: #adadad;
 }
 .composer-footer {
   display: flex;
@@ -307,7 +307,7 @@
 }
 .composer-hint {
   font-size: 10px;
-  color: #b0b0b8;
+  color: #b1b1b1;
 }
 .composer-footer button {
   font-size: 12px;
@@ -327,17 +327,17 @@
   display: none;
 }
 #m-proposal {
-  color: #8a8a94;
+  color: #8b8b8b;
   white-space: pre-wrap;
   max-height: 140px;
   overflow: auto;
 }
 #m-error {
-  color: #b8443c;
+  color: #5c5c5c;
   white-space: pre-wrap;
 }
 #m-job {
-  color: #777780;
+  color: #787878;
 }
 .motion-settings .settings-heading {
   display: flex;
@@ -355,7 +355,7 @@
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.7px;
-  color: #9a9aa3;
+  color: #9b9b9b;
   font-weight: 500;
 }
 .motion-settings .settings {
@@ -374,7 +374,7 @@
 .check-label input {
   width: auto;
   margin: 0;
-  accent-color: #0071e3;
+  accent-color: #616161;
 }
 .motion-settings p {
   font-size: 12px;
@@ -385,7 +385,7 @@
   line-height: 1.5;
   max-height: 220px;
   overflow: auto;
-  color: #6d6d76;
+  color: #6e6e6e;
 }
 .motion-settings #m-history li {
   margin-bottom: 12px;
@@ -402,7 +402,7 @@
   overflow-wrap: anywhere;
 }
 .muted {
-  color: #9898a2;
+  color: #999999;
   font-size: 11px;
 }
 @media (min-width: 1500px) {
@@ -567,7 +567,7 @@
   box-shadow: none;
 }
 .prompt-composer:focus-within {
-  border-color: #ff2b2f66;
+  border-color: #58585866;
   box-shadow: none;
 }
 #m-ai {
@@ -629,7 +629,7 @@
   background: var(--text);
 }
 #m-timeline:focus-visible {
-  outline: 2px solid #ff2b2f66;
+  outline: 2px solid #58585866;
   border-radius: 4px;
 }
 @media (max-width: 650px) {
@@ -665,7 +665,7 @@
 }
 .curve-line {
   fill: none;
-  stroke: #ff2b2f;
+  stroke: var(--text);
   stroke-width: 2;
 }
 .curve-guide {
@@ -696,14 +696,14 @@
   letter-spacing: inherit;
 }
 .prompt-ghost .ghost-name {
-  color: rgba(220, 40, 40, 0.45);
+  color: var(--muted);
 }
 .prompt-ghost {
   color: var(--text, #f2f2f2);
 }
 #m-ai.has-ghost {
   color: transparent;
-  caret-color: #ff2b2f;
+  caret-color: var(--text);
 }
 #m-ai.has-ghost::placeholder {
   color: transparent;
