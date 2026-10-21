@@ -6,10 +6,10 @@
 |---|---|
 | Last Updated | 2026-10-21 (Europe/Moscow) — AKELLA welcome/project chooser and text-only two-tone UI; targeted update, not a full audit |
 | Last Full Audit | 2026-10-13; unchanged, this update is not a full renderer/provider audit |
-| Git Commit | `3f295de` contains this UI implementation; baseline `04625fc`. This documentation status clarification is uncommitted at this snapshot. |
+| Git Commit | UI implementation `3f295de`, documentation baseline `e52bf18`; natural tagline sizing correction uncommitted at this snapshot. |
 | Git Branch | `temporal-recovery-loop`, local only |
-| Working Tree Status | UI implementation committed; only this documentation status clarification pending at snapshot. Local supplied artwork and generated brand copies excluded from Git. Original user projects unchanged. |
-| Documentation Version | 1.0.33 |
+| Working Tree Status | Only tagline HTML/font fitting, its CSS and this documentation changed at this snapshot. Local supplied artwork and user projects unchanged. |
+| Documentation Version | 1.0.34 |
 | Scope of Last Update | Two welcome screens, existing-project chooser/import entry, local brand/font allowlist, Inter Light/Medium hover, two-tone text controls and removal of renderer labels/toolbar arrows. Existing timeline and Motion Engine retained. |
 | Code snapshot SHA-256 | NOT RECALCULATED; refer to component digests and final source commit. |
 
@@ -1862,7 +1862,7 @@ Investigation revealed a dual architectural flaw in compiler and execution logic
 
 ## AKELLA welcome and text-only interface — 2026-10-21
 
-Targeted UI change, not an agent/engine audit. `web/main.js` renders a welcome screen with Start followed by a project chooser backed by the existing `/api/projects` API. Both use the same left brand column (photo, original SVG logo, SVG live-text tagline with equal widths) and right welcome title/action panel. Desktop dimensions are viewport-proportional to the supplied 2048×1152 reference; narrow screens stack columns. Existing import-preview/import-commit dialogs and project hash routes are retained; route version prevents stale asynchronous responses from replacing the current route. Returning from an open project goes to the chooser during the same page session. New page load at `/` starts at welcome.
+Targeted UI change, not an agent/engine audit. `web/main.js` renders a welcome screen with Start followed by a project chooser backed by the existing `/api/projects` API. Both use the same left brand column (photo, original SVG logo, naturally sized HTML-text tagline with equal widths) and right welcome title/action panel. Desktop dimensions are viewport-proportional to the supplied 2048×1152 reference; narrow screens stack columns. Existing import-preview/import-commit dialogs and project hash routes are retained; route version prevents stale asynchronous responses from replacing the current route. Returning from an open project goes to the chooser during the same page session. New page load at `/` starts at welcome.
 
 Inter Light300 and Medium500 are local font resources. Text links/buttons use300 and hover/focus500; controls have no filled boxes/icons. UI palette is #1A1A1A/#F2F2F2 with transparency/opacity for timeline and disabled controls. Original photography and rendered scene content retain their own colors. Native preview warning/error HTML uses the same neutral palette; rasterization, animation state and pixel transport are unchanged. Renderer labels and toolbar undo/redo arrows are removed; Undo/Redo remain text commands under project Settings. Timeline dimensions, capture, FPS/time evaluation, seeking and playback are unchanged.
 
@@ -1873,3 +1873,7 @@ Verification: desktop welcome screenshot inspected; photo/logo/tagline measured5
 Architecture Change History: UI-only welcome/chooser and local brand allowlist; no Motion State schema, AI/provider/recovery contract or rendering-math changes.
 
 Completion:21/21 native API/renderer tests passed (including shared Preview/FFmpeg frame checks),20/20 Motion/mentions/timeline tests passed, TypeScript and production build passed. Native UI smoke used an isolated synthetic project and a real worker-backed frame; no live provider calls. Screenshot artifacts remain local outside tracked history.
+
+Tagline correction (2026-10-21): removed SVG textLength/spacingAndGlyphs. SOFTWARE THAT CREATES is native HTML Inter Medium500 with letter-spacing:-0.1em. After local fonts load, a ResizeObserver measures actual text advance and adjusts only font-size to match the brand column. No scale transform, glyph stretching or spacing redistribution; observer disconnects on routing. Other controls retain Light→Medium hover.
+
+Tagline verification: browser measured width534.453125px against534.515625px photo at2048px viewport, Medium500, spacing/font-size=-0.1, transform:none, zero textLength attributes.390px resize retains width within0.1px; Start/chooser route and observer lifecycle ran without page errors. UI build passed.

@@ -4,6 +4,7 @@ const $ = (id) => document.getElementById(id),
 let current, token, updateId;
 let welcomeStarted = false;
 let routeVersion = 0;
+let disposeWelcome = () => {};
 const escape = (s) =>
   String(s ?? "").replace(
     /[&<>"']/g,
@@ -108,13 +109,34 @@ function renderWelcome(projects = [], showProjects = false) {
     <div class="welcome-brand">
       <img class="welcome-photo" src="/brand/akella_photo.png" alt="Волки" fetchpriority="high">
       <img class="welcome-logo" src="/brand/akella.svg" alt="AKELLA">
-      <svg class="welcome-tagline" viewBox="0 0 789 60" role="img" aria-label="Software that creates"><text x="0" y="49" textLength="789" lengthAdjust="spacingAndGlyphs">SOFTWARE THAT CREATES</text></svg>
+      <div class="welcome-tagline"><span>SOFTWARE THAT CREATES</span></div>
     </div>
     <div class="welcome-panel">
       <h1 class="welcome-title"><span>Welcome to</span><img src="/brand/akella.svg" alt="AKELLA"></h1>
       <div class="welcome-actions">${showProjects ? `<button id="new">Новый проект</button><button id="open-project" aria-controls="project-list">Открыть проект</button>
       <nav id="project-list" class="welcome-projects" aria-label="Проекты">${projects.map(p => `<a href="#project/${encodeURIComponent(p.projectId)}">${escape(p.name)}</a>`).join("") || '<p>Пока нет проектов</p>'}</nav>` : '<button id="start">Старт</button>'}</div>
     </div></section>`;
+  const tagline = app.querySelector(".welcome-tagline");
+  const text = tagline.firstElementChild;
+  let lastWidth = 0;
+  const fit = () => {
+    if (!tagline.isConnected) return;
+    const width = tagline.getBoundingClientRect().width;
+    if (!width || width === lastWidth) return;
+    lastWidth = width;
+    // Measure actual Medium glyphs with their tracking; change font size only.
+    text.style.fontSize = "100px";
+    const naturalWidth = text.getBoundingClientRect().width;
+    if (naturalWidth) text.style.fontSize = `${100 * width / naturalWidth}px`;
+  };
+  const observer = new ResizeObserver(fit);
+  let disposed = false;
+  disposeWelcome = () => { disposed = true; observer.disconnect(); };
+  void document.fonts.load("500 100px Inter").catch(() => []).then(() => {
+    if (disposed) return;
+    observer.observe(tagline);
+    fit();
+  });
   if (showProjects) {
     $("new").onclick = () => openImport();
     $("open-project").onclick = () => {
@@ -125,6 +147,7 @@ function renderWelcome(projects = [], showProjects = false) {
   } else $("start").onclick = () => { welcomeStarted = true; void route(); };
 }
 async function route() {
+  disposeWelcome();
   const version = ++routeVersion;
   unmountMotion();
   try {

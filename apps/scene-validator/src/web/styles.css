@@ -570,7 +570,14 @@ body[data-page='welcome'] #message:not(:empty) { position: fixed; bottom: 12px; 
 .welcome-photo { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
 .welcome-logo { width: 100%; height: auto; display: block; margin-top: 2vw; }
 .welcome-tagline { display: block; width: 100%; height: auto; margin-top: .7vw; overflow: visible; }
-.welcome-tagline text { fill: #1a1a1a; font-size: 48px; letter-spacing: -.05em; }
+body .welcome-tagline span {
+  display: inline-block;
+  white-space: nowrap;
+  font-size: 2.4vw;
+  font-weight: 500 !important;
+  letter-spacing: -.1em;
+  line-height: 1;
+}
 .welcome-panel { padding-top: 11.05vw; min-width: 0; }
 .welcome-title {
   display: flex; align-items: center; gap: .55vw; margin: 0;
