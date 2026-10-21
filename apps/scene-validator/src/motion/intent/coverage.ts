@@ -328,7 +328,18 @@ export function inspectSemanticCoverage(
             (r) =>
               coversTarget(r, id) ||
               unresolvedMention(r, id),
-          )
+          ) && !plan.requirements.some(r => {
+            // An inherited action can have its primary provenance on a later
+            // timing clause. Accept the shared clause only with a verified
+            // parent edge, explicit target and coverage link; not row text alone.
+            const parent = plan.requirements.find(p => p.requirementId === r.inheritFromRequirementId);
+            const clause = parent?.sourceClauseId ? sourceClauses.get(parent.sourceClauseId) : undefined;
+            return coversTarget(r, id) && !r.unresolvedReason && r.sceneId === parent?.sceneId &&
+              clause && clause.start < end && clause.end > start &&
+              objectMentionRanges(r.target.name ?? "", text).length > 0 &&
+              techs.every(t => effective(r).has(t)) &&
+              plan.coverage.some(row => row.sourceText === clause.text && row.requirementIds.includes(r.requirementId));
+          })
         )
           issue("MISSING_OBJECT_REQUIREMENT", text, [], {
             target: id,

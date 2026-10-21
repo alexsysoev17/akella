@@ -4,13 +4,13 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-21 (Europe/Moscow) — bounded project recovery and isolated source proposals; targeted update, not a full audit |
+| Last Updated | 2026-10-21 (Europe/Moscow) — semantic coverage/provenance repair regression; targeted update, not a full audit |
 | Last Full Audit | 2026-10-13; unchanged, this update is not a full renderer/provider audit |
-| Git Commit | Baseline `d28630d`; palette `f462041`; architecture checkpoint `ee66472`. Recovery changes are uncommitted at this documentation snapshot. |
+| Git Commit | Clean baseline/checkpoint `2048f16` before this task; semantic coverage changes are uncommitted at this documentation snapshot. |
 | Git Branch | `main`, local only |
-| Working Tree Status | Recovery source/configuration/tests/docs uncommitted at this snapshot; user projects not modified. Tests use isolated synthetic fixtures. |
-| Documentation Version | 1.0.28 |
-| Scope of Last Update | Failure taxonomy, deterministic/typed-tool preflight recovery, model/effort budgets, memory, quarantine code proposals, OS-constrained tests, Inspector/settings, qualification evidence and limits. |
+| Working Tree Status | Semantic coverage source/tests/docs uncommitted at this snapshot; original user projects unchanged. Saved-response replay uses a separate temporary copy of test32; permanent tests use synthetic geometry. |
+| Documentation Version | 1.0.29 |
+| Scope of Last Update | Canonical targeted-repair source spans, preserved coverage mappings, deterministic inherited provenance recovery, semantic-repair Recovery Runtime entry, exact-prompt regression and native rendering verification. |
 | Code snapshot SHA-256 | NOT RECALCULATED; refer to component digests and final source commit. |
 
 Git 2.54.0 (Apple Git-157): локальная история на main, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
@@ -203,6 +203,27 @@ Technical stages do not each call LLM. Selection of relevant skills happens befo
 Legacy route: `proposeMotion(execute=false)` / manual-response / applyProposal / completeExecution retain older `runAutonomous`, `planMotionTasks`, `runMotionTasks`, `intentRequirements`, `validateTechnique`. They are not the semantic primary flow; they are not dead files. UI/manual/compatibility paths and tests still use them. This is one Engine/Renderer with multiple planning paths, not several Engines.
 
 ## 6. Semantic Intent Processing
+
+### Semantic coverage repair regression — 2026-10-21
+
+**Verified saved run:** `8f302aed-26b2-4002-a596-4ea451a55925` in test32. The original normalized plan already contains BOTH reverse `trimPath` actions. Ribbon2 (`action_d4167252d30e01f943f3`) inherits Ribbon1 and starts after it; its primary provenance is `c_ribbon_sequence` (408–493). The shared clause `c_ribbons` (307–407) links only Ribbon1. Coverage correctly identifies an uncovered target within that clause, but its `MISSING_OBJECT_REQUIREMENT` label overstates the defect: an existing inherited action was missing its additional coverage mapping, not its technique or timing.
+
+The returned patch adds a redundant Ribbon2 requirement and two coverage rows: the affected shared clause and the adjacent sequence clause. Previous `mergeTargetedRepair` compares each row literally with `issue.sourceText` and rejects the second row with `REPAIR_COVERAGE_SCOPE_VIOLATION`, before compilation/QA. This is a distinct-clause mismatch, not merely missing leading whitespace. The patch also refers to Ribbon1 as an existing animation despite the initial state; that reference was never executed. Do not replay it as a new action to conceal missing provenance.
+
+**Current contracts:**
+
+- `motion/intent/repair.ts` canonicalizes issues/replacement requirements using existing clause IDs or uniquely located original-request UTF-16 spans (`provenance.ts`). Only whitespace normalization is allowed; quotes, IDs and actual original spans must agree. Ambiguous quotes without a disambiguating clause ID do not grant scope. Existing requirements outside affected IDs cannot be replaced. New requirements must name a target explicitly in the affected clause and match the validator's expected target when supplied. Full project identity/technique/timing checks still follow in `validateIntentPlan`.
+- Coverage patch rows outside affected canonical spans, or without a unique original span, are isolated: authoritative original rows remain. In-scope rows merge links with existing links, never drop unaffected requirements. Unknown/cross-clause new mappings fail. The ordinary planner ALWAYS runs complete semantic validation after merging; isolation is not an admission bypass.
+- `harness/recovery/semantic.ts::recoverSemanticProvenance` reconnects an already resolved, explicitly named inherited action to its parent's authoritative clause only when scene, technique set, original span and executable parent mapping agree. It creates no requirements, animations, IDs, timing or inheritance edges. The primary timing clause remains unchanged. Coverage accepts this extra link only with the actual inheritance edge, named target and effective techniques; a fabricated coverage row alone is insufficient.
+- `validateIntentPlan` invokes that deterministic reconstruction before selective audit and records `SEMANTIC_RECOVERY` in existing target-resolution/Inspector diagnostics. `semanticPlan` routes failures thrown during targeted repair to `recoverSemanticRepair`, using the existing RecoveryReport/failure taxonomy. One deterministic candidate reconstruction plus full validation is allowed; no Motion Tools execute against unvalidated intent and no additional provider call is made. Failed reconstruction retains a Failed Safely report and propagates the failure, without a partial commit or unrestricted retry. Preflight/tool recovery remains separate and unchanged.
+
+**Measured replay:** isolated temporary test32 copy, same original saved semantic response, one fixture call, NO live provider. `executeMotion` SUCCESS15/15 requirements (10 semantic actions;12 objects),42 applied operations,127.084s local execution including native QA. At30fps Ribbon1 starts90/duration21, Ribbon2 starts111/duration21; persisted dependency is `after`, offset0. Both actual `renderedPathReveal` checks PASSED using native geometric reveal versus untrimmed counterfactual (frames100/121;51,217/20 changed pixels respectively). Top-level render status is WARNING, not pixel-perfect PASS: font weight590 maps to600 and one source image's color filters are not implemented. Original source/project was not modified. This replay does not claim live-provider or real-project full-MP4 qualification.
+
+**Token evidence:** historical planning24,342input/2,084output,51.876s provider; repair19,417input/825output,26.497s provider. Historical total43,759input/2,909output and two calls. The saved replay needs no second call; it consumes no actual provider tokens. Avoided historical repair payload is19,417input/825output; future live latency/token savings are NOT MEASURED. Renderer runtime was not optimized by this change.
+
+Permanent fixtures retain the exact Russian prompt (including NBSP), source clauses and semantic relations, but replace project IDs/targets with synthetic equivalents and include no client assets. `semantic-repair.test.ts` checks canonical patch scope, new named targets, unrelated-row isolation, non-destructive recovery and strict failure propagation. `native-semantic-repair.test.ts` runs the exact prompt through production `executeMotion`, native QA, persisted sequential real Trim Paths, Preview and FFmpeg export, plus Undo. Prepared provider responses are explicitly mock/replay tests, never live semantic-understanding proof.
+
+**Architecture Change History / actual verification:** full `npm run check` PASSED249/249 base/compat tests,2/2 browser placement tests,41/41 native tests, TypeScript and build. After adding disambiguation of repeated quotes through canonical clause IDs,11/11 affected semantic graph/repair tests passed again; final typecheck/build were rerun. The native exact-prompt test renders changed reveal pixels and verifies all3 recorded raw frame digests against native Preview frames supplied to FFmpeg; this is exact renderer-input equality, not a claim that lossy H264 decoded pixels are byte-identical. No live model call, source-data mutation, validation relaxation, render fallback or timeout increase occurred.
 
 ### Unified effect lifecycle — 2026-10-14 (verified partial update)
 

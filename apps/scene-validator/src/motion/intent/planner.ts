@@ -5,6 +5,7 @@ import {
 } from "./references.js";
 import { semanticBindings } from "../../motion-library/techniques/registry.js";
 import { targetedRepairSchema, mergeTargetedRepair } from "./repair.js";
+import { recoverSemanticProvenance, recoverSemanticRepair } from "../../harness/recovery/semantic.js";
 import {
   semanticGraphSchema,
   semanticResponseSchema,
@@ -210,7 +211,7 @@ export class SemanticProvider implements IntentProvider {
         targetedRepairSchema,
         "semantic-repair",
       );
-      return mergeTargetedRepair(plan, patch, feedback.issues);
+      return mergeTargetedRepair(plan, patch, feedback.issues, request);
     }
     if ((context as { contextualEditHint?: boolean })?.contextualEditHint)
       return normalizeSelectorPlan(
@@ -733,6 +734,9 @@ export function validateIntentPlan(
     references: referenceDiagnostics(plan, currentState),
     durationMs: referenceDurationMs,
   });
+  const provenanceRepairs = recoverSemanticProvenance(plan, request);
+  if (provenanceRepairs.length)
+    resolutionContext?.onResolution?.({ event: "SEMANTIC_RECOVERY", stage: "semantic-coverage", procedure: "inherited-clause-provenance/1", llmCalls: 0, repairs: provenanceRepairs });
   const preliminary = inspectSemanticCoverage(project, request, plan, fps);
   for (const issue of preliminary.issues) {
     if (
@@ -953,19 +957,34 @@ export async function semanticPlan(
         });
         calls++;
         correctionUsed = true;
-        const repaired = await provider.audit(
-          {
-            ...(context as object),
-            coverageFeedback: {
-              issues: error.report.issues,
-              clauses: error.report.clauses.filter((c) =>
-                error.report.issues.some((i) => i.sourceText === c.sourceText),
-              ),
+        let repaired: IntentPlan;
+        try {
+          repaired = await provider.audit(
+            {
+              ...(context as object),
+              coverageFeedback: {
+                issues: error.report.issues,
+                clauses: error.report.clauses.filter((c) =>
+                  error.report.issues.some((i) => i.sourceText === c.sourceText),
+                ),
+              },
             },
-          },
-          request,
-          audited,
-        );
+            request,
+            audited,
+          );
+        } catch (repairError) {
+          // A repair transport/merge failure is not a reason to regenerate the
+          // whole plan. The shared Recovery Runtime can reconstruct only proven
+          // provenance edges, then must pass the complete semantic validator.
+          try {
+            const recovered = recoverSemanticRepair(audited, request, repairError, options.projectRevision ?? "unknown", validate);
+            repaired = recovered.plan;
+            await trace("semantic-repair-recovery", recovered.report);
+          } catch (terminal) {
+            await trace("semantic-repair-recovery", (terminal as { recoveryReport?: unknown }).recoveryReport ?? { failure: String(terminal) });
+            throw terminal;
+          }
+        }
         await trace("selective-audit-" + attempt, repaired);
         await trace("semantic-retry-result-" + attempt, {
           planChanged:

@@ -1,0 +1,307 @@
+{
+  "prompt": "на 1 секунде начинается 2 сцена: Абонементы на любимую еду и напитки и лого появляются сверху через фейд с колебаниями затухающими\nтарелка и куар появляются снизу через фейд с затухающими колебаниями \nна 3 секунде начинается сцена 3: с выгодой до 80% шейп под 80% появляются сверху через фейд с колебаниями\nлента 1 и лента 2 анимируются через trim paths причем они анимируются от конца линии до начала линии причем анимация ленты 2 начинается в тот же кадр когда заканчивается анимация ленты 1\nна 5 секунде начинается сцена 4: морковь и петрушка 1 появляются снизу справа через фейд с колебаниями а базилик и петрушка 2 появляются снизу слева через фейд с колебаниями",
+  "graph": {
+    "schemaVersion": "semantic-graph/1.0",
+    "timelineExtension": "safeExtend",
+    "clauses": [
+      {
+        "clauseId": "c_scene2",
+        "text": "на 1 секунде начинается 2 сцена:",
+        "occurrence": 0
+      },
+      {
+        "clauseId": "c_top2",
+        "text": "Абонементы на любимую еду и напитки и лого появляются сверху через фейд с колебаниями затухающими",
+        "occurrence": 0
+      },
+      {
+        "clauseId": "c_bottom2",
+        "text": "тарелка и куар появляются снизу через фейд с затухающими колебаниями",
+        "occurrence": 0
+      },
+      {
+        "clauseId": "c_scene3",
+        "text": "на 3 секунде начинается сцена 3:",
+        "occurrence": 0
+      },
+      {
+        "clauseId": "c_top3",
+        "text": "с выгодой до 80% шейп под 80% появляются сверху через фейд с колебаниями",
+        "occurrence": 0
+      },
+      {
+        "clauseId": "c_ribbons",
+        "text": "лента 1 и лента 2 анимируются через trim paths причем они анимируются от конца линии до начала линии",
+        "occurrence": 0
+      },
+      {
+        "clauseId": "c_ribbon_sequence",
+        "text": "причем анимация ленты 2 начинается в тот же кадр когда заканчивается анимация ленты 1",
+        "occurrence": 0
+      },
+      {
+        "clauseId": "c_scene4",
+        "text": "на 5 секунде начинается сцена 4:",
+        "occurrence": 0
+      },
+      {
+        "clauseId": "c_right4",
+        "text": "морковь и петрушка 1 появляются снизу справа через фейд с колебаниями",
+        "occurrence": 0
+      },
+      {
+        "clauseId": "c_left4",
+        "text": "а базилик и петрушка 2 появляются снизу слева через фейд с колебаниями",
+        "occurrence": 0
+      }
+    ],
+    "actions": [
+      {
+        "actionId": "scene2_start",
+        "clauseId": "c_scene2",
+        "kind": "sceneTiming",
+        "scene": "s1",
+        "targets": [],
+        "techniques": [],
+        "parameters": [],
+        "start": {
+          "unit": "seconds",
+          "value": 1
+        },
+        "constraints": [
+          "Preserve scene order; resolve block coverage deterministically."
+        ],
+        "unresolvedReason": null
+      },
+      {
+        "actionId": "top2_entrance",
+        "clauseId": "c_top2",
+        "kind": "objectAnimation",
+        "scene": "s1",
+        "targets": [
+          "Абонементы на любимую еду и напитки",
+          "лого"
+        ],
+        "techniques": [
+          "slideDown",
+          "fadeIn",
+          "inertialOvershoot"
+        ],
+        "parameters": [
+          {
+            "key": "entrance",
+            "value": "offscreen"
+          }
+        ],
+        "relation": "sceneStart",
+        "targetScope": "instance",
+        "constraints": [
+          "Inertia follows the base movement endpoint and samples its incoming velocity."
+        ],
+        "unresolvedReason": null
+      },
+      {
+        "actionId": "bottom2_entrance",
+        "clauseId": "c_bottom2",
+        "kind": "objectAnimation",
+        "scene": "s1",
+        "targets": [
+          "тарелка",
+          "куар"
+        ],
+        "techniques": [
+          "slideUp",
+          "fadeIn",
+          "inertialOvershoot"
+        ],
+        "parameters": [
+          {
+            "key": "entrance",
+            "value": "offscreen"
+          }
+        ],
+        "relation": "sceneStart",
+        "targetScope": "instance",
+        "constraints": [
+          "Inertia follows the base movement endpoint and samples its incoming velocity."
+        ],
+        "unresolvedReason": null
+      },
+      {
+        "actionId": "scene3_start",
+        "clauseId": "c_scene3",
+        "kind": "sceneTiming",
+        "scene": "s2",
+        "targets": [],
+        "techniques": [],
+        "parameters": [],
+        "start": {
+          "unit": "seconds",
+          "value": 3
+        },
+        "constraints": [
+          "Preserve scene order; resolve block coverage deterministically."
+        ],
+        "unresolvedReason": null
+      },
+      {
+        "actionId": "top3_entrance",
+        "clauseId": "c_top3",
+        "kind": "objectAnimation",
+        "scene": "s2",
+        "targets": [
+          "с выгодой до 80%",
+          "шейп под 80%"
+        ],
+        "techniques": [
+          "slideDown",
+          "fadeIn",
+          "inertialOvershoot"
+        ],
+        "parameters": [
+          {
+            "key": "entrance",
+            "value": "offscreen"
+          }
+        ],
+        "relation": "sceneStart",
+        "targetScope": "instance",
+        "constraints": [
+          "Inertia follows the base movement endpoint and samples its incoming velocity."
+        ],
+        "unresolvedReason": null
+      },
+      {
+        "actionId": "ribbon1_reveal",
+        "clauseId": "c_ribbons",
+        "kind": "objectAnimation",
+        "scene": "s2",
+        "targets": [
+          "лента 1"
+        ],
+        "techniques": [
+          "trimPath"
+        ],
+        "parameters": [
+          {
+            "key": "direction",
+            "value": "reverse"
+          }
+        ],
+        "relation": "sceneStart",
+        "targetScope": "instance",
+        "constraints": [
+          "Reveal actual path length from path end to beginning; preserve geometry and paint; progress remains 0 to 1."
+        ],
+        "unresolvedReason": null
+      },
+      {
+        "actionId": "ribbon2_reveal",
+        "clauseId": "c_ribbon_sequence",
+        "kind": "objectAnimation",
+        "scene": "s2",
+        "targets": [
+          "лента 2"
+        ],
+        "techniques": [
+          "trimPath"
+        ],
+        "parameters": [
+          {
+            "key": "direction",
+            "value": "reverse"
+          }
+        ],
+        "relation": "afterRequirement",
+        "dependsOn": "ribbon1_reveal",
+        "delayFrames": 0,
+        "inheritFrom": "ribbon1_reveal",
+        "targetScope": "instance",
+        "constraints": [
+          "Reveal actual path length from path end to beginning; preserve geometry and paint; progress remains 0 to 1.",
+          "Start on the exact end frame of ribbon1_reveal."
+        ],
+        "unresolvedReason": null
+      },
+      {
+        "actionId": "scene4_start",
+        "clauseId": "c_scene4",
+        "kind": "sceneTiming",
+        "scene": "s3",
+        "targets": [],
+        "techniques": [],
+        "parameters": [],
+        "start": {
+          "unit": "seconds",
+          "value": 5
+        },
+        "constraints": [
+          "Preserve scene order; resolve block coverage deterministically."
+        ],
+        "unresolvedReason": null
+      },
+      {
+        "actionId": "right4_entrance",
+        "clauseId": "c_right4",
+        "kind": "objectAnimation",
+        "scene": "s3",
+        "targets": [
+          "морковь",
+          "петрушка 1"
+        ],
+        "techniques": [
+          "slideUp",
+          "slideLeft",
+          "fadeIn",
+          "inertialOvershoot"
+        ],
+        "parameters": [
+          {
+            "key": "entrance",
+            "value": "offscreen"
+          }
+        ],
+        "relation": "sceneStart",
+        "targetScope": "instance",
+        "constraints": [
+          "Combine simultaneous horizontal and vertical movement into a diagonal entrance from bottom right.",
+          "Inertia follows the base movement endpoint on both movement channels and samples incoming velocity."
+        ],
+        "unresolvedReason": null
+      },
+      {
+        "actionId": "left4_entrance",
+        "clauseId": "c_left4",
+        "kind": "objectAnimation",
+        "scene": "s3",
+        "targets": [
+          "базилик",
+          "петрушка 2"
+        ],
+        "techniques": [
+          "slideUp",
+          "slideRight",
+          "fadeIn",
+          "inertialOvershoot"
+        ],
+        "parameters": [
+          {
+            "key": "entrance",
+            "value": "offscreen"
+          }
+        ],
+        "relation": "sceneStart",
+        "targetScope": "instance",
+        "constraints": [
+          "Combine simultaneous horizontal and vertical movement into a diagonal entrance from bottom left.",
+          "Inertia follows the base movement endpoint on both movement channels and samples incoming velocity."
+        ],
+        "unresolvedReason": null
+      }
+    ],
+    "assumptions": [
+      "Неуточнённые колебания интерпретированы как инерционные затухающие колебания.",
+      "Длительность, easing и интенсивность определяет компилятор; общая длительность видео пользователем не зафиксирована."
+    ]
+  }
+}
