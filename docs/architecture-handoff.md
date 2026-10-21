@@ -4,16 +4,16 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-21 (Europe/Moscow) — Temporal editing architecture fix (run 461cd34c), atomic existing-track retiming, self-anchor cycle elimination, separated model budgets, deterministic recovery & sandboxed code repair loop; targeted update, not a full audit |
+| Last Updated | 2026-10-21 (Europe/Moscow) — AKELLA welcome/project chooser and text-only two-tone UI; targeted update, not a full audit |
 | Last Full Audit | 2026-10-13; unchanged, this update is not a full renderer/provider audit |
-| Git Commit | Baseline `82f3f80`. Working branch `temporal-recovery-loop`. Current changes uncommitted at this documentation snapshot. |
+| Git Commit | `3f295de` contains this UI implementation; baseline `04625fc`. This documentation status clarification is uncommitted at this snapshot. |
 | Git Branch | `temporal-recovery-loop`, local only |
-| Working Tree Status | Temporal editing compiler/execution fixes, operations cycle check & origin shift, separated model budgets, deterministic cycle recovery, sandboxed code repair expansion, and 15-test verification suite uncommitted at this snapshot. Original user projects unchanged. |
-| Documentation Version | 1.0.32 |
-| Scope of Last Update | Elimination of self-edge cycles in temporal editing (run 461cd34c-4276-4bac-94ad-14f0e7367607), atomic multi-track retiming preserving pairwise offsets and attached expressions, separation of Operation A/B/C, shiftProjectOrigin timeline extension fix, model budget separation between planning/recovery/repair, deterministic preflight timing cycle recovery recipe, Level 2 sandboxed code repair with strict human gate. |
+| Working Tree Status | UI implementation committed; only this documentation status clarification pending at snapshot. Local supplied artwork and generated brand copies excluded from Git. Original user projects unchanged. |
+| Documentation Version | 1.0.33 |
+| Scope of Last Update | Two welcome screens, existing-project chooser/import entry, local brand/font allowlist, Inter Light/Medium hover, two-tone text controls and removal of renderer labels/toolbar arrows. Existing timeline and Motion Engine retained. |
 | Code snapshot SHA-256 | NOT RECALCULATED; refer to component digests and final source commit. |
 
-Git 2.54.0 (Apple Git-157): локальная история на main, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
+Git 2.54.0 (Apple Git-157): локальная история, текущая ветка указана в Document Status, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
 
 Snapshot вычислен над отсортированными файлами `apps/scene-validator/src/`, `figma-motion-exporter/src/`, `scripts/`, а также package.json, package-lock.json и manifest плагина: relative path, NUL, bytes, NUL. Это локальный идентификатор просмотренного состояния, не Git commit и не криптографическая аттестация запуска приложения. Документ и AGENTS.md не входят в этот hash.
 
