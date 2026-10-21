@@ -8,7 +8,9 @@
     "scripts/harness-fixtures.ts",
     "scripts/benchmark-report.ts",
     "scripts/diagnose-text.ts",
-    "scripts/eval-motion-tools.ts"
+    "scripts/eval-motion-tools.ts",
+    "scripts/recovery.ts",
+    "scripts/eval-recovery.ts"
   ],
   "exclude": [],
   "compilerOptions": {

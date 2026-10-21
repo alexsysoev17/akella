@@ -1054,6 +1054,7 @@ export function preflightIntentPlan(
   project: LoadedProject,
   state: MotionState,
   input: IntentPlan,
+  overrides: ReadonlyMap<string, Plan> = new Map(),
 ) {
   const preflightStarted = performance.now();
   const plan = expandInheritance(input),
@@ -1081,7 +1082,7 @@ export function preflightIntentPlan(
       let admitted: ReturnType<typeof admitCompiledTask> | undefined, compiled: Plan | undefined;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          const proposed = compileRequirement(project, working, plan, task);
+          const proposed = overrides.get(task.taskId) ?? compileRequirement(project, working, plan, task);
           compiled = { ...proposed, operations: [...prefix, ...proposed.operations] };
           admitted = admitCompiledTask(project, initial, plan, task, compiled);
           break;

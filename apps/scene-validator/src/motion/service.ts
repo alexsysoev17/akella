@@ -1,5 +1,9 @@
+import { recoveryProviderRuntime } from "../harness/recovery/provider-runtime.js";
+import { proposeCodeRepair } from "../harness/recovery/code-service.js";
+import { recoveryFailure } from "../harness/recovery/failure.js";
+import { recoverPreflight, recoveryDecisionSchema, type RecoveryReport } from "../harness/recovery/runtime.js";
+import { rememberRecovery } from "../harness/recovery/memory.js";
 import { compileTasks } from "./intent/compiler.js";
-import { findObject, inspectAnimations, inspectTimeline, inspectDependencies } from "./tools.js";
 import { commitChanges } from "./tool-runtime.js";
 import { duringStage } from "../harness/failure.js";
 import { renderingMode } from "../native/client.js";
@@ -460,6 +464,8 @@ export async function proposeMotion(
           });
           runQA = new RunQA(harness);
         }
+        const recoveryCallStart = harness?.calls.length ?? 0;
+        let recoveryReport: RecoveryReport | undefined;
         let preparedPlans: ReturnType<typeof preflightIntentPlan>["preparedPlans"] | undefined;
         if (
           contract.requirements.some(
@@ -488,32 +494,42 @@ export async function proposeMotion(
               "compilation-preflight",
               (error as { report?: unknown }).report ?? { status: "FAILED" },
             );
-            const failure = (error as { report?: { classification?: string; taskId?: string } }).report;
-            const failedTask = compileTasks(project, contract).find(t => t.taskId === failure?.taskId);
-            const task = contract.requirements.find(r => failedTask?.requirementIds.includes(r.requirementId) && r.techniques.includes("objectStateTransition") && (r.kind === "unsupported" || r.effectOperation?.action === "remove"));
-            if (task && !task.target.logicalObjectId) {
-              const resolved = findObject(project, doc.state, { referenceText: task.sourceText, name: task.target.name, sourceNodeId: task.target.sourceNodeId, sceneId: task.sceneId, techniques: task.techniques, preferExisting: true });
-              if (resolved.target) { task.sceneId = resolved.target.sceneId; task.target = { name: resolved.target.canonicalName, sourceNodeId: resolved.target.sourceNodeId, logicalObjectId: resolved.target.logicalObjectId }; }
-            }
-            // One targeted tool decision, using the existing provider and shared run budget.
-            // Never regenerate a full semantic plan to resolve deterministic frame arithmetic.
-            if (!task?.target.logicalObjectId || task.dependentPolicy === "reject" || !harness?.config.maxRepairAttempts || !["AMBIGUOUS", "UNSUPPORTED"].includes(failure?.classification ?? "")) throw error;
-            onStage("repairing");
-            harness.repairAttempts++;
-            const entries = inspectAnimations(project, doc.state, { logicalObjectId: task.target.logicalObjectId! });
-            const provider = new CodexProvider(request.settings, await providerDirectory("preflight-resolution"), harness.providerRuntime());
-            const decision = await provider.structured({ failure, originalRequirement: task, animations: entries, timeline: inspectTimeline(doc.state), dependencies: entries.map(e => ({ id: e.id, ...inspectDependencies(doc.state, e.id) })) }, request.request,
-              "Resolve ONLY this lifecycle conflict using actual typed tools. Decide whether the original user authorized removing the base animation and its dependent effects. Preserve source objects and unrelated motion. If removal or dependent deletion is not justified return stop. Never fabricate IDs or reinterpret a different request.",
-              z.object({ action: z.enum(["removeAnimation", "stop"]), dependentPolicy: z.enum(["reject", "removeDependents"]), reason: z.string().max(1000) }).strict(), "preflight-resolution");
-            await atomicJson(path.join(directory, "preflight-resolution.json"), decision);
-            if (decision.action === "stop") throw error;
-            task.kind = "editAnimation"; task.unresolvedReason = null; task.effectOperation = { storage: "transition", action: "remove" }; task.dependentPolicy = decision.dependentPolicy;
-            const recovered = preflightIntentPlan(project, doc.state, contract);
-            preparedPlans = recovered.preparedPlans;
-            const { preparedPlans: runtimeOnly, ...recoveredReport } = recovered;
+            if (!harness?.config.recovery.enabled || !harness.config.maxRepairAttempts) throw error;
+            onStage("recovering-project");
+            const recoveryStart = recoveryCallStart;
+            const policy = harness.config.recovery;
+            const recovered = await recoverPreflight(project, doc.state, contract, error, {
+              policy, revision: doc.revision, request: request.request,
+              checkpoint: () => harness.checkpoint(),
+              record: async report => {
+                recoveryReport = report;
+                const calls = harness.calls.slice(recoveryStart);
+                report.metrics = { llmCalls: calls.length, inputTokens: calls.every(c=>c.usage!==null) ? calls.reduce((n,c)=>n+c.usage!.inputTokens,0) : null, outputTokens: calls.every(c=>c.usage!==null) ? calls.reduce((n,c)=>n+c.usage!.outputTokens,0) : null, estimatedCost: calls.length && calls.every(c=>c.cost!==null) ? calls.reduce((n,c)=>n+c.cost!,0) : null };
+                await atomicJson(path.join(directory, "recovery.json"), { ...report, calls: harness.calls.slice(recoveryStart) });
+                await harness.diagnostic("project-recovery", report);
+              },
+              decide: async (context, legacy, remainingMs) => {
+                harness.repairAttempts++;
+                const calls = harness.calls.slice(recoveryStart);
+                const used = calls.reduce((n,c) => n + (c.usage ? c.usage.inputTokens + c.usage.outputTokens : 0), 0);
+                const cost = calls.reduce((n,c) => n + (c.cost ?? 0), 0);
+                if (used >= policy.maxTokens || policy.maxEstimatedCost !== null && cost >= policy.maxEstimatedCost) throw new Error("RECOVERY_PROVIDER_BUDGET");
+                const provider = new CodexProvider({ ...request.settings, model: policy.model }, await providerDirectory("project-recovery-" + harness.repairAttempts), recoveryProviderRuntime(harness, recoveryStart, remainingMs));
+                if (legacy) { const decision = await provider.structured(context, request.request,
+                  "Resolve only this lifecycle conflict. Decide whether the original user authorized removing this base animation and dependent effects. Use actual inspected identities. Return stop for ambiguous or unauthorized deletion. Source objects and unrelated tracks are immutable.",
+                  z.object({ action:z.enum(["removeAnimation","stop"]), dependentPolicy:z.enum(["reject","removeDependents"]), reason:z.string().max(1000) }).strict(), "preflight-resolution");
+                  await atomicJson(path.join(directory,"preflight-resolution.json"),decision); return decision; }
+                return provider.structured(context, request.request,
+                  "Repair ONLY the failed original requirement using the typed Motion Tools in the schema. Inspect authoritative entities if necessary. Preserve IDs, original requested parameters, geometry, timeline constraints and unrelated motion. Never fabricate IDs. Return inspect, apply a minimal tool batch, or stop for real ambiguity/missing capability. Candidate scope, original intent, technical validation and native QA cannot be bypassed. No shell, filesystem or source-code capability exists.",
+                  recoveryDecisionSchema, "project-recovery");
+              },
+            });
+            Object.assign(contract, recovered.plan);
+            preparedPlans = recovered.prepared.preparedPlans;
+            const { preparedPlans: runtimeOnly, ...recoveredReport } = recovered.prepared;
             await atomicJson(path.join(directory, "intent-contract.json"), contract);
-            await atomicJson(path.join(directory, "compilation-preflight.json"), { ...recoveredReport, preparedPlanCount: runtimeOnly.size, agentResolution: decision });
-            await harness.diagnostic("preflight-resolution", { ...recoveredReport, agentResolution: decision });
+            await atomicJson(path.join(directory, "compilation-preflight.json"), { ...recoveredReport, preparedPlanCount: runtimeOnly.size, recovery: recovered.report });
+
           }
         }
         let committed = doc;
@@ -523,9 +539,9 @@ export async function proposeMotion(
             onStage("repairing");
             if (harness) harness.repairAttempts++;
             const provider = new CodexProvider(
-              request.settings,
+              harness ? { ...request.settings, model: harness.config.recovery.model } : request.settings,
               await providerDirectory(`${task.taskId}/attempt-${attempt}`),
-              harness?.providerRuntime(),
+              harness ? recoveryProviderRuntime(harness, recoveryCallStart) : undefined,
             );
             return parsePlan(
               await provider.structured(
@@ -562,14 +578,17 @@ export async function proposeMotion(
             return next;
           },
           checkpoint: () => harness?.checkpoint(),
-          maxAttempts: 1 + (harness?.config.maxRepairAttempts ?? 2),
+          maxAttempts: 1 + (harness ? (harness.config.recovery.enabled ? Math.min(harness.config.maxRepairAttempts, Math.max(0, harness.config.recovery.maxAttempts - (recoveryReport?.attempts.length ?? 0))) : 0) : 2),
           trace: async (tasks, entry) => {
             if (harness && entry) {
               if ((entry as { status?: string }).status === "repair") {
                 const error = (
                   entry as { feedback?: { failureReason?: string } }
                 ).feedback?.failureReason;
-                if (error) harness.failures.push(error.split(":")[0]);
+                if (error) {
+                  harness.failures.push(error.split(":")[0]);
+                  await harness.diagnostic("recovery-failure", recoveryFailure(new Error(error), "motion-qa", doc.revision));
+                }
               }
               await harness.record("task-trace", entry);
             }
@@ -594,6 +613,11 @@ export async function proposeMotion(
           throw new Error(
             "FINAL_RECONCILIATION_FAILED: candidate not committed",
           );
+        if (recoveryReport && generated.reconciliation.status !== "SUCCESS") {
+          recoveryReport.status = "Failed Safely";
+          await atomicJson(path.join(directory,"recovery.json"),recoveryReport);
+          throw new Error("RECOVERY_FINAL_INTENT_FAILED: entire candidate rolled back");
+        }
         await atomicJson(path.join(directory, "candidate-commit.json"), {
           runId: id,
           expectedRevision: doc.revision,
@@ -673,6 +697,14 @@ export async function proposeMotion(
                 afterDigest: digest(c.after),
               })),
             });
+          if (recoveryReport) {
+            const recovered = generated.reconciliation.status === "SUCCESS";
+            recoveryReport.status = recovered ? "Project Recovered" : "Failed Safely";
+            await atomicJson(path.join(directory, "recovery.json"), recoveryReport);
+            await harness?.diagnostic("project-recovery-final", recoveryReport);
+            if (harness?.config.privacy === "full" && recoveryReport.procedure)
+              await rememberRecovery(project.root, recoveryReport.originalFailure.signature, recoveryReport.procedure, recovered);
+          }
           await harness?.record("commit-result", {
             persisted: !!generated.reconciliation.completed,
             receipt: committed.lastCommit ?? null,
@@ -792,6 +824,20 @@ export async function proposeMotion(
     }
   } catch (error) {
     if (harness) {
+      const report = (error as { recoveryReport?: RecoveryReport }).recoveryReport;
+      if (report?.status === "Failed Safely" && report.originalFailure.codeRepairEligible && harness.config.recovery.codeRepair.enabled) {
+        try {
+          onStage("code-repair-proposed");
+          const proposal = await proposeCodeRepair(process.cwd(), report.originalFailure, harness.config.recovery, request.settings, harness.signal);
+          report.codeRepairProposed = "patchIdentity" in proposal;
+          await atomicJson(path.join(harness.directory,"recovery.json"),report);
+          await atomicJson(path.join(harness.directory,"code-repair.json"),proposal);
+          await harness.diagnostic("code-repair-proposed",proposal);
+        } catch (repairError) {
+          await harness.diagnostic("code-repair-blocked", {reason:String(repairError),productionChanged:false});
+          await atomicJson(path.join(harness.directory,"code-repair.json"),{status:"BLOCKED",reason:String(repairError),productionChanged:false});
+        }
+      }
       await harness.captureFailure(error);
       await harness.finish(
         /CANCELLED/.test(String(error))

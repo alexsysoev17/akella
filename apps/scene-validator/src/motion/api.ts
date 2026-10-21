@@ -1,3 +1,6 @@
+import { harnessConfig } from "../harness/config.js";
+import { recoveryPolicySchema } from "../harness/recovery/config.js";
+import { recoveryMemory } from "../harness/recovery/memory.js";
 import { renderProjectFrame, framePacket } from "../native/service.js";
 import { nativePreviewHtml } from "../native/preview.js";
 import { renderingMode, clearNativeCache } from "../native/client.js";
@@ -28,7 +31,7 @@ import { createReadStream } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import type { LoadedProject } from "../types.js";
-import { within, noSymlinkPath } from "../files.js";
+import { atomicJson, safeDirectory, within, noSymlinkPath } from "../files.js";
 import { readMotion, changeMotion } from "./store.js";
 import { objectsIn } from "./context.js";
 import {
@@ -210,6 +213,8 @@ export async function motionApi(
       json(result);
       return true;
     }
+    if (action === "recovery-settings") { json((await harnessConfig(project.root)).recovery); return true; }
+    if (action === "recovery-memory") { json(await recoveryMemory(project.root)); return true; }
     if (action === "harness") {
       if (segments[5] === "improvements") {
         json(await candidates(project.root));
@@ -397,6 +402,13 @@ export async function motionApi(
     }
   }
   if (request.method === "POST") {
+    if (action === "recovery-settings") {
+      const policy=recoveryPolicySchema.parse(JSON.parse((await body(request,20000)).toString()));
+      const existing=await harnessConfig(project.root);
+      await safeDirectory(project.root,"motion/harness");
+      await atomicJson(path.join(project.root,"motion/harness/config.json"),{...existing,recovery:policy});
+      json(policy);return true;
+    }
     if (action === "render-cache-clear") {
       await clearNativeCache();
       json({ cleared: true });

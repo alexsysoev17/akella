@@ -109,6 +109,8 @@ export function attachInspector(container, url) {
           : "<p>NOT_AVAILABLE</p>");
     if (tab === 2)
       body.innerHTML =
+        block("Recovery", data.recovery) +
+        block("Code Repair", data.codeRepair) +
         cards(tasks) +
         block(
           "Предварительная проверка полного плана",

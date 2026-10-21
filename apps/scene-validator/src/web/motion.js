@@ -354,6 +354,8 @@ export async function mountMotion(
             generating: "Создаём движение…",
             checking: "Проверяем движение…",
             repairing: "Уточняем движение…",
+            "recovering-project": "Восстанавливаем проект…",
+            "code-repair-proposed": "Готовим предложение ремонта кода…",
             applying: "Сохраняем изменения…",
           }[job.stage] ?? "Понимаем запрос…";
       if (job.total)
@@ -608,6 +610,31 @@ export async function mountMotion(
         }),
     );
     window.addEventListener("message", receive);
+    const recoverySection = document.createElement("details");
+    recoverySection.innerHTML = `<summary>Автоматическое восстановление</summary><label class="check-label"><input type="checkbox" id="m-recovery-enabled"> Восстанавливать операции проекта</label><label>Модель восстановления<input id="m-recovery-model" value="gpt-6-sol"></label><label>Усилие<select id="m-recovery-effort"><option value="low">Низкое</option><option value="medium">Среднее</option><option value="high">Высокое</option></select></label><label>Попытки<input id="m-recovery-attempts" type="number" min="0" max="3"></label><label>Бюджет, секунд<input id="m-recovery-seconds" type="number" min="1" max="180"></label><label>Бюджет токенов<input id="m-recovery-tokens" type="number" min="1000" max="100000"></label><label class="check-label"><input type="checkbox" id="m-code-repair-enabled"> Готовить предложения ремонта кода</label><label>Модель ремонта кода<input id="m-code-repair-model" value="gpt-6-sol"></label><p>Предложения создаются изолированно. Код приложения автоматически не меняется.</p><button id="m-save-recovery" class="secondary">Сохранить восстановление</button><p id="m-recovery-status" role="status"></p>`;
+    $("m-settings-dialog").append(recoverySection);
+    let recoverySettings;
+    api("recovery-settings").then(settings => {
+      if (!alive) return;
+      recoverySettings = settings;
+      $("m-recovery-enabled").checked = settings.enabled;
+      $("m-recovery-model").value = settings.model;
+      $("m-recovery-effort").value = settings.effort;
+      $("m-recovery-attempts").value = settings.maxAttempts;
+      $("m-recovery-seconds").value = settings.maxDurationMs / 1000;
+      $("m-recovery-tokens").value = settings.maxTokens;
+      $("m-code-repair-enabled").checked = settings.codeRepair.enabled;
+      $("m-code-repair-model").value = settings.codeRepair.model;
+    }).catch(e => { if (alive) $("m-recovery-status").textContent = e.message; });
+    $("m-save-recovery").onclick = guarded(async () => {
+      if (!recoverySettings) throw Error("Настройки ещё загружаются");
+      recoverySettings = await api("recovery-settings", { ...recoverySettings,
+        enabled: $("m-recovery-enabled").checked, model: $("m-recovery-model").value.trim(), effort: $("m-recovery-effort").value,
+        maxAttempts: Number($("m-recovery-attempts").value), maxDurationMs: Number($("m-recovery-seconds").value) * 1000, maxTokens: Number($("m-recovery-tokens").value),
+        codeRepair: { ...recoverySettings.codeRepair, enabled: $("m-code-repair-enabled").checked, model: $("m-code-repair-model").value.trim() },
+      });
+      $("m-recovery-status").textContent = "Сохранено";
+    });
     $("m-provider").value = data.provider?.provider ?? "";
     $("m-model").value = data.provider?.model ?? "";
     if (data.providerSettingsError) {

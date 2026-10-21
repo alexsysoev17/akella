@@ -183,6 +183,8 @@ export class AIClient implements AIProvider {
       providerTimeoutMs: number;
       maxOutputTokens: number;
       privacy?: "full" | "metadata" | "off";
+      reasoningEffort?: "low" | "medium" | "high";
+      includeCapabilityGuidance?: boolean;
     },
   ) {
     this.settings = parseProviderSettings(settings, "AIClient");
@@ -211,7 +213,7 @@ export class AIClient implements AIProvider {
     mode = "semantic",
     nativeSchema?: z.ZodType,
   ): Promise<T> {
-    instructions += "\n" + capabilityGuidance();
+    if (this.runtime?.includeCapabilityGuidance !== false) instructions += "\n" + capabilityGuidance();
     const compact = JSON.stringify({ mode, context, userRequest: request });
     if (compact.length > 300000)
       throw new Error("Контекст превышает 300 КБ; данные не обрезаны");
@@ -257,6 +259,7 @@ export class AIClient implements AIProvider {
       ],
       responseSchema,
       model: this.settings.model || undefined,
+      reasoningEffort: this.runtime?.reasoningEffort,
       signal: this.runtime?.signal,
       timeoutMs: this.runtime?.providerTimeoutMs ?? 180000,
       maxOutputTokens: this.runtime?.maxOutputTokens ?? 16000,

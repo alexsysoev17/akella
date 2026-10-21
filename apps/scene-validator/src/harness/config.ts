@@ -1,9 +1,11 @@
+import { recoveryPolicySchema } from "./recovery/config.js";
 import { z } from "zod";
 import { readFile } from "node:fs/promises";
 import { noSymlinkPath } from "../files.js";
 import path from "node:path";
 export const harnessConfigSchema = z
   .object({
+    recovery: recoveryPolicySchema.default(recoveryPolicySchema.parse({})),
     modelProfiles: z
       .array(
         z

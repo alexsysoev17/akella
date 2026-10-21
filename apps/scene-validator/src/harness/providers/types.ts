@@ -19,6 +19,7 @@ export interface ProviderRequest {
   messages: { role: "system" | "user" | "assistant"; content: string }[];
   responseSchema: unknown;
   model?: string;
+  reasoningEffort?: "low" | "medium" | "high";
   signal?: AbortSignal;
   timeoutMs: number;
   maxOutputTokens: number;

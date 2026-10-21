@@ -1,3 +1,4 @@
+import { recoveryFailure } from "./recovery/failure.js";
 import { failureDiagnostic, type FailureDiagnostic } from "./failure.js";
 import { providerBudget } from "./providers/budget.js";
 import { PROVIDER_ID_PATTERN } from "../provider-contract.js";
@@ -61,6 +62,7 @@ export class HarnessRun {
       this.providerInitializationStatus,
       this.config.privacy === "full",
     );
+    await this.diagnostic("structured-failure", recoveryFailure(error, this.phase, "unknown"));
     this.failures.push(this.failure.errorCode);
     await this.diagnostic("run-failed", this.failure);
     if (this.config.privacy === "full")
@@ -438,7 +440,7 @@ export class HarnessRun {
           .map((r) => r.error?.split(":")[0] ?? r.status) ?? []),
       ]),
     ];
-    this.repairAttempts =
+    this.repairAttempts = Math.max(this.repairAttempts,
       result?.tasks?.reduce(
         (n, t) =>
           n +
@@ -449,7 +451,7 @@ export class HarnessRun {
             ),
           ),
         0,
-      ) ?? this.repairAttempts;
+      ) ?? 0);
     try {
       this.events.push({
         stage: "run-finished",

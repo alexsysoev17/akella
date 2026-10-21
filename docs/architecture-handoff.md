@@ -4,14 +4,14 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-20 (Europe/Moscow) — compound track timing edits; targeted update, not a full re-audit |
-| Last Full Audit | 2026-10-13 — структурный аудит исходников перечисленных подсистем; не полный production E2E и не формальная верификация каждой ветви |
-| Git Commit | Baseline `460aae5`; checkpoint `19d9b8e`. Compound timing changes are uncommitted at this documentation update. |
-| Git Branch | `main`; локальный репозиторий создан после первоначального аудита |
-| Working Tree Status | main; compound resolution/compiler/checks/tests/docs uncommitted at this update. User projects unchanged; saved provider response replay uses an isolated historical copy. |
-| Documentation Version | 1.0.27 |
-| Scope of Last Update | test30 saved-run diagnosis; synchronized compound timing groups; independent duration/start semantics; real-project saved-response replay and native production regression. |
-| Code snapshot SHA-256 | NOT RECALCULATED for this update; use component version digests in actual run artifacts and subsequent Git commit. |
+| Last Updated | 2026-10-21 (Europe/Moscow) — bounded project recovery and isolated source proposals; targeted update, not a full audit |
+| Last Full Audit | 2026-10-13; unchanged, this update is not a full renderer/provider audit |
+| Git Commit | Baseline `d28630d`; palette `f462041`; architecture checkpoint `ee66472`. Recovery changes are uncommitted at this documentation snapshot. |
+| Git Branch | `main`, local only |
+| Working Tree Status | Recovery source/configuration/tests/docs uncommitted at this snapshot; user projects not modified. Tests use isolated synthetic fixtures. |
+| Documentation Version | 1.0.28 |
+| Scope of Last Update | Failure taxonomy, deterministic/typed-tool preflight recovery, model/effort budgets, memory, quarantine code proposals, OS-constrained tests, Inspector/settings, qualification evidence and limits. |
+| Code snapshot SHA-256 | NOT RECALCULATED; refer to component digests and final source commit. |
 
 Git 2.54.0 (Apple Git-157): локальная история на main, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
 
@@ -1590,3 +1590,86 @@ Historical replay used the original saved provider output and authoritative hist
 Permanent tests cover safe synchronized group admission and rejection for interval/channel/enabled conflicts, plus production executeMotion compound creation/edit, preserved timing dependency, IDs and parameters, atomic history, native QA and matching Preview/FFmpeg final-frame input digest on synthetic data. This is prepared-provider execution, not live language qualification. Verification: full npm run check PASSED (239 base/compat tests, 2 Chromium/WebKit text-placement tests, 39 native tests, TypeScript and build). Final dependency-preservation production test also passed separately; final TypeScript check passed. Real-project state diff additionally confirmed unchanged blocks/settings/dependencies and every unrelated animation/expression, with one committed transaction in the copy.
 
 Remaining limitations: synchronized grouping does not resolve multiple independent episodes or artistic scope ambiguity. General agent-directed recovery of arbitrary ambiguous node-track sets is not implemented; existing bounded transition decision remains separate. Original request used25,119 input/640 output tokens and18.356s provider time; this patch does not claim token optimization. Passing this regression does not establish reliability of all natural-language edits.
+
+
+## Bounded project recovery and isolated code proposals — 2026-10-21 (v1.0.28)
+
+Architecture Change History: targeted integration in existing `motion/service.ts`, `intent/execution.ts`, provider adapter, Harness and Inspector. Existing operation validation, mathematical evaluators, source scene graph, native renderer and transaction store remain authoritative. No second planner, compiler, Motion State or Renderer was introduced.
+
+### Audit and integration boundary
+
+Before this change, deterministic tail extension and dependency retiming already existed. QA/task repair already had bounded retries, scope/requirement admission, numerical/native validation and an atomic final publication. Preflight had only ONE provider-directed lifecycle decision, specialized for transition removal. Other compilation/resolution failures stopped before the existing task-repair hook could execute. Recovery model selection was inherited from semantic planning; no independent policy or verified-procedure contract existed. These are verified code boundaries, not proof that every saved failure is caused by a compiler defect.
+
+```mermaid
+flowchart TD
+ P[Existing semantic planner and canonical resolvers] --> F[Existing complete-candidate preflight]
+ F -->|valid| X[Existing task execution and native QA]
+ F -->|failure| R[Typed RecoveryFailure]
+ R --> D[Deterministic state rebind / existing timeline recovery]
+ D -->|needs decision| L[Codex Recovery: inspect or typed tool batch]
+ L --> A[Same scope, original requirement and complete-candidate checks]
+ A --> X
+ X --> C[Revision-checked atomic commit and Undo]
+ R -->|eligible evidence + Level 1 failed + enabled| Q[Separate code role: quarantined tracked-source copy]
+ Q --> S[OS sandbox: baseline regression then patched checks]
+ S --> V[Reviewable hash-bound proposal]
+ V --> H[External human review; production promotion disabled]
+```
+
+### Structured failures and Level 1
+
+`harness/recovery/failure.ts` projects codes into stale references, ambiguity, missing animation, unsupported operation, timeline/dependency conflicts, invalid candidate, renderer failure, missing capability and probable compiler defect. Contract `recovery-failure/1` contains stage, signature, project revision when available, requirement/target references, invariant, read/write IDs, remediation and evidence. Unknown failures are not all called unsupported. Legacy messages retain their diagnostic invariant while the machine code is normalized. Generic startup/capture diagnostics may have revision=`unknown`; preflight recovery has the actual starting revision. Compiler coverage failures are signals for investigation, not proof of a source defect. Missing Figma path geometry alone is NOT eligible for code repair.
+
+`harness/recovery/runtime.ts::recoverPreflight` is called only after failed preflight. It reuses `motion/tools.ts` and the existing resolvers. A stale or absent target ID can be rebound only if the original name resolves uniquely in the authorized scene and the old ID is absent; the contract is revalidated. Existing deterministic timeline extension/retiming remains in the canonical preflight. Both are TypeScript procedures, not model-written code.
+
+The model can inspect project metadata, the resolved object/candidate set, relevant canonical animations, timeline, dependencies and candidate validation. Individual animation/dependency reads must belong to the requirement's bounded set. Corrective mutations use the SAME `motionToolSchema`: update/create/remove tracks, add/update/remove expressions, transitions and permitted extension. The old transition-removal response remains an adapter for compatibility. No source/filesystem/shell tools are enabled. Tool decisions are not operation permission: the original scope, requirement checks and full state validator admit each candidate. Provider-created IDs are checked by canonical lowering/admission.
+
+`preflightIntentPlan` accepts an in-memory map of per-task repair Plans. Every override passes `admitCompiledTask`; prepared Plans retain the actual beforeDigest and are reused only for that state. Source geometry and explicit timing restrictions cannot be bypassed. Invalid intermediate tool batches are admitted only when the complete final batch is valid. Successful recovery does not bypass native QA. A run that entered preflight recovery must reconcile ALL requirements before publication; otherwise the entire candidate is discarded. Existing ordinary execution's independent-task partial-success policy is retained outside this recovered path. Commit uses the existing expected revision/source fingerprint/candidate digest transaction, preserving one Undo entry and rejecting concurrent stale revisions.
+
+Maximum recovery attempts is 0–3, counting inspections and deterministic rebind decisions as bounded steps. Repeating an identical decision on unchanged candidate state stops with RECOVERY_DUPLICATE_ACTION. Cancellation and global execution deadline are reused. Existing QA repairs use the recovery model/effort policy and share the measured recovery token/cost budget. Preflight steps reduce the remaining task-repair attempt allowance. Global maxLLMCalls remains authoritative (default3 across planning and repairs); a successful ordinary request adds no recovery call.
+
+Preview/rendering is reused through mandatory existing native QA after admission. There is no extra model-callable pixel/vision preview tool and no automatic MP4 for recovery. Rich arbitrary intent rewriting or artistic conflict resolution is NOT IMPLEMENTED. Unsupported semantics, genuine competing objects, fixed timeline conflicts and missing capabilities can still stop safely.
+
+### Configuration, provider and performance
+
+`harness/recovery/config.ts` is nested under existing Harness config at `motion/harness/config.json`. Default Level1 enabled, model=`gpt-6-sol`, effort=`low`, maxAttempts3, focused-context20KB, maxOutputTokens4000, measured total recovery tokens24000, wall budget60s, estimated cost limit nullable. Existing global time/call/context/render budgets still apply. Code repair has independent enabled/model/medium-effort/duration/context/output/token/cost policy, defaults disabled and one provider call per proposal. Semantic model selection remains in existing provider settings.
+
+The installed SDK exposes `modelReasoningEffort`; Codex SDK and CLI adapters map the typed low/medium/high field to their actual supported settings. Tools remain disabled and responses are schema checked. No provider/model substitution occurs. The local model catalog listed gpt-6-sol and low/medium support; an actual synthetic availability call on2026-10-21 returned successfully (12,177input/15output tokens,6.263s). Availability/quotas are not guaranteed for subsequent calls; provider errors remain explicit.
+
+Recovery uses focused canonical animation records rather than source SVGs, a complete repository or the full scene JSON; additional duplicate capability guidance is omitted. Full request/schema budgeting remains the Harness responsibility. `recovery/provider-runtime.ts` enforces the separate measured token/cost budget before and after each call. Unknown usage/cost stays unknown. Codex does not expose a hard native output-token cap here; post-response checks cannot retroactively prevent the cost of a completed call. No false hard spend guarantee or measured savings percentage is claimed.
+
+Actual hybrid qualification run `60bea868-4980-4324-bf23-257a03065098`: intentionally prepared stale unsupported semantics, then ONE real Codex Recovery decision, production native QA and atomic deletion. It succeeded; live recovery13,383input/118output tokens,6.667s provider latency,7.514s total hybrid run and0.772s QA; estimated cost unavailable. The recorded failure predates final machine-code normalization. That historical run also exposed a finish-accounting defect: task history reset the preflight repair counter to zero. The current Harness preserves the larger actual counter, verified by the production recovery regression; do not interpret the old zero metric as no recovery call. This is NOT a live semantic-planning E2E or live coding-agent qualification. `npm run eval:recovery -- --live` repeats this optional synthetic-only hybrid qualification; it is not run after ordinary user prompts.
+
+### Persistent recovery knowledge
+
+`motion/harness/recovery/memory.json` stores at most200 compact versioned rows: signature, operation class, procedure ID, preconditions, capability IDs, actual validation outcome, Motion State/tool semantics version, regression reference and success/failure counts. No prompts, scene dumps, SVG assets or executable code are saved there. History/current Motion State remains separate and authoritative.
+
+Only reviewed static procedures in `recoveryRecipes` can be VERIFIED after successful current-state validation and commit. New successful generic model-guided procedures are TESTED, not automatically VERIFIED. Older semantics versions load as DEPRECATED. Runtime retrieves matching verified IDs, rechecks preconditions and always revalidates candidate scope/intent/QA. The executable recipes live in TypeScript; memory cannot add code or alter permissions. This is compact repair experience, not model retraining or automatic production knowledge rewriting. Tail-extension stays the existing deterministic implementation; its catalog entry does not add a second implementation.
+
+### Level 2 security boundary and scope
+
+`harness/recovery/code-service.ts` activates only after failed Level1 plus eligible diagnostic evidence and explicit settings enablement. This role is a separate bounded provider invocation, using supplied code only and no operating-system tools. A model can return STOP when evidence is insufficient. The original prompt, media, complete projects and credentials are not passed. Source containing detected secret patterns requires manual reproduction rather than being transmitted. Selection is currently narrow: tools or execution module according to failure class, not arbitrary repository traversal.
+
+`code-repair.ts` requires a clean repository baseline and an allowlisted module scope. It creates an independent temporary tracked-source copy with a local branch `codex/repair-<UUID>` and records the production base commit. User projects, exports, binaries, logs, ignored files, original Git credentials/remotes and executable permissions are not copied. The backend writes only allowlisted supplied source files or NEW regression tests; existing tests/config/security permissions cannot be edited by the coding model. Exact before hashes and unique textual edits are checked; no regex/eval/agent shell is executed. Full new test content is supported, compact find/replace edits avoid regenerating entire source files.
+
+Generated tests run only via fixed Node/typecheck/test commands under macOS sandbox-exec. OS policy denies network, production/personal file contents, writes outside quarantine and arbitrary executable launches. Read access is limited to quarantine, installed readonly dependencies and system runtime paths; directory metadata/root listing is allowed for Node's loader. Executables are limited to Node and the installed esbuild binary; children inherit confinement. No unsandboxed test fallback exists. Non-macOS platforms return BLOCKED pending a secure platform runner. This is a tested local boundary, not an independently audited hostile-code container.
+
+The NEW regression must fail with original source, then typecheck and regression must pass after the patch. Otherwise status is NO_REPRODUCED_DEFECT or TESTS_FAILED. Only then can a proposal be AWAITING_APPROVAL. Source replacements, patch bytes and reports have hash-bound identities; review/export rejects changed workspace/diff. Full engine/browser/video regression for an arbitrary source proposal is NOT automatically guaranteed; a test needing non-allowlisted executables may fail securely and require controlled external review.
+
+Production promotion is deliberately unavailable. `promoteCodeRepair()` unconditionally rejects. No HTTP approval/apply endpoint exists, no model-generated approved string is accepted, and no restart/merge/deploy is performed by Level2. This is the specification's reviewable-patch fallback, not a completed in-app merge authorization service.
+
+### Storage, UI and review workflow
+
+- Existing run directory `motion/ai/<runId>/recovery.json`: original failure, attempts/actual tools, admission/outcome and measured recovery usage; normal runs incur no new recovery file.
+- Existing run directory `code-repair.json`: blocked/insufficient-evidence/proposal status, metrics and local quarantine references. Existing Harness events retain structured failures and run metrics.
+- Quarantine: independent Git source snapshot, proposal.json, proposal.patch, test.sb, report.json and provider records. No user binary assets. Temporary workspaces are not automatically pruned; export/review retention is manual in this first implementation.
+- Existing Inspector Actions tab exposes recovery and code proposal diagnostics. Existing project Settings exposes enablement, model/effort, attempts/time/token budget and separate code model selection. Full remaining limits are available in Harness JSON; there is no separate main UI or execution-confirmation dialog.
+- GET/POST `/api/projects/:id/motion/recovery-settings` uses strict bounded schema and the existing loopback/Host/Origin protection. GET recovery-memory returns compact metadata. These routes cannot grant code promotion.
+
+Review with `npm run recovery -- review --workspace /absolute/quarantine/path`. Export with `npm run recovery -- export --workspace /absolute/quarantine/path --output /absolute/review.patch`; existing destination files are not overwritten. The export includes its report. A human must review the exact patch identity, original repository base revision, tests and risks through a separate controlled code-review/apply workflow. There is intentionally no approve command in the agent runtime. The coding proposal cannot install itself.
+
+### Verification and remaining gaps
+
+Permanent synthetic tests exercise failure taxonomy, typed-tool admission against original intent, safe duplicate-loop termination, rejection of unrelated writes/shell commands, deterministic stale-name rebind without provider calls, compact memory, original-defect failure/patched success, sandbox read/write/network denial, hash-bound review, production atomic recovery/Undo and no extra call on a successful normal operation. Existing native circle/multiscene/dependency/Wiggle/Trim tests cover preserved mechanisms; this is reuse, not a claim that all scenarios were newly exercised live.
+
+Earlier full check in this implementation passed244base/compat +2browser +40native tests. After added deterministic rebind coverage, the final full check PASSED245/245base/compat +2/2Chromium/WebKit +40/40native tests, TypeScript and build. After the final accounting fix,9/9affected Harness/production recovery tests independently passed. No QA tolerances or validators were disabled. No live model generated a source patch during this task; source-repair backend was tested with an injected synthetic defect and prepared patch. No source promotion, client-project mutation or external client-data transfer occurred.

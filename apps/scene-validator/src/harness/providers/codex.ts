@@ -115,6 +115,7 @@ export class CodexAdapter implements ProviderAdapter {
         const result = await codex
           .startThread({
             model: req.model || undefined,
+            modelReasoningEffort: req.reasoningEffort,
             workingDirectory: this.directory,
             sandboxMode: "read-only",
             approvalPolicy: "never",
@@ -169,6 +170,7 @@ export class CodexAdapter implements ProviderAdapter {
         for (const key of Object.keys(toolsDisabled))
           args.push("-c", `features.${key}=false`);
         if (req.model) args.push("--model", req.model);
+        if (req.reasoningEffort) args.push("-c", `model_reasoning_effort="${req.reasoningEffort}"`);
         args.push("-");
         const events = await cli(await codexBinary(), args, prompt, signal);
         for (const event of events) {
