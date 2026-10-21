@@ -19,7 +19,7 @@ const request = JSON.parse(
 );
 const response = JSON.parse(
   await readFile(
-    path.join(saved, "semantic-interpret/raw-response.json"),
+    args.includes("--response-file") ? path.resolve(arg("response-file")) : path.join(saved, "semantic-interpret/raw-response.json"),
     "utf8",
   ),
 );

@@ -193,6 +193,7 @@ export function resolveIntentSelectors(
     objects = project.inspection.document.scenes.flatMap(objectsIn);
   const replacements = new Map<string, string[]>();
   for (const r of plan.requirements) {
+    if (r.motionAction === "freezeProject") { expanded.push(r); continue; }
     const trackMembers = resolveTrackLifecycle(
       project,
       state,

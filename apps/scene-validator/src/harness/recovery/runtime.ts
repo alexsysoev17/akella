@@ -20,6 +20,18 @@ export const recoveryDecisionSchema = z.discriminatedUnion("action", [
     z.object({ action: z.literal("removeAnimation"), dependentPolicy: z.enum(["reject", "removeDependents"]), reason: z.string().max(1000) }).strict(),
 ]);
 export type RecoveryDecision = z.infer<typeof recoveryDecisionSchema>;
+/** Narrow the advertised tool contract for a known deletion-policy conflict.
+ * Admission still validates against the full canonical tool/intent contracts. */
+export function recoveryDecisionSchemaFor(code?: string) {
+    if (!code || !/DEPENDENT_EFFECTS_REQUIRE_POLICY/.test(code)) return recoveryDecisionSchema;
+    const removeAnimation = motionToolSchema.options.find(s => s.shape.tool.value === "removeAnimation")!;
+    const removeEffect = motionToolSchema.options.find(s => s.shape.tool.value === "removeEffect")!;
+    return z.discriminatedUnion("action",[
+        recoveryDecisionSchema.options[0],
+        z.object({action:z.literal("apply"),commands:z.array(z.union([removeAnimation,removeEffect])).min(1).max(12),reason:z.string().max(1000)}).strict(),
+        recoveryDecisionSchema.options[2],
+    ]);
+}
 export interface RecoveryReport {
     version: "project-recovery/1";
     status: "Recovering Project" | "Candidate Recovered" | "Project Recovered" | "Failed Safely";
@@ -128,7 +140,9 @@ export async function recoverPreflight(project: LoadedProject, state: MotionStat
             const bytes = Buffer.byteLength(JSON.stringify(context));
             if (bytes > hooks.policy.maxContextBytes)
                 throw new Error("RECOVERY_CONTEXT_BUDGET");
-            const decision = recoveryDecisionSchema.parse(await hooks.decide(context, legacy, Math.max(1, hooks.policy.maxDurationMs - (performance.now() - started))));
+            const decoded = recoveryDecisionSchema.safeParse(await hooks.decide(context, legacy, Math.max(1, hooks.policy.maxDurationMs - (performance.now() - started))));
+            if (!decoded.success) throw new Error("RECOVERY_INVALID_ACTION", {cause:decoded.error});
+            const decision = decoded.data;
             const signature = JSON.stringify([motionStateDigest(candidate), decision]);
             if (seen.has(signature))
                 throw new Error("RECOVERY_DUPLICATE_ACTION");

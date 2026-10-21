@@ -1,4 +1,5 @@
 import { capabilityGuidance } from "../motion-library/guidance.js";
+import { objectEnvelope, validateProviderSchema } from "../harness/providers/schema.js";
 import { createHash } from "node:crypto";
 import { redactSecrets } from "../harness/security.js";
 import {
@@ -32,6 +33,8 @@ export function compatibleSchema(value: unknown): unknown {
     if (key === "$schema" || key === "default") continue;
     result[key === "oneOf" ? "anyOf" : key] = compatibleSchema(item);
   }
+  if (result.type === "object" && !result.properties && result.additionalProperties && typeof result.additionalProperties === "object")
+    return { type: "array", items: { type:"object", properties:{key:result.propertyNames ?? {type:"string"},value:result.additionalProperties}, required:["key","value"], additionalProperties:false } };
   if (
     result.type === "object" &&
     result.properties &&
@@ -66,6 +69,25 @@ export function normalizeProviderOutput(
         part.replace(/~1/g, "/").replace(/~0/g, "~")
       ];
     return normalizeProviderOutput(value, resolved, root);
+  }
+  const variants = shape.oneOf ?? shape.anyOf;
+  if (Array.isArray(variants)) {
+    const resolved = variants.map(v => {
+      let branch = v as Record<string, unknown>;
+      if (typeof branch.$ref === "string") {
+        let target = root as Record<string, unknown>;
+        for (const key of branch.$ref.slice(2).split("/")) target = target[key] as Record<string, unknown>;
+        branch = target;
+      }
+      return branch;
+    });
+    const tagged = resolved.filter(b => Object.entries((b?.properties ?? {}) as Record<string, {const?:unknown}>).some(([key,p]) => "const" in p && value && typeof value === "object" && (value as Record<string,unknown>)[key] === p.const));
+    if (tagged.length === 1) return normalizeProviderOutput(value, tagged[0], root);
+  }
+  if (Array.isArray(value) && shape.type === "object" && !shape.properties && shape.additionalProperties && typeof shape.additionalProperties === "object") {
+    const entries = value as {key?:unknown;value?:unknown}[];
+    if (entries.some(e => !e || typeof e.key !== "string") || new Set(entries.map(e => e.key)).size !== entries.length) throw new ProviderError("INVALID_OUTPUT", "Invalid or duplicate dictionary entries");
+    return Object.fromEntries(entries.map(e => [e.key as string, normalizeProviderOutput(e.value, shape.additionalProperties, root)]));
   }
   if (
     Array.isArray(shape.anyOf) &&
@@ -235,9 +257,9 @@ export class AIClient implements AIProvider {
     const logicalSchema = nativeSchema
       ? z.toJSONSchema(nativeSchema, { io: "output", reused: "ref" })
       : runtimeSchema;
-    const responseSchema = strictWire
-      ? compatibleSchema(logicalSchema)
-      : logicalSchema;
+    const wire = strictWire ? objectEnvelope(compatibleSchema(logicalSchema)) : { schema: logicalSchema, wrapped: false };
+    const responseSchema = wire.schema;
+    if (strictWire) validateProviderSchema(responseSchema);
     await writeFile(
       path.join(this.directory, "request.txt"),
       redactSecrets(prompt),
@@ -272,9 +294,10 @@ export class AIClient implements AIProvider {
         "UNSUPPORTED_CAPABILITY",
         "Motion planning accepts structured intent, not provider tool execution",
       );
+    const payload = wire.wrapped ? (response.output as { response?: unknown })?.response : response.output;
     const normalized = strictWire
-      ? normalizeProviderOutput(response.output, runtimeSchema)
-      : response.output;
+      ? normalizeProviderOutput(payload, runtimeSchema)
+      : payload;
     const parsed = schema.safeParse(normalized);
     const fullDiagnostics = (this.runtime?.privacy ?? "full") === "full";
     const issues = parsed.success

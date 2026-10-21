@@ -191,6 +191,7 @@ export const settingsSchema = z
     height: z.number().int().min(2).max(4096),
     durationFrames: duration,
     strictDuration: z.boolean(),
+    relativeTimingOffsetSeconds: z.number().min(0.01).max(1).optional(),
     tailPolicy: z.literal("holdLastScene").optional(),
     timelineExtensionPolicy: z.enum(["safeExtend", "fixed"]).optional(),
   })
@@ -231,13 +232,14 @@ export const timingDependencySchema = z
     dependencyId: id,
     animationId: id,
     anchorAnimationId: id,
-    relation: z.enum(["after", "with", "before"]),
+    relation: z.enum(["after", "with", "before", "endWith"]),
     offsetFrames: z.number().int().min(-108000).max(108000),
   })
   .strict();
 export const motionSchema = z
   .object({
     schemaVersion: z.literal("1.0.0"),
+    staticObjects: z.array(z.object({ logicalObjectId: id, sceneId: id, targetId: id }).strict()).max(1000).optional(),
     settings: settingsSchema,
     blocks: z.array(blockSchema).min(1).max(1000),
     animations: z.array(animationSchema).max(5000),
@@ -253,6 +255,8 @@ export const motionSchema = z
   .strict();
 const animRef = { animationId: id };
 export const operationSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("setStaticObject"), object: z.object({ logicalObjectId: id, sceneId: id, targetId: id }).strict() }).strict(),
+  z.object({ type: z.literal("removeStaticObject"), logicalObjectId: id }).strict(),
   z
     .object({
       type: z.literal("retimeScenes"),

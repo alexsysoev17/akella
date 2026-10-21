@@ -2,7 +2,7 @@ import path from "node:path";
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import { atomicJson, noSymlinkPath, safeDirectory } from "../../files.js";
-export const recoverySemanticsVersion = "motion-recovery/1";
+export const recoverySemanticsVersion = "motion-recovery/2";
 // Executable procedures are reviewed TypeScript, never text loaded from memory.
 export const recoveryRecipes = Object.freeze([
     { id: "canonical-reference-rebind/1", regression: "recovery-runtime: stale reference repair", status: "VERIFIED" as const },

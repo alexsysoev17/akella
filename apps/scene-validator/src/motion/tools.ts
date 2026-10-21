@@ -9,11 +9,14 @@ import { expressionSchema, expressionLifecycles } from "../motion-library/expres
 import { channels, applyOperations } from "./operations.js";
 import { resolveObjectReference } from "./object-resolution.js";
 import { buildRegistry } from "./registry.js";
+import { freezeObjectOperations } from "./static-object.js";
 
 const id = z.string().min(1).max(180);
 const timingPatch = { startFrame: z.number().int().nonnegative().optional(), durationFrames: z.number().int().positive().optional() };
 const parameters = z.record(z.string(), z.union([z.number().finite(), z.string(), z.boolean(), z.null()]));
 export const motionToolSchema = z.discriminatedUnion("tool", [
+  z.object({ tool: z.literal("freezeObject"), logicalObjectId: id }).strict(),
+  z.object({ tool: z.literal("releaseStaticObject"), logicalObjectId: id }).strict(),
   z.object({ tool: z.literal("createAnimation"), animation: animationSchema }).strict(),
   z.object({ tool: z.literal("updateAnimation"), animationId: id, patch: z.object({ ...timingPatch, easing: easingSchema.optional(), enabled: z.boolean().optional(), parameters: parameters.optional() }).strict() }).strict(),
   z.object({ tool: z.literal("addEffect"), expression: expressionSchema }).strict(),
@@ -49,6 +52,8 @@ export const findObject = resolveObjectReference;
 export function lowerMotionTool(project: LoadedProject, state: MotionState, input: MotionTool): Plan["operations"] {
   const command = motionToolSchema.parse(input);
   switch (command.tool) {
+    case "freezeObject": return freezeObjectOperations(project, state, command.logicalObjectId);
+    case "releaseStaticObject": return [{ type: "removeStaticObject", logicalObjectId: command.logicalObjectId }];
     case "createAnimation":
       if (state.animations.some(a => a.animationId === command.animation.animationId)) return fail("ID_ALREADY_EXISTS", "Use updateAnimation for an existing track", { animationId: command.animation.animationId }, ["updateAnimation"]);
       return [{ type: "addAnimation", animation: command.animation }];

@@ -1,4 +1,5 @@
 import { statePresentation } from "../motion/transitions.js";
+import { staticObjectMembers } from "../motion/static-object.js";
 import { presentedTransitions } from "../motion/transition-runtime.js";
 import { failureCategory } from "../motion/qa/failure.js";
 import type { LoadedProject } from "../types.js";
@@ -53,10 +54,10 @@ export async function nativeMotionQA(
     samples: { frame: number; file: string }[] = [],
     warnings = new Set<string>(),
     before = nativeDigest(project.inspection.document),
-    frames = [...new Set(numeric.frames)]
+    frames = [...new Set([...numeric.frames, ...(state.staticObjects?.some(o => scope(o.sceneId,o.targetId)) ? [0, Math.floor(state.settings.durationFrames / 2), state.settings.durationFrames - 1] : [])])]
       .filter(
         (frame) =>
-          !targetScope ||
+          !targetScope || state.staticObjects?.some(o => scope(o.sceneId,o.targetId)) ||
           state.blocks.some(
             (b) =>
               b.sceneId === targetScope.sceneId &&
@@ -381,6 +382,21 @@ export async function nativeMotionQA(
         status: difference.changedPixels > 0 ? "PASSED" : "FAILED",
         metrics: { frame, ...difference },
       });
+    }
+    for (const entry of state.staticObjects ?? []) {
+      if (targetScope && !scope(entry.sceneId, entry.targetId)) continue;
+      if (previous?.staticObjects?.some(o => JSON.stringify(o) === JSON.stringify(entry))) continue;
+      const { object } = staticObjectMembers(project, entry.logicalObjectId);
+      const hidden = { ...state, staticObjects: (state.staticObjects ?? []).filter(o => o.logicalObjectId !== entry.logicalObjectId), visibility: [...state.visibility.filter(v => !object.sourceInstances.some(i => i.sceneId === v.sceneId && i.sourceNodeId === v.targetId)), ...object.sourceInstances.map(i => ({sceneId:i.sceneId,targetId:i.sourceNodeId,visible:false}))] };
+      let expected: string | undefined;
+      for (const frame of [...new Set([0, Math.floor(state.settings.durationFrames / 2), state.settings.durationFrames - 1])]) {
+        const actual = await render(state, frame), background = await render(hidden, frame);
+        const hit = actual.hits.find(h => h.sceneId === entry.sceneId && h.targetId === entry.targetId);
+        const pose = JSON.stringify(hit?.points);
+        expected ??= pose;
+        const difference = await compareNativeFrames(actual.png, background.png);
+        checks.push({name:"staticObjectPresentation",category:"render",target:entry.targetId,required:true,status:hit && pose === expected && difference.changedPixels > 0 ? "PASSED" : "FAILED",metrics:{frame,...difference},reason:"Persistent original pose and visible contribution across full project lifetime"});
+      }
     }
     checks.push({
       name: "immutableGeometry",

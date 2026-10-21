@@ -119,6 +119,8 @@ export function resolveTimingDependencies(state: MotionState) {
       anchor.startFrame +
       (d.relation === "after"
         ? anchor.durationFrames
+        : d.relation === "endWith"
+          ? anchor.durationFrames - a.durationFrames
         : d.relation === "before"
           ? -a.durationFrames
           : 0) +

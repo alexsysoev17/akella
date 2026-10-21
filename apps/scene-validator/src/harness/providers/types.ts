@@ -59,7 +59,12 @@ export class ProviderError extends Error {
       | "AUTH_REQUIRED"
       | "RATE_LIMITED"
       | "OVERLOADED"
-      | "CONTEXT_EXHAUSTED",
+      | "CONTEXT_EXHAUSTED"
+      | "PROVIDER_SCHEMA_INVALID"
+      | "PROVIDER_UNAVAILABLE"
+      | "PROVIDER_AUTH_FAILED"
+      | "PROVIDER_TIMEOUT"
+      | "PROVIDER_TRANSPORT_ERROR",
     message: string,
   ) {
     super(`${code}: ${message}`);
@@ -94,6 +99,10 @@ export function providerIds() {
 
 /** HTTP-compatible adapters retain actionable transport categories without retrying blindly. */
 export function transportErrorCode(error: unknown): ProviderError["code"] {
+  const message = String(error);
+  if (/invalid_json_schema|invalid.*(?:output|response).*schema|schema must be.*object/i.test(message)) return "PROVIDER_SCHEMA_INVALID";
+  if (/401|403|unauthori[sz]ed|authentication|not logged in/i.test(message)) return "PROVIDER_AUTH_FAILED";
+  if (/ENOENT|ECONNREFUSED|ENOTFOUND/.test(message)) return "PROVIDER_UNAVAILABLE";
   const e =
     error && typeof error === "object"
       ? (error as { status?: number; statusCode?: number; code?: string })

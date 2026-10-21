@@ -109,8 +109,12 @@ export function attachInspector(container, url) {
           : "<p>NOT_AVAILABLE</p>");
     if (tab === 2)
       body.innerHTML =
-        block("Recovery", data.recovery) +
-        block("Code Repair", data.codeRepair) +
+        `<h3>Уровень 1 — восстановление проекта</h3><p>${esc(data.recovery?.status ?? "Не запускалось")}</p>` +
+        block("Исходная и текущая ошибка, операции и попытки", data.recovery) +
+        `<h3>Уровень 2 — ремонт кода в изоляции</h3><p>${esc(data.codeRepair?.status ?? "Не запускалось")}</p>` +
+        (data.codeRepair?.status === "AWAITING_APPROVAL" ? "<p>Патч подготовлен и проверен. Приложение не изменено. Автоматическое применение отключено; требуется внешний просмотр и ручное применение точного патча.</p>" : "") +
+        block("Code Repair — причина, файлы, тесты и риски", data.codeRepair) +
+        (data.codeRepair?.patchPreview ? `<details><summary>Предложенный diff${data.codeRepair.patchPreviewTruncated ? " (сокращён; полный файл в экспорте)" : ""}</summary><pre>${esc(data.codeRepair.patchPreview)}</pre></details>` : "") +
         cards(tasks) +
         block(
           "Предварительная проверка полного плана",

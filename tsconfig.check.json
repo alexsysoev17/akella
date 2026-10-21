@@ -10,7 +10,8 @@
     "scripts/diagnose-text.ts",
     "scripts/eval-motion-tools.ts",
     "scripts/recovery.ts",
-    "scripts/eval-recovery.ts"
+    "scripts/eval-recovery.ts",
+    "scripts/eval-code-repair.ts"
   ],
   "exclude": [],
   "compilerOptions": {

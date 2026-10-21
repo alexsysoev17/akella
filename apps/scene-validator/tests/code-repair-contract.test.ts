@@ -1,0 +1,24 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {createHash} from "node:crypto";
+import {normalizeCodeProposal, scopedCodeProposalSchema} from "../src/harness/recovery/code-repair.js";
+import {compatibleSchema} from "../src/motion/provider.js";
+import {validateProviderSchema} from "../src/harness/providers/schema.js";
+import {z} from "zod";
+const empty=createHash("sha256").update("").digest("hex");
+test("code agent paths are schema constrained; new test relocation preserves assertions and source write scope",()=>{
+ const workspace={id:"synthetic",root:"/tmp/unused",baseCommit:"baseline",files:[{path:"apps/scene-validator/src/harness/providers/schema.ts",hash:"a".repeat(64),content:"export const example = 1;"}]};
+ const content='import { example } from "./schema.js";\nimport assert from "node:assert/strict";\nassert.equal(example, 1);\n';
+ const proposal={rootCause:"fixture",changes:[{path:"apps/scene-validator/src/harness/providers/schema.test.ts",beforeHash:empty,content}],regressionTests:["model prose instead of path"],risks:[]};
+ const normalized=normalizeCodeProposal(workspace,proposal);
+ assert.equal(normalized.relocations.length,1);
+ const change=normalized.proposal.changes[0];assert.ok("content" in change);
+ assert.ok(change.path.startsWith("apps/scene-validator/tests/"));assert.ok(change.content.includes('from "../src/harness/providers/schema.js"'));
+ assert.ok(change.content.endsWith('assert.equal(example, 1);\n'));
+ assert.deepEqual(normalized.proposal.regressionTests,[change.path]);
+ const scoped=scopedCodeProposalSchema(workspace);
+ validateProviderSchema(compatibleSchema(z.toJSONSchema(scoped.schema,{io:"output",reused:"ref"})));
+ assert.equal(scoped.schema.safeParse(proposal).success,false,"future wire schema excludes misplaced paths and prose");
+ assert.throws(()=>normalizeCodeProposal(workspace,{...proposal,changes:[{...proposal.changes[0],path:"apps/scene-validator/src/arbitrary.ts"}]}),/WRITE_SCOPE/);
+ assert.throws(()=>normalizeCodeProposal(workspace,{...proposal,changes:[{...proposal.changes[0],content:'import x from "../../../../secrets.js";'}]}),/IMPORT_SCOPE/);
+});

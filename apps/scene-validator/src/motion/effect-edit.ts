@@ -21,6 +21,8 @@ export function editExpression(existing: Expression, request: IntentRequirement,
     if (p.frequency != null) next.parameters.frequency = p.frequency;
   }
   if ("decay" in next.parameters && p.decay != null) next.parameters.decay = p.decay;
+  if ("decay" in next.parameters && p.decay == null && p.decayFactor != null) next.parameters.decay *= p.decayFactor;
+  if (!("decay" in next.parameters) && (p.decay != null || p.decayFactor != null)) throw new Error("EFFECT_PARAMETER_UNSUPPORTED: this effect has no decay envelope");
   if (next.type === "wiggle") {
     if (p.seed != null) next.parameters.seed = p.seed;
     if (p.lifetime) {

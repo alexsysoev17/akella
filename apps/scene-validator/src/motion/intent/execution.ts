@@ -5,6 +5,7 @@ import { taskRepairContext } from "./repair-context.js";
 import { qaAdmission } from "../qa/policy.js";
 import { resolveTextSettings } from "../../motion-library/techniques/text.js";
 import { isDeepStrictEqual } from "node:util";
+import { freezeObjectOperations } from "../static-object.js";
 import { inertiaIntensityDefaults } from "../../motion-library/expressions/registry.js";
 import { semanticBindings } from "../../motion-library/techniques/registry.js";
 import type { LoadedProject } from "../../types.js";
@@ -66,6 +67,11 @@ export function assertIntentScope(
   )!;
   const own = (a: { sceneId: string; targetId: string }) =>
     a.sceneId === r.sceneId && a.targetId === r.target.sourceNodeId;
+  if (r.motionAction === "freezeProject") {
+    const expected = applyOperations(before, freezeObjectOperations(project, before, r.target.logicalObjectId!), project);
+    if (!isDeepStrictEqual(next, expected)) throw new Error("STATIC_OBJECT_SCOPE_VIOLATION");
+    return;
+  }
   const writes = desiredChannels(r),
     allEdits = r.kind === "editAnimation";
   const permittedIds = new Set(
@@ -85,6 +91,8 @@ export function assertIntentScope(
           /reveal|ribbon|trim/i.test(a.animationId) &&
           channels(a).some((c) => c.startsWith("scale"))));
   const baseline = structuredClone(before);
+  if (r.kind === "objectAnimation" && baseline.staticObjects?.some(o => o.logicalObjectId === r.target.logicalObjectId) && !next.staticObjects?.some(o => o.logicalObjectId === r.target.logicalObjectId))
+    baseline.staticObjects = baseline.staticObjects.filter(o => o.logicalObjectId !== r.target.logicalObjectId);
   if (plan.timelineExtension !== "fixed" && before.settings.timelineExtensionPolicy !== "fixed" && next.settings.durationFrames > before.settings.durationFrames &&
       next.settings.durationFrames === requiredProjectFrames({ ...next, settings: { ...next.settings, durationFrames: before.settings.durationFrames } }))
     { baseline.settings.durationFrames = next.settings.durationFrames; baseline.settings.tailPolicy = next.settings.tailPolicy; }
@@ -341,6 +349,7 @@ export function requirementChecks(
         requirementId: r.requirementId,
         status:
           now &&
+          (r.parameters.decayFactor == null || ("decay" in old.parameters && "decay" in now.parameters && Math.abs(now.parameters.decay - old.parameters.decay * r.parameters.decayFactor) < 1e-10)) &&
           (r.parameters.frequencyFactor === null ||
             ("frequency" in old.parameters &&
               "frequency" in now.parameters &&
@@ -509,7 +518,7 @@ export function requirementChecks(
       checks.push({
         name: "requirementTiming",
         requirementId: r.requirementId,
-        status: related.every((a) => a.startFrame === expected)
+        status: related.every((a) => a.startFrame + (r.timing.align === "end" && r.timing.relation !== "sceneEnd" ? a.durationFrames : 0) === expected)
           ? "PASSED"
           : "FAILED",
       });
@@ -540,6 +549,7 @@ export function requirementChecks(
       (r.parameters.frequency === null ||
         !("frequency" in e.parameters) ||
         e.parameters.frequency === r.parameters.frequency) &&
+      (r.parameters.decay === null || ("decay" in e.parameters && e.parameters.decay === r.parameters.decay)) &&
       (e.type !== "wiggle" ||
         r.parameters.seed == null ||
         e.parameters.seed === r.parameters.seed);

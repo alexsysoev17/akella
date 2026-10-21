@@ -1,7 +1,7 @@
 import { recoveryProviderRuntime } from "../harness/recovery/provider-runtime.js";
 import { proposeCodeRepair } from "../harness/recovery/code-service.js";
 import { recoveryFailure } from "../harness/recovery/failure.js";
-import { recoverPreflight, recoveryDecisionSchema, type RecoveryReport } from "../harness/recovery/runtime.js";
+import { recoverPreflight, recoveryDecisionSchemaFor, type RecoveryReport } from "../harness/recovery/runtime.js";
 import { rememberRecovery } from "../harness/recovery/memory.js";
 import { compileTasks } from "./intent/compiler.js";
 import { commitChanges } from "./tool-runtime.js";
@@ -469,7 +469,7 @@ export async function proposeMotion(
         let preparedPlans: ReturnType<typeof preflightIntentPlan>["preparedPlans"] | undefined;
         if (
           contract.requirements.some(
-            (r) => r.semanticActionId || r.effectOperation,
+            (r) => r.semanticActionId || r.effectOperation || r.motionAction,
           )
         ) {
           try {
@@ -520,8 +520,8 @@ export async function proposeMotion(
                   z.object({ action:z.enum(["removeAnimation","stop"]), dependentPolicy:z.enum(["reject","removeDependents"]), reason:z.string().max(1000) }).strict(), "preflight-resolution");
                   await atomicJson(path.join(directory,"preflight-resolution.json"),decision); return decision; }
                 return provider.structured(context, request.request,
-                  "Repair ONLY the failed original requirement using the typed Motion Tools in the schema. Inspect authoritative entities if necessary. Preserve IDs, original requested parameters, geometry, timeline constraints and unrelated motion. Never fabricate IDs. Return inspect, apply a minimal tool batch, or stop for real ambiguity/missing capability. Candidate scope, original intent, technical validation and native QA cannot be bypassed. No shell, filesystem or source-code capability exists.",
-                  recoveryDecisionSchema, "project-recovery");
+                  "You are a structured decision service. Native Codex tools are intentionally unavailable. The response commands array is a SERIALIZED tool plan; the trusted Harness executes it after your response. This is not a request to call a Codex tool yourself. Repair ONLY the failed original requirement using the typed commands in the schema. Inspect authoritative entities if necessary; supplied canonical identities and dependency records are already inspected state. Preserve IDs, original requested parameters, geometry, timeline constraints and unrelated motion. Never fabricate IDs. Return inspect, apply a minimal serialized command batch, or stop for real ambiguity/missing capability. Do not report missing capability merely because native Codex tools are disabled. Candidate scope, original intent, technical validation and native QA cannot be bypassed. No shell, filesystem or source-code capability exists.",
+                  recoveryDecisionSchemaFor((context as {failure?:{code?:string}}).failure?.code), "project-recovery");
               },
             });
             Object.assign(contract, recovered.plan);
@@ -824,11 +824,14 @@ export async function proposeMotion(
     }
   } catch (error) {
     if (harness) {
-      const report = (error as { recoveryReport?: RecoveryReport }).recoveryReport;
-      if (report?.status === "Failed Safely" && report.originalFailure.codeRepairEligible && harness.config.recovery.codeRepair.enabled) {
+      let report = (error as { recoveryReport?: RecoveryReport }).recoveryReport;
+      const outerFailure = recoveryFailure(error, "agent-execution", "unknown");
+      if (!report && outerFailure.codeRepairEligible) report = {version:"project-recovery/1",status:"Failed Safely",originalFailure:outerFailure,terminalFailure:outerFailure,attempts:[],procedure:null,codeRepairProposed:false};
+      const codeFailure = report?.terminalFailure?.codeRepairEligible ? report.terminalFailure : report?.originalFailure;
+      if (report?.status === "Failed Safely" && codeFailure?.codeRepairEligible && harness.config.recovery.codeRepair.enabled) {
         try {
           onStage("code-repair-proposed");
-          const proposal = await proposeCodeRepair(process.cwd(), report.originalFailure, harness.config.recovery, request.settings, harness.signal);
+          const proposal = await proposeCodeRepair(process.cwd(), codeFailure, harness.config.recovery, request.settings, harness.signal);
           report.codeRepairProposed = "patchIdentity" in proposal;
           await atomicJson(path.join(harness.directory,"recovery.json"),report);
           await atomicJson(path.join(harness.directory,"code-repair.json"),proposal);

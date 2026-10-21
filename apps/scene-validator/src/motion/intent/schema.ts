@@ -47,6 +47,7 @@ export const temporalReferenceSchema = z
 export const intentRequirementSchema = z
   .object({
     semanticActionId: z.string().optional(),
+    motionAction: z.enum(["freezeProject"]).optional(),
     sourceClauseId: z.string().optional(),
     requirementId: z.string().min(1).max(100),
     kind: z.enum([
@@ -162,6 +163,7 @@ export const intentRequirementSchema = z
         frequencyFactor: z.number().positive().max(10).nullable().default(null),
         frequency: z.number().min(0.01).max(30).nullable(),
         decay: z.number().min(0).max(30).nullable(),
+        decayFactor: z.number().min(0.01).max(10).nullable().optional(),
         easing: easingSchema.nullable(),
         durationFactor: z.number().positive().max(10).nullable(),
         amplitudeFactor: z.number().min(0).max(10).nullable(),
@@ -191,6 +193,8 @@ export const intentRequirementSchema = z
         anchorRequirementId: z.string().nullable(),
         reference: temporalReferenceSchema.optional(),
         offsetFrames: z.number().int().optional(),
+        offsetPolicy: z.enum(["slightlyLater"]).optional(),
+        align: z.enum(["start", "end"]).optional(),
         delaySeconds: z.number().min(-3600).max(3600),
       })
       .strict(),

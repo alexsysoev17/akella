@@ -12,6 +12,7 @@ import {
 } from "./schema.js";
 import type { LoadedProject } from "../types.js";
 import { objectsIn } from "./context.js";
+import { staticObjectMembers, staticObjectReference, staticObjectTransitions } from "./static-object.js";
 export function channels(a: Animation): string[] {
   if (a.effect === "property") return [a.parameters.property];
   if (a.effect === "keyframes") return [a.parameters.property];
@@ -30,6 +31,18 @@ export function validateMotion(
   project: LoadedProject,
 ): MotionState {
   const state = motionSchema.parse(input);
+  const frozen = new Set<string>();
+  const frozenMembers = new Set<string>();
+  for (const entry of state.staticObjects ?? []) {
+    if (frozen.has(entry.logicalObjectId)) throw new Error("DUPLICATE_STATIC_OBJECT");
+    frozen.add(entry.logicalObjectId);
+    staticObjectReference(project,entry);
+    const { object, members } = staticObjectMembers(project, entry.logicalObjectId);
+    if ([...members].some(id=>frozenMembers.has(id))) throw new Error("STATIC_SCOPE_OVERLAP");
+    members.forEach(id=>frozenMembers.add(id));
+    if (!object.sourceInstances.some(i => i.sceneId === entry.sceneId && i.sourceNodeId === entry.targetId)) throw new Error("STATIC_SOURCE_NOT_FOUND");
+    if (state.animations.some(a => members.has(`${a.sceneId}/${a.targetId}`)) || state.expressions?.some(e => members.has(`${e.sceneId}/${e.targetId}`)) || staticObjectTransitions(project,state,members).length) throw new Error("STATIC_OBJECT_HAS_MOTION");
+  }
   const ids = new Set<string>(),
     sceneIds = new Set(
       project.inspection.document.scenes.map((s) => s.sceneId),
@@ -234,6 +247,12 @@ export function applyOperations(
     if ("blockId" in op && !block)
       throw new Error(`Блок не найден: ${op.blockId}`);
     switch (op.type) {
+      case "setStaticObject":
+        state.staticObjects = [...(state.staticObjects ?? []).filter(o => o.logicalObjectId !== op.object.logicalObjectId), op.object];
+        break;
+      case "removeStaticObject":
+        state.staticObjects = (state.staticObjects ?? []).filter(o => o.logicalObjectId !== op.logicalObjectId);
+        break;
       case "retimeScenes":
         retimeScenes(state, op.starts);
         break;
@@ -495,6 +514,8 @@ export function motionDiff(before: MotionState, after: MotionState) {
   diff(before.settings, after.settings, "settings");
   diff(before.blocks, after.blocks, "blocks");
   diff(before.visibility, after.visibility, "visibility");
+  diff(before.staticObjects ?? [], after.staticObjects ?? [], "staticObjects");
+  diff(before.timingDependencies ?? [], after.timingDependencies ?? [], "timingDependencies");
   diff(
     before.objectTransitions ?? [],
     after.objectTransitions ?? [],

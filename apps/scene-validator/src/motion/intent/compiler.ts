@@ -1,4 +1,5 @@
 import { TimelineConstraintError } from "../constraints.js";
+import { freezeObjectOperations } from "../static-object.js";
 import { statePresentation } from "../transitions.js";
 import { parentLocalDelta, unit } from "../geometry.js";
 import {
@@ -198,6 +199,7 @@ export function isParameterOnlyEdit(r: IntentRequirement) {
       r.parameters.frequency,
       r.parameters.frequencyFactor,
       r.parameters.decay,
+      r.parameters.decayFactor,
       r.parameters.seed,
     ].some((v) => v != null)
   );
@@ -302,6 +304,9 @@ export function compileRequirement(
     );
   const operations: Plan["operations"] = [],
     warnings: string[] = [];
+  if (reqs[0]?.motionAction === "freezeProject") return { status: "ready", summary: "Объект зафиксирован на весь ролик", assumptions: [], warnings: [], operations: freezeObjectOperations(project, state, reqs[0].target.logicalObjectId!) };
+  if (reqs[0]?.kind === "objectAnimation" && state.staticObjects?.some(o => o.logicalObjectId === reqs[0].target.logicalObjectId))
+    operations.push({type:"removeStaticObject",logicalObjectId:reqs[0].target.logicalObjectId!});
   if (task.kind === "sceneTiming")
     operations.push({
       type: "retimeScenes",
@@ -433,6 +438,7 @@ export function compileRequirement(
           ? (requirementAnimations(state, r)[0]?.durationFrames ?? duration)
           : duration) +
         (r.timing.offsetFrames ?? Math.round(r.timing.delaySeconds * fps));
+    if (r.kind === "objectAnimation" && r.timing.align === "end" && r.timing.relation !== "sceneEnd") start -= duration;
     // An additional entrance Fade follows the actual base movement, not inertia.
     if (
       r.kind === "objectAnimation" &&
@@ -557,7 +563,9 @@ export function compileRequirement(
                 dependencyId: "dependency_" + stable(a.animationId),
                 animationId: a.animationId,
                 anchorAnimationId: anchor.animationId,
-                relation: r.timing.reference
+                relation: r.timing.align === "end"
+                  ? (r.timing.reference?.endpoint === "end" || r.timing.relation === "afterRequirement" ? "endWith" : "before")
+                  : r.timing.reference
                   ? r.timing.reference.endpoint === "end"
                     ? "after"
                     : "with"
@@ -613,6 +621,7 @@ export function compileRequirement(
             1,
             Math.round(r.parameters.durationSeconds * fps),
           );
+        if (r.timing.align === "end" && r.timing.relation !== "sceneEnd") next.startFrame = start - next.durationFrames;
         if (
           next.effect === "keyframes" &&
           next.durationFrames !== a.durationFrames
@@ -927,7 +936,8 @@ export function compileRequirement(
                 "dependency_" + stable([a.animationId, anchor.animationId]),
               animationId: a.animationId,
               anchorAnimationId: anchor.animationId,
-              relation: (
+              relation: r.timing.align === "end" ?
+                (r.timing.reference?.endpoint === "end" || r.timing.relation === "afterRequirement" ? "endWith" : "before") : (
                 r.timing.reference
                   ? r.timing.reference.endpoint === "end"
                   : r.timing.relation === "afterRequirement"
@@ -936,7 +946,7 @@ export function compileRequirement(
                 : r.timing.relation === "beforeRequirement"
                   ? "before"
                   : "with",
-              offsetFrames: Math.round(r.timing.delaySeconds * fps),
+              offsetFrames: r.timing.offsetFrames ?? Math.round(r.timing.delaySeconds * fps),
             },
           });
       }
@@ -1089,6 +1099,7 @@ function compileInertiaAttachments(
   return operations;
 }
 export function validateRequirement(state: MotionState, r: IntentRequirement) {
+  if (r.motionAction === "freezeProject") return [{ name: "staticLifetime", status: state.staticObjects?.some(o => o.logicalObjectId === r.target.logicalObjectId) ? "PASSED" : "FAILED" }];
   if (r.kind === "unsupported" || r.unresolvedReason)
     return [
       {

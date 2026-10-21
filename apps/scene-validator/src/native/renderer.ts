@@ -24,6 +24,7 @@ import {
 } from "../motion/geometry.js";
 import { statePresentation } from "../motion/transitions.js";
 import { interpolateState, presentedTransitions, presentationBlocks } from "../motion/transition-runtime.js";
+import { staticObjectMembers, staticObjectReference } from "../motion/static-object.js";
 import { within, noSymlinkPath } from "../files.js";
 import { fonts, projectFonts, type FontResources } from "./fonts.js";
 import {
@@ -566,6 +567,8 @@ export class NativeRenderer {
         canvas.restore();
       }
     };
+    const frozenMembers = new Set((state.staticObjects ?? []).flatMap(o => [...staticObjectMembers(this.project, o.logicalObjectId).members]));
+    let drawingStatic = false, currentStaticRoot: string | null = null;
     const drawNode = (
       n: NativeNode,
       parent: Matrix,
@@ -579,7 +582,8 @@ export class NativeRenderer {
           state.visibility.find(
             (v) => v.sceneId === sceneId && v.targetId === n.figmaNodeId,
           )?.visible ?? p.visible !== false;
-      if (!visible) return;
+      if (!drawingStatic && frozenMembers.has(`${sceneId}/${n.figmaNodeId}`)) return;
+      if (!visible && currentStaticRoot !== key) return;
       const local = multiply(inverse(parent), matrix(n.sceneTransform)),
         v = evaluation.nodes[key] ?? {},
         override = overrides.get(key),
@@ -1274,6 +1278,24 @@ export class NativeRenderer {
           drawNode(scene as unknown as NativeNode, unit, fit, scene.sceneId),
         );
         canvas.restore();
+      }
+      // Persistent objects have one immutable source presentation across every
+      // scene. Original instances are suppressed above, including transitions.
+      for (const entry of state.staticObjects ?? []) {
+        const scene = this.project.inspection.document.scenes.find(s => s.sceneId === entry.sceneId)!;
+        const find = (nodes: NativeNode[]): NativeNode | undefined => {
+          for (const n of nodes) { if (n.figmaNodeId === entry.targetId) return n; const child = find(n.children ?? []); if (child) return child; }
+        };
+        const source = find(scene.children as NativeNode[]);
+        if (!source) throw new NativeRenderError("STATIC_SOURCE_NOT_FOUND", entry.targetId);
+        const fit = canvasMatrix(scene, state.settings);
+        drawingStatic = true; currentStaticRoot = JSON.stringify([entry.sceneId, entry.targetId]);
+        const reference = staticObjectReference(this.project,entry);
+        const originalOpacity = num(source.properties.opacity,1) * reference.inheritedOpacity;
+        canvas.save(); canvas.concat(affine(fit));
+        canvas.clipRect(k.XYWHRect(0,0,scene.width,scene.height),k.ClipOp.Intersect,true);
+        drawNode({ ...source, properties: { ...source.properties, visible: true, opacity: originalOpacity > 0 ? originalOpacity : 1 } }, unit, fit, entry.sceneId);
+        canvas.restore(); drawingStatic = false; currentStaticRoot = null;
       }
       const drawn = performance.now();
       surface.flush();

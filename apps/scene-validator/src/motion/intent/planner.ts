@@ -1,4 +1,5 @@
 import { resolveTextSettings } from "../../motion-library/techniques/text.js";
+import { buildRegistry } from "../registry.js";
 import {
   resolveTemporalReference,
   referenceDiagnostics,
@@ -304,6 +305,15 @@ export function validateIntentPlan(
     if (r.parameters.amplitudeFactor === null && r.parameters.relativeIntensity)
       r.parameters.amplitudeFactor =
         relativeIntensityFactors[r.parameters.relativeIntensity];
+  for (const r of plan.requirements.filter(r => r.motionAction === "freezeProject")) {
+    const matches = buildRegistry(project.inspection.document, project.inspection.fingerprint).objects.filter(o =>
+      r.target.logicalObjectId ? o.logicalObjectId === r.target.logicalObjectId : r.target.sourceNodeId ? o.sourceInstances.some(i => i.sourceNodeId === r.target.sourceNodeId && (!r.sceneId || i.sceneId === r.sceneId)) : !!r.target.name && equivalentObjectName(o.name, r.target.name));
+    if (matches.length !== 1 || matches[0].ambiguousScenes.length) throw new Error("AMBIGUOUS_STATIC_OBJECT");
+    const object = matches[0], source = [...object.sourceInstances].sort((a,b)=>project.inspection.document.scenes.find(s=>s.sceneId===a.sceneId)!.index-project.inspection.document.scenes.find(s=>s.sceneId===b.sceneId)!.index)[0];
+    r.target = {logicalObjectId: object.logicalObjectId, sourceNodeId: source.sourceNodeId, name: object.name};
+    r.sceneId = source.sceneId; r.targetScope = "logicalObject"; r.kind = "editAnimation";
+    r.techniques = []; r.selector = undefined; r.effectOperation = undefined; r.unresolvedReason = null;
+  }
   resolveIntentSelectors(
     project,
     resolutionContext?.state ?? defaultMotion(project),
@@ -364,13 +374,17 @@ export function validateIntentPlan(
   );
   const currentState = resolutionContext?.state ?? defaultMotion(project);
   for (const r of plan.requirements) {
+    if (r.timing.offsetPolicy === "slightlyLater" && r.timing.offsetFrames === undefined) {
+      r.timing.offsetFrames = Math.max(1, Math.round(currentState.settings.fps * (currentState.settings.relativeTimingOffsetSeconds ?? 0.1)));
+      resolutionContext?.onResolution?.({event:"RELATIVE_TIMING_DEFAULT", requirementId:r.requirementId, offsetFrames:r.timing.offsetFrames, fps:currentState.settings.fps, policy:"slightlyLater"});
+    }
     if (r.kind === "unsupported" && r.unresolvedReason === "RESOLVED") r.unresolvedReason = "UNSUPPORTED_EFFECT_OPERATION: resolved identity requires an executable action";
     if (r.sceneId && !sceneIds.has(r.sceneId)) {
       r.unresolvedReason = "UNKNOWN_SCENE";
       continue;
     }
     if (r.targetScope === "sceneInstance") r.targetScope = "instance";
-    if (r.kind === "sceneTiming") continue;
+    if (r.kind === "sceneTiming" || r.motionAction === "freezeProject") continue;
     if (
       r.effectOperation &&
       r.kind === "unsupported" &&
@@ -804,6 +818,7 @@ export function validateIntentPlan(
       r.kind !== "sceneTiming" &&
       r.kind !== "unsupported" &&
       !r.techniques.length &&
+      r.motionAction !== "freezeProject" &&
       !r.inheritFromRequirementId &&
       r.effectOperation?.action !== "updateTiming"
     )
@@ -1035,6 +1050,7 @@ export async function semanticPlan(
       await trace("failure-" + attempt, feedback);
       if (
         correctionUsed ||
+        /PROVIDER_SCHEMA_INVALID/.test(failure) ||
         repeated ||
         calls >= maxCalls ||
         /MISSING_TEMPORAL|AMBIGUOUS_TEMPORAL|TEMPORAL_ANCHOR_KIND_UNSUPPORTED|TEMPORAL_RECENT|BUDGET|CANCELLED|UNSUPPORTED_TOOL_CALL|UNSUPPORTED_CAPABILITY|timeout|aborted|authentication|401|403|login|TRANSPORT|UNAVAILABLE/i.test(

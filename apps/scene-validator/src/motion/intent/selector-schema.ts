@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { editingContract } from "../../motion-library/editing-contract.js";
 import {
   intentRequirementSchema,
   intentPlanSchema,
@@ -13,10 +14,11 @@ export const selectorEditSchema = z.object({
     .array(
       z.object({
         requirementId: z.string().min(1).max(100),
+        motionAction: intentRequirementSchema.shape.motionAction,
         kind: z.enum(["editAnimation", "unsupported"]),
         sourceText: z.string().min(1).max(20000),
         selector: intentRequirementSchema.shape.selector,
-        techniques: z.array(intentTechnique).min(1).max(3),
+        techniques: z.array(intentTechnique).max(3),
         target: intentRequirementSchema.shape.target.optional(),
         sceneId: z.string().nullable().optional(),
         targetScope: intentRequirementSchema.shape.targetScope,
@@ -24,6 +26,8 @@ export const selectorEditSchema = z.object({
         effectOperation: intentRequirementSchema.shape.effectOperation,
         temporalReference: intentRequirementSchema.shape.timing.shape.reference,
         delayFrames: z.number().int().optional(),
+        delayPolicy: z.enum(["slightlyLater"]).optional(),
+        align: z.enum(["start", "end"]).optional(),
         startFrame: z.number().int().min(0).optional(),
         timingRelation: z
           .enum(["sceneStart", "sceneEnd", "unchanged"])
@@ -39,6 +43,7 @@ export const selectorEditSchema = z.object({
           frequencyFactor: parameters.frequencyFactor,
           frequency: parameters.frequency.optional(),
           decay: parameters.decay.optional(),
+          decayFactor: parameters.decayFactor,
           durationFactor: parameters.durationFactor.optional(),
           durationSeconds: parameters.durationSeconds.optional(),
           property: parameters.property,
@@ -66,6 +71,8 @@ export function normalizeSelectorPlan(
             ![
               "temporalReference",
               "delayFrames",
+              "delayPolicy",
+              "align",
               "startFrame",
               "timingRelation",
             ].includes(key),
@@ -97,6 +104,8 @@ export function normalizeSelectorPlan(
         ...r.parameters,
       },
       timing: {
+        offsetPolicy: r.delayPolicy,
+        align: r.align,
         startSeconds:
           r.startFrame === undefined
             ? null
@@ -118,6 +127,6 @@ export function normalizeSelectorPlan(
     })),
   });
 }
-export const selectorEditInstructions = `Interpret the entire natural-language request as an edit/removal of EXISTING effects. trimPath/Fade/Slide/etc live in animation tracks; inertia/wiggle live in expressions. Use effectOperation={storage:"animation"|"expression",action:"update"|"remove"} according to the supplied lifecycle catalog. Track edits preserve animationId, timing, easing and geometry. Effect actions also support enable/disable. Existing-motion edits without explicit scene/ID use targetScope=logicalObject, explicit constraints use instance. Direction reverse is spatial, hidden-to-visible progress stays 0 to 1. Resolve meaning, pronouns, typo-tolerant references and qualitative modifiers; never compute existing parameter values or invent IDs. Return the compact contract, verbatim sourceText and complete coverage. Explicit object names/IDs take precedence. byExistingEffect is EXPLICIT all matching project expressions; never use it for an unqualified follow-up. recentSuccessfulTargets is the recent committed effect group; currentSelection is explicit selected objects; byScene uses an explicitly requested canonical scene. filteredSet intersects effect/property/scene with base=recentSuccessfulTargets or currentSelection; project is the default only for explicit project filters. Current state is queried deterministically after interpretation. Failed proposals are not committed actions. Do not broaden scope on ambiguity; retain an unsupported requirement. expressionAction=remove removes existing expressions; update preserves IDs and all unspecified values. relativeIntensity selects slightlyWeaker/weaker/muchWeaker/slightlyStronger/stronger/muchStronger, or amplitudeFactor for an explicit numeric ratio. Timing edits use effectOperation={storage:"animation",action:"updateTiming"}; use temporalReference for a READ-ONLY existing anchor, endpoint start/end, with signed delayFrames. No fake edit for the anchor. Empty techniques only for a timing edit where one actual track can be determined. startFrame is an explicit absolute project frame. Do not compute end frames, deterministic resolver queries authoritative state. No new effects/geometry/full project regeneration. Unrelated edits and natural-language Undo are unsupported by this compact contract.`;
+export const selectorEditInstructions = editingContract + `Interpret the entire natural-language request as an edit/removal of EXISTING effects. trimPath/Fade/Slide/etc live in animation tracks; inertia/wiggle live in expressions. Use effectOperation={storage:"animation"|"expression",action:"update"|"remove"} according to the supplied lifecycle catalog. Track edits preserve animationId, timing, easing and geometry. Effect actions also support enable/disable. Existing-motion edits without explicit scene/ID use targetScope=logicalObject, explicit constraints use instance. Direction reverse is spatial, hidden-to-visible progress stays 0 to 1. Resolve meaning, pronouns, typo-tolerant references and qualitative modifiers; never compute existing parameter values or invent IDs. Return the compact contract, verbatim sourceText and complete coverage. Explicit object names/IDs take precedence. byExistingEffect is EXPLICIT all matching project expressions; never use it for an unqualified follow-up. recentSuccessfulTargets is the recent committed effect group; currentSelection is explicit selected objects; byScene uses an explicitly requested canonical scene. filteredSet intersects effect/property/scene with base=recentSuccessfulTargets or currentSelection; project is the default only for explicit project filters. Current state is queried deterministically after interpretation. Failed proposals are not committed actions. Do not broaden scope on ambiguity; retain an unsupported requirement. expressionAction=remove removes existing expressions; update preserves IDs and all unspecified values. relativeIntensity selects slightlyWeaker/weaker/muchWeaker/slightlyStronger/stronger/muchStronger, or amplitudeFactor for an explicit numeric ratio. Timing edits use effectOperation={storage:"animation",action:"updateTiming"}; use temporalReference for a READ-ONLY existing anchor, endpoint start/end, with signed delayFrames. No fake edit for the anchor. Empty techniques only for a timing edit where one actual track can be determined. startFrame is an explicit absolute project frame. Do not compute end frames, deterministic resolver queries authoritative state. No new effects/geometry/full project regeneration. Unrelated edits and natural-language Undo are unsupported by this compact contract.`;
 
 // Lifecycle and scope contracts are shared by every provider.

@@ -268,6 +268,8 @@ export function inspectSemanticCoverage(
     ];
     const techs = explicitTechniques(text),
       inherit = inheritance.test(text);
+    const staticLifetime = /статич|неподвиж|motionless|\bstatic\b|\bkeep\s+still\b/iu.test(text) &&
+      /(?:весь|всё|все|цел(?:ый|ое)|whole|entire).{0,30}(?:ролик|видос|видео|video|project)|(?:throughout|на\s+вс[её]м\s+протяжении)/iu.test(text);
     const readTargets = new Set(
       plan.requirements
         .filter((r) => r.timing.reference)
@@ -314,13 +316,17 @@ export function inspectSemanticCoverage(
           (!sceneId || r.sceneId === sceneId) &&
           r.sourceText.includes(text.trim()),
       );
-    if (ids.length && !techs.length && !inherit && !sequential.test(text)) {
+    if (ids.length && !techs.length && !inherit && !sequential.test(text) && !staticLifetime) {
       pendingIds = [...new Set([...pendingIds, ...ids])];
       activeIds = ids;
       continue;
     }
-    if (!ids.length && !techs.length && !inherit && !sequential.test(text))
+    if (!ids.length && !techs.length && !inherit && !sequential.test(text) && !staticLifetime)
       continue;
+    if (staticLifetime)
+      for (const id of targetIds)
+        if (!rs.some(r=>coversTarget(r,id)&&r.motionAction === "freezeProject"&&!r.unresolvedReason))
+          issue("MISSING_STATIC_LIFETIME_REQUIREMENT",text,rs.filter(r=>coversTarget(r,id)),{target:id,motionAction:"freezeProject"});
     if (techs.length && targetIds.length)
       for (const id of targetIds) {
         if (

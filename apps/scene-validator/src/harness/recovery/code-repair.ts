@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, writeFile, copyFile, lstat, realpath } from "node:fs/promises";
 import { z } from "zod";
+import { createRequire } from "node:module";
 import { noSymlinkPath, relativePath, within, atomicJson } from "../../files.js";
 import { redactSecrets } from "../security.js";
 import type { RecoveryFailure } from "./failure.js";
@@ -19,7 +20,7 @@ const fileChange = z.union([
 ]);
 export const codeProposalSchema = z.object({ rootCause: z.string().min(1).max(3000), changes: z.array(fileChange).min(1).max(6), regressionTests: z.array(z.string().max(250)).min(1).max(3), risks: z.array(z.string().max(1000)).max(10) }).strict();
 export type CodeProposal = z.infer<typeof codeProposalSchema>;
-const sourceAllowed = (p: string) => /^apps\/scene-validator\/src\/motion\/(?:intent\/(?:compiler|execution|retime)|tools|operations|contextual-resolution|base-motion|transitions|validate-expressions)\.ts$/.test(p);
+const sourceAllowed = (p: string) => /^apps\/scene-validator\/src\/(?:motion\/(?:intent\/(?:compiler|execution|retime)|provider|tools|operations|contextual-resolution|base-motion|transitions|validate-expressions)|harness\/providers\/(?:schema|types|codex))\.ts$/.test(p);
 const testAllowed = (p: string) => /^apps\/scene-validator\/tests\/[a-z0-9-]+\.test\.ts$/.test(p);
 export type CodeRepairWorkspace = {
     id: string;
@@ -31,6 +32,46 @@ export type CodeRepairWorkspace = {
         content: string;
     }[];
 };
+export function scopedCodeProposalSchema(workspace: CodeRepairWorkspace) {
+    const regressionPath = `apps/scene-validator/tests/code-repair-${workspace.id}.test.ts`;
+    const paths = z.enum([regressionPath,...workspace.files.map(f=>f.path)] as [string,...string[]]);
+    return {regressionPath,schema:codeProposalSchema.extend({
+        changes:z.array(z.union([fileChange.options[0].extend({path:paths}),fileChange.options[1].extend({path:paths})])).min(1).max(6),
+        regressionTests:z.array(z.literal(regressionPath)).min(1).max(1),
+    })};
+}
+/** Narrow deterministic correction of NEW-test metadata, never of assertions or
+ * source edits. Existing files and source write boundaries are unchanged. */
+export function normalizeCodeProposal(workspace: CodeRepairWorkspace, input: unknown) {
+    const proposal = codeProposalSchema.parse(input), relocations: {from:string;to:string}[] = [];
+    const changes = proposal.changes.map(change => {
+        if (workspace.files.some(f => f.path === change.path) || testAllowed(change.path)) return change;
+        if (!/^apps\/scene-validator\/src\/[a-zA-Z0-9/_-]+\.test\.ts$/.test(change.path) || change.beforeHash !== hash("") || !("content" in change)) throw new Error("CODE_REPAIR_WRITE_SCOPE");
+        const destination = `apps/scene-validator/tests/code-repair-${workspace.id}-${relocations.length}.test.ts`;
+        // TypeScript's parser is needed only for this rare quarantined repair,
+        // never on an ordinary prompt/render or a correctly scoped proposal.
+        const ts: typeof import("typescript") = createRequire(import.meta.url)("typescript");
+        const source = ts.createSourceFile(change.path, change.content, ts.ScriptTarget.Latest, true);
+        const replacements: {start:number;end:number;text:string}[] = [];
+        for (const statement of source.statements) {
+            if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+            const specifier = statement.moduleSpecifier.text;
+            if (!specifier.startsWith(".")) continue;
+            const target = path.posix.normalize(path.posix.join(path.posix.dirname(change.path), specifier));
+            if (!workspace.files.some(f => f.path === target || f.path === target.replace(/\.js$/, ".ts"))) throw new Error("CODE_REPAIR_TEST_IMPORT_SCOPE");
+            let replacement = path.posix.relative(path.posix.dirname(destination), target);
+            if (!replacement.startsWith(".")) replacement = "./" + replacement;
+            replacements.push({start:statement.moduleSpecifier.getStart(source),end:statement.moduleSpecifier.end,text:JSON.stringify(replacement)});
+        }
+        let content = change.content;
+        for (const edit of replacements.sort((a,b)=>b.start-a.start)) content = content.slice(0,edit.start)+edit.text+content.slice(edit.end);
+        relocations.push({from:change.path,to:destination});
+        return {...change,path:destination,content};
+    });
+    const newTests = changes.filter(c => testAllowed(c.path) && c.beforeHash === hash("")).map(c => c.path);
+    const regressionTests = newTests.length ? newTests : proposal.regressionTests;
+    return {proposal:{...proposal,changes,regressionTests},relocations};
+}
 /** Only tracked source/config/test files. No user project, media, logs, secrets or Git auth. */
 export async function isolateCodeRepair(repository: string, failure: RecoveryFailure, requestedFiles: string[]): Promise<CodeRepairWorkspace> {
     if (!failure.codeRepairEligible)

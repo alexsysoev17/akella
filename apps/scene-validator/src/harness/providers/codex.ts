@@ -1,4 +1,5 @@
 import { redactSecrets, redact } from "../security.js";
+import { validateProviderSchema } from "./schema.js";
 import { Codex } from "@openai/codex-sdk";
 import { promisify } from "node:util";
 import { execFile } from "node:child_process";
@@ -78,6 +79,7 @@ export class CodexAdapter implements ProviderAdapter {
     }
   }
   async generate(req: ProviderRequest): Promise<ProviderResponse> {
+    validateProviderSchema(req.responseSchema);
     if (req.tools?.length)
       throw new ProviderError(
         "UNSUPPORTED_CAPABILITY",
@@ -231,10 +233,11 @@ export class CodexAdapter implements ProviderAdapter {
       if (req.signal?.aborted)
         throw new ProviderError("CANCELLED", "Run cancelled");
       if (signal.aborted)
-        throw new ProviderError("TIMEOUT", "Provider time budget exceeded");
+        throw new ProviderError("PROVIDER_TIMEOUT", "Provider time budget exceeded");
       if (e instanceof ProviderError) throw e;
+      const transport = transportErrorCode(e);
       throw new ProviderError(
-        e instanceof SyntaxError ? "INVALID_OUTPUT" : transportErrorCode(e),
+        e instanceof SyntaxError ? "INVALID_OUTPUT" : transport === "TRANSPORT" ? "PROVIDER_TRANSPORT_ERROR" : transport === "AUTH_REQUIRED" ? "PROVIDER_AUTH_FAILED" : transport === "TIMEOUT" ? "PROVIDER_TIMEOUT" : transport,
         String(e),
       );
     }
