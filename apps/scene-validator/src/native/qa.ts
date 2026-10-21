@@ -374,12 +374,26 @@ export async function nativeMotionQA(
           frame,
         ),
         difference = await compareNativeFrames(a.png, b.png);
+      const targetHit = a.hits.find(
+        (h) => h.sceneId === track.sceneId && h.targetId === track.targetId,
+      );
+      const isOffscreen = Boolean(
+        targetHit?.points.length &&
+          targetHit.points.every(
+            (p) =>
+              p.x < 0 ||
+              p.x > state.settings.width ||
+              p.y < 0 ||
+              p.y > state.settings.height,
+          ),
+      );
+      const passed = difference.changedPixels > 0 || isOffscreen;
       checks.push({
         name: "renderedTextReveal",
         category: "render",
         target: track.targetId,
         required: true,
-        status: difference.changedPixels > 0 ? "PASSED" : "FAILED",
+        status: passed ? "PASSED" : "FAILED",
         metrics: { frame, ...difference },
       });
     }

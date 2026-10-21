@@ -45,9 +45,9 @@ const wave = z
   .object({
     property: z.enum(["x", "y", "rotation"]),
     amplitude: numeric(20),
-    cycles: z.number().min(0.01).max(100).default(2),
+    cycles: z.number().min(0.001).max(10000).default(2),
     phase: numeric(0),
-    damping: z.number().min(0).max(30).default(4),
+    damping: z.number().min(0).max(10000).default(4),
   })
   .strict();
 export const keyframeSchema = z
@@ -89,8 +89,8 @@ export const animationSchema = z.discriminatedUnion("effect", [
       effect: z.literal("scaleIn"),
       parameters: z
         .object({
-          from: z.number().min(0.001).max(100).default(0.5),
-          to: z.number().min(0.001).max(100).default(1),
+          from: z.number().min(0.00001).max(100000).default(0.5),
+          to: z.number().min(0.00001).max(100000).default(1),
         })
         .strict(),
     })
@@ -101,8 +101,8 @@ export const animationSchema = z.discriminatedUnion("effect", [
       effect: z.literal("scaleOut"),
       parameters: z
         .object({
-          from: z.number().min(0.001).max(100).default(1),
-          to: z.number().min(0.001).max(100).default(0.001),
+          from: z.number().min(0.00001).max(100000).default(1),
+          to: z.number().min(0.00001).max(100000).default(0.001),
         })
         .strict(),
     })
@@ -211,9 +211,9 @@ export const objectTransitionSchema = z
         z
           .object({
             type: z.literal("dampedOscillation"),
-            amplitude: z.number().min(0).max(0.5),
-            cycles: z.number().min(0.1).max(10),
-            damping: z.number().min(0).max(20),
+            amplitude: z.number().min(0).max(100000),
+            cycles: z.number().min(0.001).max(10000),
+            damping: z.number().min(0).max(10000),
           })
           .strict(),
       )
@@ -354,6 +354,12 @@ export const operationSchema = z.discriminatedUnion("type", [
       type: z.literal("shiftAnimation"),
       ...animRef,
       deltaFrames: z.number().int().min(-108000).max(108000),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("shiftProjectOrigin"),
+      deltaFrames: z.number().int().min(1).max(108000),
     })
     .strict(),
   z

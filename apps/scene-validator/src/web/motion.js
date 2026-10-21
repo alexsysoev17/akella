@@ -551,6 +551,23 @@ export async function mountMotion(
       timelineObserver.disconnect();
       previousStop();
     };
+    if (data.activeJob?.id) {
+      activeJobId = data.activeJob.id;
+      busy = true;
+      $("m-ai").disabled = true;
+      $("m-generate").disabled = true;
+      $("m-cancel").hidden = false;
+      $("m-job").textContent = "Восстанавливаем подключение к выполняющемуся заданию…";
+      pollJob(data.activeJob.id)
+        .then(showExecution)
+        .catch(error)
+        .finally(() => {
+          busy = false;
+          $("m-ai").disabled = false;
+          $("m-generate").disabled = false;
+          $("m-cancel").hidden = true;
+        });
+    }
     $("m-debug-load").onclick = guarded(async () => {
       const diagnostics = await api("diagnostics");
       $("m-debug").textContent = JSON.stringify(diagnostics, null, 2);

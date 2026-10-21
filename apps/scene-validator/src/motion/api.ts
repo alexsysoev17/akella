@@ -110,7 +110,23 @@ export async function motionApi(
     }
 
     if (!action) {
-      json(await projectMotion(project));
+      const activeJob = (() => {
+        for (const [id, job] of jobs) {
+          if (
+            job.projectId === project.config.projectId &&
+            job.status === "running"
+          ) {
+            return {
+              id,
+              stage: job.stage,
+              progress: job.progress,
+              total: job.total,
+            };
+          }
+        }
+        return null;
+      })();
+      json({ ...(await projectMotion(project)), activeJob });
       return true;
     }
     if (action === "inspector") {

@@ -146,27 +146,27 @@ export const intentRequirementSchema = z
         fromSceneId: z.string().nullable().default(null),
         toSceneId: z.string().nullable().default(null),
         moveToCenter: z.boolean().nullable().default(null),
-        x: z.number().finite().min(-10000).max(10000).nullable().default(null),
-        y: z.number().finite().min(-10000).max(10000).nullable().default(null),
-        scaleFrom: z.number().positive().max(100).nullable().default(null),
-        scaleTo: z.number().positive().max(100).nullable().default(null),
+        x: z.number().finite().min(-100000).max(100000).nullable().default(null),
+        y: z.number().finite().min(-100000).max(100000).nullable().default(null),
+        scaleFrom: z.number().positive().max(100000).nullable().default(null),
+        scaleTo: z.number().positive().max(100000).nullable().default(null),
         durationSeconds: z.number().positive().max(3600).nullable(),
-        distance: z.number().positive().max(10000).nullable(),
+        distance: z.number().positive().max(100000).nullable(),
         direction: z
           .enum(["forward", "reverse", "leftToRight", "rightToLeft"])
           .nullable(),
-        amplitude: z.number().min(0).max(10000).nullable(),
+        amplitude: z.number().min(0).nullable(),
         intensity: z
           .enum(["subtle", "normal", "strong", "veryStrong"])
           .nullable()
           .default(null),
-        frequencyFactor: z.number().positive().max(10).nullable().default(null),
-        frequency: z.number().min(0.01).max(30).nullable(),
-        decay: z.number().min(0).max(30).nullable(),
-        decayFactor: z.number().min(0.01).max(10).nullable().optional(),
+        frequencyFactor: z.number().positive().max(10000).nullable().default(null),
+        frequency: z.number().min(0.001).max(10000).nullable(),
+        decay: z.number().min(0).max(10000).nullable(),
+        decayFactor: z.number().min(0.0001).max(10000).nullable().optional(),
         easing: easingSchema.nullable(),
-        durationFactor: z.number().positive().max(10).nullable(),
-        amplitudeFactor: z.number().min(0).max(10).nullable(),
+        durationFactor: z.number().positive().max(10000).nullable(),
+        amplitudeFactor: z.number().min(0).max(10000).nullable(),
         relativeIntensity: z
           .enum([
             "slightlyWeaker",

@@ -568,7 +568,28 @@ export class NativeRenderer {
       }
     };
     const frozenMembers = new Set((state.staticObjects ?? []).flatMap(o => [...staticObjectMembers(this.project, o.logicalObjectId).members]));
-    let drawingStatic = false, currentStaticRoot: string | null = null;
+    let drawingStatic = false, currentStaticRoot: string | null = null, onlyActive = false;
+    const nodeActive = (sceneId: string, nodeId: string): boolean => {
+      return state.animations.some(
+        (a) =>
+          a.enabled &&
+          a.sceneId === sceneId &&
+          a.targetId === nodeId &&
+          frame >= a.startFrame &&
+          frame < a.startFrame + a.durationFrames,
+      ) || (state.expressions ?? []).some(
+        (e) =>
+          e.enabled &&
+          e.sceneId === sceneId &&
+          e.targetId === nodeId &&
+          frame >= e.startFrame &&
+          frame < e.startFrame + e.durationFrames,
+      );
+    };
+    const subtreeActive = (node: NativeNode, sceneId: string): boolean => {
+      if (nodeActive(sceneId, node.figmaNodeId)) return true;
+      return (node.children ?? []).some((c) => subtreeActive(c as NativeNode, sceneId));
+    };
     const drawNode = (
       n: NativeNode,
       parent: Matrix,
@@ -576,6 +597,7 @@ export class NativeRenderer {
       sceneId: string,
       maskOnly = false,
     ) => {
+      if (onlyActive && !subtreeActive(n, sceneId)) return;
       const p = n.properties ?? {},
         key = JSON.stringify([sceneId, n.figmaNodeId]),
         visible =
@@ -1262,7 +1284,25 @@ export class NativeRenderer {
         (a, b) => a.startFrame - b.startFrame,
       )) {
         const opacity = blocks[block.blockId] ?? 0;
-        if (opacity <= 0) continue;
+        const hasActiveMotion =
+          opacity <= 0 &&
+          (state.animations.some(
+            (a) =>
+              a.enabled &&
+              a.sceneId === block.sceneId &&
+              frame >= a.startFrame &&
+              frame < a.startFrame + a.durationFrames,
+          ) ||
+            (state.expressions ?? []).some(
+              (e) =>
+                e.enabled &&
+                e.sceneId === block.sceneId &&
+                frame >= e.startFrame &&
+                frame < e.startFrame + e.durationFrames,
+            ));
+        if (opacity <= 0 && !hasActiveMotion) continue;
+        onlyActive = opacity <= 0;
+        const effectiveOpacity = opacity > 0 ? opacity : 1;
         const scene = this.project.inspection.document.scenes.find(
           (s) => s.sceneId === block.sceneId,
         )!;
@@ -1274,10 +1314,11 @@ export class NativeRenderer {
           k.ClipOp.Intersect,
           true,
         );
-        layer(opacity, () =>
+        layer(effectiveOpacity, () =>
           drawNode(scene as unknown as NativeNode, unit, fit, scene.sceneId),
         );
         canvas.restore();
+        onlyActive = false;
       }
       // Persistent objects have one immutable source presentation across every
       // scene. Original instances are suppressed above, including transitions.

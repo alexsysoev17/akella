@@ -4,13 +4,13 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-21 (Europe/Moscow) — two-level Recovery contract, persistent static presentation and existing-motion editing; targeted update, not a full audit |
+| Last Updated | 2026-10-21 (Europe/Moscow) — autonomous motion recovery, global timeline & parameter constraint relaxation; targeted update, not a full audit |
 | Last Full Audit | 2026-10-13; unchanged, this update is not a full renderer/provider audit |
-| Git Commit | Baseline `12b6ab9`; clean local checkpoint `0f66e42` before this task. Current Recovery/editing changes are uncommitted at this documentation snapshot. |
+| Git Commit | Baseline `e5cddb3`. Current changes uncommitted at this documentation snapshot. |
 | Git Branch | `main`, local only |
-| Working Tree Status | Recovery/editing source/config/tests/docs uncommitted at this snapshot. Original user projects unchanged. Real test33 checked in an isolated copy; live tests use synthetic project data or explicitly authorized source-only copies. |
-| Documentation Version | 1.0.30 |
-| Scope of Last Update | Object-root strict schemas, reversible dictionary wire encoding, failure taxonomy/escalation, bounded code-patch preparation, static-object lifecycle, relative timing/anchor roles, effect edits, Inspector and live qualification evidence. |
+| Working Tree Status | Global timeline, parameter bounds relaxation, offscreen QA, Level 1/2 recovery, reload/lock/corruption resilience source/config/tests/docs uncommitted at this snapshot. Original user projects unchanged. |
+| Documentation Version | 1.0.31 |
+| Scope of Last Update | Global timeline authorization across scene boundaries, shiftProjectOrigin for negative start frames, parameter limit removal across schemas/easings/expressions, offscreen motion QA relaxation, Level 1 deterministic recovery execution, Level 2 sandboxed defect reproduction and human-gated proposals, stale lock reclamation & corruption fallback. |
 | Code snapshot SHA-256 | NOT RECALCULATED; refer to component digests and final source commit. |
 
 Git 2.54.0 (Apple Git-157): локальная история на main, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
@@ -1759,3 +1759,55 @@ Final typed Level1 qualification: run e557a4ee-5acd-4e3b-a269-d3042e389b87 on a 
 Verification at this update: full check passed254/254base/compat +2/2browser +43/43native, TypeScript and build. Subsequent focused checks passed8/8 temporal/native-recovery/core-editing tests and5/5 schema/code-repair/static contracts. The old ambiguous-anchor fixture was changed from synchronized Slide+Fade (now explicitly a supported compound entrance) to independent movement intervals; genuine ambiguity checks remain. The final full check after these last role/schema changes is recorded at completion below. No renderer tolerances were changed.
 
 Completion verification (2026-10-21): final full `npm run check` PASSED **255/255 base/compat +2/2 browser +43/43 native**, TypeScript and production build. Additional post-check lazy TypeScript loading in the quarantined new-test relocation path passed4/4 focused code-repair/static contracts; final TypeScript/build were repeated. Coverage now explicitly rejects a one-track deletion when an authoritative whole-video static requirement lacks freezeProject. motionDiff includes staticObjects and timingDependencies. Durable local evidence: `data/harness/reports/two-level-qualification-2026-10-21/qualification-summary.json` and `full-check.log` (ignored runtime artifacts, not source history).
+
+## Autonomous Motion Recovery, Global Timeline and Parameter Constraints — 2026-10-21 (v1.0.31)
+
+### Foundational Global Timeline & Scene Semantics
+Scenes are organizational containers and navigational anchors, not temporal execution sandboxes.
+- Authoritative global animation timeline: animations, effects, transitions, and expressions operate in project-global time. Scene boundaries no longer prohibit animation execution before, across, or after nominal scene intervals.
+- `apps/scene-validator/src/motion/intent/compiler.ts`: Deleted artificial scene constraint check (`Requested action outside its scene`) and default entrance duration shortening. Added relative retiming calculation against existing animation start frame.
+- When an animation is retimed or shifted before frame 0 (`start < 0`), `shiftProjectOrigin` is prepended to the task operations. `shiftProjectOrigin` in `apps/scene-validator/src/motion/operations.ts` shifts project settings duration, blocks, animation start frames, transitions, and expressions uniformly, preserving relative timing and project consistency without silent clamping or truncation.
+- `apps/scene-validator/src/motion/intent/execution.ts`: Updated `assertIntentScope` to adjust expected scope coordinates by origin shift deltas. Added retiming detection to accept `delaySeconds !== 0` or `offsetFrames != null`.
+- `apps/scene-validator/src/native/renderer.ts`: Render nodes with active animations or expressions across scene transitions even when nominal scene block opacity is `<= 0`, while skipping non-animated parent container fills.
+
+### Removal of Artificial Parameter Constraints
+Arbitrary artistic ceilings across schemas, easings, expressions, and QA have been eliminated:
+- `apps/scene-validator/src/motion-library/expressions/registry.ts`: Expanded parameter bounds: `amplitude: finite(0, 100000)`, `frequency: finite(0.001, 10000)`, `decay: finite(0, 10000)`, `velocityLookbackFrames: finite(0.01, 1000)`. Extreme amplitudes (e.g., tenfold inertia amplitude 5.0 from historical run `59694185-cae3-4d1e-af88-6174ecebacce`) execute successfully without `INVALID_EFFECT_PARAMETER`.
+- `apps/scene-validator/src/motion/schema.ts` & `src/motion/intent/schema.ts`: Expanded bounds for `wave` (cycles <= 10000, damping <= 10000), `scaleIn`/`scaleOut` (endpoints <= 100000), `objectTransitionSchema` (amplitude <= 100000, cycles/damping <= 10000), and task parameters for `x`, `y`, `distance`, `scaleFrom`, `scaleTo`, `amplitude`, `frequency`, `decay`, `frequencyFactor`, `amplitudeFactor`, `durationFactor`.
+- `apps/scene-validator/src/motion-library/easings/registry.ts`: Expanded curve parameters: `bezierParameters` (y1/y2 to 1000), `springParameters` (stiffness/damping/mass to 100000), `elasticParameters` (amplitude to 100000, freq/decay to 10000), `backParameters` (overshoot to 10000), `piecewiseParameters` (value/slope to 100000).
+
+### Offscreen and Partially Offscreen Motion QA
+- `apps/scene-validator/src/native/qa.ts`: Visual QA checks (such as `renderedTextReveal`) now verify whether the target is legitimately outside the visible viewport (`isOffscreen`). When the object motion deliberately places it offscreen, `difference.changedPixels === 0` is accepted as valid without failing validation.
+
+### Two-Level Recovery Architecture
+- Level 1 (Deterministic/Runtime Project Recovery): In-memory and persistent recovery recipes are inspected and executed deterministically (e.g. `removeAnimation` with dependent cleanup) when known failure signatures occur.
+- Level 2 (Autonomous Sandboxed Defect Reproduction & Human-Gated Code Repair):
+  - Defect reproduction in an isolated quarantine sandbox with restricted environment.
+  - Generates patch proposal with clean test relocation and AST adjustment.
+  - Human Gate strictly enforced: proposals transition to `AWAITING_APPROVAL`. `promoteCodeRepair` throws; automatic patch application into production source is strictly prohibited without explicit human authorization.
+- `apps/scene-validator/src/harness/recovery/failure.ts`: Classified `RECOVERY_PROVIDER_BUDGET`, `RECOVERY_CONTEXT_BUDGET`, and `INVALID_EFFECT_PARAMETER` as `PROBABLE_DEFECT` with `codeRepairEligible = true`.
+- `apps/scene-validator/src/harness/recovery/code-repair.ts`: Expanded `sourceAllowed` paths to encompass compiler, schema, constraints, intervals, effect-edit, service, registry, QA, renderer, and files.
+
+### Persistence, Lock Recovery & Reload Resilience
+- `apps/scene-validator/src/files.ts`: Robust stale lock recovery in `lockProject`: checks dead PID (`ESRCH`), macOS localhost hostname drift, and lock age (`stat` mtimeMs > 30s when no owner, age > 60s when same host, or > 300s).
+- `apps/scene-validator/src/motion/store.ts`: Added corruption fallback in `readMotion` (recovers from `motion.json.bak` or falls back to safe default state with diagnostic if file is corrupted or cursor is invalid). Added automatic backup writes in `changeMotion`.
+- `apps/scene-validator/src/motion/api.ts` & `src/web/motion.js`: Exposed `activeJob` in `projectMotion` and auto-reattachment in web UI on page mount so browser reloads never hang on "Восстанавливаем проект".
+
+### Architecture Change History / Verification Results
+- 13 comprehensive end-to-end tests implemented in `apps/scene-validator/tests/autonomous-motion-recovery.test.ts` verifying all requirements:
+  - Test A: Cross-scene animation start (Scene 1 to Scene 2) — PASSED
+  - Test B: Pre-scene animation start (before nominal scene start) — PASSED
+  - Test C: Post-scene animation persistence (after nominal scene duration) — PASSED
+  - Test D: Multi-scene retiming request (historical failure B: logo +2s, ribbons -2s) — PASSED
+  - Test E: Scene retiming does not hide objects (earlier animation on scene 2 object rendered) — PASSED
+  - Test F: Extreme parameter acceptance (tenfold inertia from Section 2 succeeds without INVALID_EFFECT_PARAMETER) — PASSED
+  - Test G: Offscreen motion (1500px entrance/exit does not fail validation for zero-pixel change) — PASSED
+  - Test H: Level 1 deterministic recovery (verified recipe in memory) — PASSED
+  - Test I: Level 2 autonomous reproduction (reproduces failure in sandbox and generates proposal) — PASSED
+  - Test J: Level 2 human gate (verifies that proposed patch is NOT applied without explicit approval) — PASSED
+  - Test K: Reload resilience (safe state restoration and active job status) — PASSED
+  - Test L: Stale lock recovery (stale lock safely reclaimed after timeout) — PASSED
+  - Test M: Corrupted motion file fallback (malformed JSON does not hang; loads safely with diagnostic) — PASSED
+- Full repository test execution (`node scripts/test.mjs`): **43/43 suites PASSED** (0 failed, 0 skipped), including all native Skia rendering, memory bounds, ownership, FFmpeg export, and compound edit suites.
+- Production UI build (`node scripts/build-ui.mjs`): PASSED, worker runtime and client bundles updated.
+- Full TypeScript verification (`tsc --noEmit -p tsconfig.check.json`): 0 errors.

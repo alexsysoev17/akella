@@ -331,6 +331,11 @@ export function compileRequirement(
     if (r.timing.anchorRequirementId && !anchor)
       throw new Error("Anchor requirement has no persisted base action");
     const fps = state.settings.fps;
+    const existingTargets = requirementAnimations(state, r);
+    const existingBase =
+      r.kind === "editAnimation" || r.effectOperation?.action === "updateTiming"
+        ? existingTargets[0]
+        : undefined;
     let start = r.timing.reference
       ? anchor!.startFrame +
         (r.timing.reference.endpoint === "end" ? anchor!.durationFrames : 0)
@@ -340,7 +345,7 @@ export function compileRequirement(
           ? anchor!.startFrame + anchor!.durationFrames
           : r.timing.relation === "withRequirement"
             ? anchor!.startFrame
-            : block.startFrame;
+            : existingBase?.startFrame ?? block.startFrame;
     start += r.timing.offsetFrames ?? Math.round(r.timing.delaySeconds * fps);
     if (r.parameters.text)
       r.parameters.text = resolveTextSettings(
@@ -473,14 +478,11 @@ export function compileRequirement(
     if (!stateTransition && !(hasInertia && transitionForTarget(project, state, r.sceneId!, r.target.sourceNodeId!))) {
       if (r.timing.relation === "sceneEnd") start = block.startFrame + block.durationFrames - duration;
       if (r.timing.relation === "beforeRequirement") start = anchor!.startFrame - duration + Math.round(r.timing.delaySeconds * fps);
-      if (start < block.startFrame || start >= block.startFrame + block.durationFrames)
-        throw new Error("Requested action outside its scene");
-      const remaining = block.startFrame + block.durationFrames - start;
-      if (remaining < duration + (hasInertia ? 4 : 0)) {
-        if (r.parameters.durationSeconds !== null) throw new Error("Explicit duration does not fit scene");
-        duration = Math.max(1, Math.floor(remaining * (hasInertia ? 0.35 : 0.8)));
-        warnings.push("Default entrance shortened to fit the scene");
-      }
+    }
+    if (start < 0) {
+      const originShift = -start;
+      operations.push({ type: "shiftProjectOrigin", deltaFrames: originShift });
+      start = 0;
     }
     if (stateTransition) {
       const existing = transitionForTarget(project, state, r.sceneId!, r.target.sourceNodeId!);
@@ -553,6 +555,8 @@ export function compileRequirement(
           r.timing.reference ||
           r.timing.anchorRequirementId ||
           r.timing.startSeconds !== null ||
+          r.timing.offsetFrames != null ||
+          r.timing.delaySeconds !== 0 ||
           (r.effectOperation?.action === "updateTiming" && r.timing.relation !== "unchanged")
         ) {
           next.startFrame = start;

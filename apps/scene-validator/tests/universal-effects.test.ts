@@ -147,7 +147,7 @@ test("duration and easing edits preserve expression identity and timing dependen
     assert.deepEqual(eased.expressions, next.expressions);
     assert.equal(eased.animations.find(a => a.animationId === "base")?.easing, "easeInOutCubic");
     assert.deepEqual(eased.animations.find(a => a.animationId === "fade"), original.animations.find(a => a.animationId === "fade"));
-    const invalid = request(["inertialOvershoot"], "Headline инерция слишком сильная"); invalid.kind = "editAnimation"; invalid.parameters.amplitude = 3;
+    const invalid = request(["inertialOvershoot"], "Headline инерция слишком сильная"); invalid.kind = "editAnimation"; invalid.parameters.amplitude = 100001;
     const before = structuredClone(eased);
     assert.throws(() => execute(f, invalid, eased), /INVALID_EFFECT_PARAMETER/);
     assert.deepEqual(eased, before);

@@ -96,6 +96,15 @@ export function assertIntentScope(
   if (plan.timelineExtension !== "fixed" && before.settings.timelineExtensionPolicy !== "fixed" && next.settings.durationFrames > before.settings.durationFrames &&
       next.settings.durationFrames === requiredProjectFrames({ ...next, settings: { ...next.settings, durationFrames: before.settings.durationFrames } }))
     { baseline.settings.durationFrames = next.settings.durationFrames; baseline.settings.tailPolicy = next.settings.tailPolicy; }
+  const originDelta =
+    (next.blocks[0]?.startFrame ?? 0) - (before.blocks[0]?.startFrame ?? 0);
+  if (originDelta > 0) {
+    baseline.settings.durationFrames += originDelta;
+    for (const b of baseline.blocks) b.startFrame += originDelta;
+    for (const a of baseline.animations)
+      if (!allowed(a)) a.startFrame += originDelta;
+    for (const t of baseline.objectTransitions ?? []) t.startFrame += originDelta;
+  }
   baseline.animations = [
     ...before.animations.filter((a) => !allowed(a)),
     ...next.animations.filter(allowed),
@@ -113,6 +122,10 @@ export function assertIntentScope(
     (r.techniques.includes(e.type as (typeof r.techniques)[number]) ||
       ("sourceAnimationId" in e && allowedIds.has(e.sourceAnimationId)))) || Boolean(e.transitionId && transitionIds.has(e.transitionId) &&
       (r.effectOperation?.action !== "remove" || r.dependentPolicy === "removeDependents"));
+  if (originDelta > 0) {
+    for (const e of baseline.expressions ?? [])
+      if (!exprAllowed(e)) e.startFrame += originDelta;
+  }
   baseline.expressions = [
     ...(before.expressions ?? []).filter((e) => !exprAllowed(e)),
     ...(next.expressions ?? []).filter(exprAllowed),
@@ -304,6 +317,8 @@ export function requirementChecks(
         r.timing.reference ||
         r.timing.anchorRequirementId ||
         r.timing.startSeconds !== null ||
+        r.timing.delaySeconds !== 0 ||
+        r.timing.offsetFrames != null ||
         r.effectOperation?.action === "updateTiming"
           ? "PASSED"
           : "FAILED",
@@ -321,6 +336,8 @@ export function requirementChecks(
           (r.timing.reference ||
             r.timing.anchorRequirementId ||
             r.timing.startSeconds !== null ||
+            r.timing.delaySeconds !== 0 ||
+            r.timing.offsetFrames != null ||
             (r.effectOperation?.action === "updateTiming" && r.timing.relation !== "unchanged") ||
             now.startFrame === old.startFrame) &&
           (r.parameters.durationFactor === null ||

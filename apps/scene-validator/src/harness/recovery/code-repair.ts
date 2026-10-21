@@ -20,7 +20,10 @@ const fileChange = z.union([
 ]);
 export const codeProposalSchema = z.object({ rootCause: z.string().min(1).max(3000), changes: z.array(fileChange).min(1).max(6), regressionTests: z.array(z.string().max(250)).min(1).max(3), risks: z.array(z.string().max(1000)).max(10) }).strict();
 export type CodeProposal = z.infer<typeof codeProposalSchema>;
-const sourceAllowed = (p: string) => /^apps\/scene-validator\/src\/(?:motion\/(?:intent\/(?:compiler|execution|retime)|provider|tools|operations|contextual-resolution|base-motion|transitions|validate-expressions)|harness\/providers\/(?:schema|types|codex))\.ts$/.test(p);
+const sourceAllowed = (p: string) =>
+    /^apps\/scene-validator\/src\/(?:motion\/(?:intent\/(?:compiler|execution|retime|planner|schema)|provider|tools|operations|contextual-resolution|base-motion|transitions|validate-expressions|schema|constraints|intervals|effect-edit|service)|motion-library\/(?:expressions\/registry|easings\/registry|techniques\/registry)|harness\/(?:recovery\/(?:failure|memory|runtime)|providers\/(?:schema|types|codex))|native\/(?:qa|renderer)|files)\.ts$/.test(
+        p,
+    );
 const testAllowed = (p: string) => /^apps\/scene-validator\/tests\/[a-z0-9-]+\.test\.ts$/.test(p);
 export type CodeRepairWorkspace = {
     id: string;
@@ -73,13 +76,18 @@ export function normalizeCodeProposal(workspace: CodeRepairWorkspace, input: unk
     return {proposal:{...proposal,changes,regressionTests},relocations};
 }
 /** Only tracked source/config/test files. No user project, media, logs, secrets or Git auth. */
-export async function isolateCodeRepair(repository: string, failure: RecoveryFailure, requestedFiles: string[]): Promise<CodeRepairWorkspace> {
+export async function isolateCodeRepair(
+    repository: string,
+    failure: RecoveryFailure,
+    requestedFiles: string[],
+    options: { allowDirty?: boolean } = {},
+): Promise<CodeRepairWorkspace> {
     if (!failure.codeRepairEligible)
         throw new Error("CODE_REPAIR_EVIDENCE_INSUFFICIENT");
     if (!requestedFiles.length || requestedFiles.length > 5 || requestedFiles.some(p => !sourceAllowed(p)))
         throw new Error("CODE_REPAIR_SOURCE_SCOPE");
     const baseCommit = (await exec("git", ["rev-parse", "HEAD"], { cwd: repository })).stdout.trim();
-    if ((await exec("git", ["status", "--porcelain"], { cwd: repository })).stdout.trim())
+    if (!options.allowDirty && (await exec("git", ["status", "--porcelain"], { cwd: repository })).stdout.trim())
         throw new Error("CODE_REPAIR_REQUIRES_CLEAN_BASELINE");
     const root = await mkdtemp(path.join(await realpath(os.tmpdir()), "akella-code-repair-")), id = randomUUID();
     const tracked = (await exec("git", ["ls-files", "-z"], { cwd: repository, maxBuffer: 2000000 })).stdout.split("\0").filter(Boolean);

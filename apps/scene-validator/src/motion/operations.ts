@@ -388,6 +388,15 @@ export function applyOperations(
       case "shiftAnimation":
         animation!.startFrame += op.deltaFrames;
         break;
+      case "shiftProjectOrigin": {
+        const delta = op.deltaFrames;
+        state.settings.durationFrames += delta;
+        for (const b of state.blocks) b.startFrame += delta;
+        for (const a of state.animations) a.startFrame += delta;
+        for (const t of state.objectTransitions ?? []) t.startFrame += delta;
+        for (const e of state.expressions ?? []) e.startFrame += delta;
+        break;
+      }
       case "setStartFrame":
         animation!.startFrame = op.startFrame;
         break;

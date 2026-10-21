@@ -11,30 +11,30 @@ const standardSchema = z.enum(
 export const bezierParameters = z
   .object({
     x1: finite(0, 1),
-    y1: finite(-10, 10),
+    y1: finite(-1000, 1000),
     x2: finite(0, 1),
-    y2: finite(-10, 10),
+    y2: finite(-1000, 1000),
   })
   .strict();
 export const springParameters = z
   .object({
-    stiffness: finite(1, 1000),
-    damping: finite(0.01, 100),
-    mass: finite(0.1, 10),
+    stiffness: finite(0.001, 100000),
+    damping: finite(0.0001, 100000),
+    mass: finite(0.001, 100000),
   })
   .strict();
 export const elasticParameters = z
   .object({
-    amplitude: finite(0, 5),
-    frequency: finite(0.1, 20),
-    decay: finite(0, 30),
+    amplitude: finite(0, 100000),
+    frequency: finite(0.001, 10000),
+    decay: finite(0, 10000),
   })
   .strict();
-export const backParameters = z.object({ overshoot: finite(0, 10) }).strict();
+export const backParameters = z.object({ overshoot: finite(0, 10000) }).strict();
 export const bounceParameters = z
   .object({
     restitution: finite(0, 1),
-    bounceCount: z.number().int().min(1).max(12),
+    bounceCount: z.number().int().min(1).max(100),
   })
   .strict();
 export const piecewiseParameters = z
@@ -45,8 +45,8 @@ export const piecewiseParameters = z
         z
           .object({
             t: finite(0, 1),
-            value: finite(-10, 10),
-            slope: finite(-100, 100).nullable().optional(),
+            value: finite(-100000, 100000),
+            slope: finite(-100000, 100000).nullable().optional(),
           })
           .strict(),
       )

@@ -21,9 +21,9 @@ const common = {
   durationFrames: z.number().int().min(1).max(108000),
   enabled: z.boolean(),
 };
-const amplitude = finite(0, 10000),
-  frequency = finite(0.01, 30),
-  decay = finite(0, 30);
+const amplitude = finite(0, 100000),
+  frequency = finite(0.001, 10000),
+  decay = finite(0, 10000);
 export const expressionSchema = z.discriminatedUnion("type", [
   z
     .object({
@@ -53,10 +53,10 @@ export const expressionSchema = z.discriminatedUnion("type", [
       sourceAnimationId: id,
       parameters: z
         .object({
-          amplitude: finite(0, 2),
+          amplitude,
           frequency,
           decay,
-          velocityLookbackFrames: finite(0.01, 30).default(6),
+          velocityLookbackFrames: finite(0.01, 1000).default(6),
           mode: z.enum(["legacy", "ae"]).optional(),
           settlingEnvelope: z.literal("smoothTail").optional(),
           incomingImpulse: finite(-100000, 100000).nullable().optional(),
@@ -86,7 +86,7 @@ export const expressionSchema = z.discriminatedUnion("type", [
       parameters: z
         .object({
           mode: z.enum(["cycle", "pingPong"]),
-          amplitude: finite(0, 10),
+          amplitude,
         })
         .strict(),
     })

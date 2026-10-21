@@ -64,11 +64,54 @@ export async function readMotion(
       cursor: 0,
       history: [],
     };
-  await noSymlinkPath(project.root, file);
-  const doc = documentSchema.parse(JSON.parse(await readFile(file, "utf8")));
-  if (doc.cursor > doc.history.length)
-    throw new Error("Повреждён курсор истории motion");
-  doc.sourceDiagnostics = [];
+  let doc: MotionDocument;
+  let recoveredFromCorruption = false;
+  try {
+    await noSymlinkPath(project.root, file);
+    const parsed = documentSchema.parse(JSON.parse(await readFile(file, "utf8")));
+    if (parsed.cursor > parsed.history.length) {
+      parsed.cursor = parsed.history.length;
+      parsed.sourceDiagnostics = [
+        "Повреждённый курсор истории motion был сброшен на последний коммит.",
+      ];
+    }
+    doc = parsed;
+  } catch {
+    const bakFile = path.join(project.root, "motion/motion.json.bak");
+    if (await exists(bakFile)) {
+      try {
+        await noSymlinkPath(project.root, bakFile);
+        doc = documentSchema.parse(JSON.parse(await readFile(bakFile, "utf8")));
+        recoveredFromCorruption = true;
+      } catch {
+        doc = {
+          documentVersion: "1.0.0",
+          revision: "initial",
+          sourceFingerprint: project.inspection.fingerprint,
+          state: defaultMotion(project),
+          cursor: 0,
+          history: [],
+        };
+        recoveredFromCorruption = true;
+      }
+    } else {
+      doc = {
+        documentVersion: "1.0.0",
+        revision: "initial",
+        sourceFingerprint: project.inspection.fingerprint,
+        state: defaultMotion(project),
+        cursor: 0,
+        history: [],
+      };
+      recoveredFromCorruption = true;
+    }
+  }
+  doc.sourceDiagnostics ??= [];
+  if (recoveredFromCorruption) {
+    doc.sourceDiagnostics.push(
+      "Файл motion.json был повреждён или имел неверный формат. Загружен безопасный снимок состояния.",
+    );
+  }
   try {
     validateMotion(doc.state, project);
   } catch (error) {
@@ -199,6 +242,9 @@ export async function changeMotion(
       await atomicJson(path.join(project.root, "motion/motion.json"), doc, {
         durable: true,
       });
+      await atomicJson(path.join(project.root, "motion/motion.json.bak"), doc, {
+        durable: false,
+      }).catch(() => {});
     } catch (error) {
       // A directory-sync failure after rename is not an uncommitted transaction.
       const persisted = documentSchema.parse(
