@@ -12,7 +12,7 @@ export function attachInspector(container, url) {
   panel.className = "agent-inspector";
   panel.hidden = true;
   panel.setAttribute("aria-label", "Agent Inspector");
-  panel.innerHTML = `<div class="inspector-resize" role="separator" aria-label="Ширина Inspector" tabindex="0"></div><header><strong>Agent Inspector</strong><button data-close aria-label="Закрыть">×</button></header><select aria-label="История запусков"></select><div class="inspector-tabs" role="tablist">${["Обзор", "Понимание", "Действия", "QA", "Данные"].map((t, i) => `<button role="tab" data-tab="${i}">${t}</button>`).join("")}</div><div class="inspector-body"></div><footer><button data-copy>Скопировать отчёт</button><button data-zip>Скачать ZIP</button><button data-project-zip>Диагностика проекта</button><span role="status"></span></footer>`;
+  panel.innerHTML = `<div class="inspector-resize" role="separator" aria-label="Ширина Inspector" tabindex="0"></div><header><strong>Agent Inspector</strong><button data-close aria-label="Закрыть">Закрыть</button></header><select aria-label="История запусков"></select><div class="inspector-tabs" role="tablist">${["Обзор", "Понимание", "Действия", "QA", "Данные"].map((t, i) => `<button role="tab" data-tab="${i}">${t}</button>`).join("")}</div><div class="inspector-body"></div><footer><button data-copy>Скопировать отчёт</button><button data-zip>Скачать ZIP</button><button data-project-zip>Диагностика проекта</button><span role="status"></span></footer>`;
   container.append(panel);
   const select = panel.querySelector("select"),
     body = panel.querySelector(".inspector-body"),
@@ -37,8 +37,8 @@ export function attachInspector(container, url) {
     const id = String(++valueId);
     values.set(id, value);
     if (value && typeof value === "object")
-      return `<details data-value="${id}"><summary>${esc(key)} <small>${Array.isArray(value) ? value.length + " элементов" : Object.keys(value).length + " полей"}</small><button data-copy-value="${id}" title="Копировать значение">⧉</button></summary><div data-children></div></details>`;
-    return `<div class="inspector-value"><span>${esc(key)}</span>: <code>${esc(value)}</code><button data-copy-value="${id}" title="Копировать значение">⧉</button></div>`;
+      return `<details data-value="${id}"><summary>${esc(key)} <small>${Array.isArray(value) ? value.length + " элементов" : Object.keys(value).length + " полей"}</small><button data-copy-value="${id}" title="Копировать значение">Копировать</button></summary><div data-children></div></details>`;
+    return `<div class="inspector-value"><span>${esc(key)}</span>: <code>${esc(value)}</code><button data-copy-value="${id}" title="Копировать значение">Копировать</button></div>`;
   }
   body.addEventListener(
     "toggle",

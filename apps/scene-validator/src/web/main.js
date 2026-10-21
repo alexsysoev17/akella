@@ -2,6 +2,8 @@ import { mountMotion, unmountMotion } from "/motion.js";
 const $ = (id) => document.getElementById(id),
   app = $("app");
 let current, token, updateId;
+let welcomeStarted = false;
+let routeVersion = 0;
 const escape = (s) =>
   String(s ?? "").replace(
     /[&<>"']/g,
@@ -100,33 +102,49 @@ $("commit").onclick = async () => {
     $("commit").disabled = false;
   }
 };
+function renderWelcome(projects = [], showProjects = false) {
+  document.body.dataset.page = "welcome";
+  app.innerHTML = `<section class="welcome" aria-label="Добро пожаловать в AKELLA">
+    <div class="welcome-brand">
+      <img class="welcome-photo" src="/brand/akella_photo.png" alt="Волки" fetchpriority="high">
+      <img class="welcome-logo" src="/brand/akella.svg" alt="AKELLA">
+      <svg class="welcome-tagline" viewBox="0 0 789 60" role="img" aria-label="Software that creates"><text x="0" y="49" textLength="789" lengthAdjust="spacingAndGlyphs">SOFTWARE THAT CREATES</text></svg>
+    </div>
+    <div class="welcome-panel">
+      <h1 class="welcome-title"><span>Welcome to</span><img src="/brand/akella.svg" alt="AKELLA"></h1>
+      <div class="welcome-actions">${showProjects ? `<button id="new">Новый проект</button><button id="open-project" aria-controls="project-list">Открыть проект</button>
+      <nav id="project-list" class="welcome-projects" aria-label="Проекты">${projects.map(p => `<a href="#project/${encodeURIComponent(p.projectId)}">${escape(p.name)}</a>`).join("") || '<p>Пока нет проектов</p>'}</nav>` : '<button id="start">Старт</button>'}</div>
+    </div></section>`;
+  if (showProjects) {
+    $("new").onclick = () => openImport();
+    $("open-project").onclick = () => {
+      const first = $("project-list").querySelector("a");
+      if (first) { first.focus(); first.scrollIntoView({block:"nearest"}); }
+      else openImport();
+    };
+  } else $("start").onclick = () => { welcomeStarted = true; void route(); };
+}
 async function route() {
+  const version = ++routeVersion;
   unmountMotion();
   try {
     const id = location.hash.match(/^#project\/([^/]+)/)?.[1];
     if (!id) {
       current = undefined;
+      if (!welcomeStarted) { renderWelcome(); return; }
       const r = await api("/api/projects");
-      app.innerHTML =
-        '<div class="heading"><h1>Проекты</h1><button id="new">+ НОВЫЙ ПРОЕКТ</button></div><div class="grid">' +
-        r.projects
-          .map(
-            (p) =>
-              `<a class="card" href="#project/${encodeURIComponent(p.projectId)}"><h2>${escape(p.name)}</h2><p>${p.sceneCount} сцен · ${escape(p.resolution)}</p><small>${escape(new Date(p.updatedAt).toLocaleString("ru-RU"))}</small></a>`,
-          )
-          .join("") +
-        "</div>" +
-        (r.projects.length
-          ? ""
-          : "<p>Проектов пока нет. Импортируйте ZIP из Figma.</p>");
-      $("new").onclick = () => openImport();
+      if (version !== routeVersion) return;
+      renderWelcome(r.projects, true);
       if (r.errors.length) message(r.errors.join("\n"));
       return;
     }
+    welcomeStarted = true;
+    document.body.dataset.page = "project";
     current = await api("/api/projects/" + encodeURIComponent(id));
+    if (version !== routeVersion) return;
     renderProject();
   } catch (e) {
-    message(String(e));
+    if (version === routeVersion) message(String(e));
   }
 }
 function renderProject() {

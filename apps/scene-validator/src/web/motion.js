@@ -165,7 +165,7 @@ export async function mountMotion(
   function pause() {
     playing = false;
     cancelAnimationFrame(raf);
-    $("m-play").textContent = "▶ Воспроизвести";
+    $("m-play").textContent = "Воспроизвести";
   }
   function curves() {
     if (!$("m-curves")) return;
@@ -236,15 +236,7 @@ export async function mountMotion(
             depth++;
             parent = byId.get(parent.parentId);
           }
-          const icon =
-            o.type === "TEXT"
-              ? "T"
-              : o.type === "GROUP" || o.type === "FRAME"
-                ? "▧"
-                : o.mask
-                  ? "◐"
-                  : "◇";
-          return `<button class="object ${selected?.targetId === o.targetId && selected?.sceneId === id ? "selected" : ""}" data-target="${esc(o.targetId)}" style="--depth:${Math.min(depth, 5)}" title="${esc(o.name)} · ${esc(o.targetId)} · ${esc(o.logicalObjectId || "")}"><span class="object-icon">${icon}</span><span>${esc(o.name || o.type)}</span>${o.ambiguous ? '<small class="state-count">неоднозначно</small>' : o.stateCount > 1 ? `<small class="state-count">${o.stateCount} состояния</small>` : ""}</button>`;
+          return `<button class="object ${selected?.targetId === o.targetId && selected?.sceneId === id ? "selected" : ""}" data-target="${esc(o.targetId)}" style="--depth:${Math.min(depth, 5)}" title="${esc(o.name)} · ${esc(o.targetId)} · ${esc(o.logicalObjectId || "")}"><span>${esc(o.name || o.type)}</span>${o.ambiguous ? '<small class="state-count">неоднозначно</small>' : o.stateCount > 1 ? `<small class="state-count">${o.stateCount} состояния</small>` : ""}</button>`;
         })
         .join("");
       list.querySelectorAll("[data-target]").forEach(
@@ -281,7 +273,7 @@ export async function mountMotion(
     $("m-history").innerHTML = doc.history
       .map(
         (h, i) =>
-          `<li>${i < doc.cursor ? "✓" : "↶"} ${esc(h.request)} <small>${esc(h.origin)}</small>${[...(h.assumptions ?? []), ...(h.warnings ?? [])].map((note) => `<p class="muted">${esc(note)}</p>`).join("")}</li>`,
+          `<li>${i < doc.cursor ? "Применено:" : "Отменено:"} ${esc(h.request)} <small>${esc(h.origin)}</small>${[...(h.assumptions ?? []), ...(h.warnings ?? [])].map((note) => `<p class="muted">${esc(note)}</p>`).join("")}</li>`,
       )
       .join("");
     if (reload) {
@@ -295,7 +287,7 @@ export async function mountMotion(
   function play() {
     if (playing) return;
     playing = true;
-    $("m-play").textContent = "❚❚ Пауза";
+    $("m-play").textContent = "Пауза";
     if (frame >= data.document.state.settings.durationFrames - 1) seek(0);
     let start = performance.now(),
       initial = frame;
@@ -471,21 +463,21 @@ export async function mountMotion(
     if (!alive) return;
     expandedScene = data.scenes[0]?.sceneId;
     container.innerHTML = `<div class="director">
-      <aside class="scene-sidebar"><a class="project-switch" href="#" title="Все проекты"><span class="project-symbol">◧</span><span>${esc(projectName)}</span><span class="project-chevron">⌄</span></a><div class="sidebar-label">СЦЕНЫ <span>${data.scenes.length}</span></div>
+      <aside class="scene-sidebar"><a class="project-switch" href="#" title="Все проекты"><span>${esc(projectName)}</span></a><div class="sidebar-label">СЦЕНЫ <span>${data.scenes.length}</span></div>
       <select id="m-scenes" hidden aria-hidden="true" tabindex="-1">${data.scenes.map((s) => `<option value="${esc(s.sceneId)}">${esc(s.name)}</option>`).join("")}</select>
-      <div id="m-objects" class="scene-tree">${data.scenes.map((s, i) => `<div class="scene-row" data-scene-row="${esc(s.sceneId)}"><button data-scene-button="${esc(s.sceneId)}" aria-expanded="false" title="${esc(s.name)}"><span class="disclosure">›</span><span class="scene-title">Сцена ${i + 1}</span><span class="scene-name">${esc(s.name)}</span></button><iframe class="scene-thumb" title="Миниатюра сцены ${i + 1}" tabindex="-1" aria-hidden="true" loading="lazy" src="${url}/thumbnail/${encodeURIComponent(s.sceneId)}"></iframe></div><div class="scene-objects" data-scene-objects="${esc(s.sceneId)}" hidden></div>`).join("")}</div>
-      <button id="m-open-settings" class="settings-launch"><span>⚙</span> Настройки</button></aside>
-      <div class="motion-workspace"><div class="viewer-toolbar"><small class="muted">${data.renderer === "browser-compat" ? "Совместимость · браузерный рендер" : "Skia · нативный рендер"}</small><div class="toolbar-actions"><button id="m-undo" class="quiet" title="Отменить" aria-label="Отменить">↶</button><button id="m-redo" class="quiet" title="Повторить" aria-label="Повторить">↷</button><button id="m-render" class="secondary">Экспорт MP4</button></div></div>
+      <div id="m-objects" class="scene-tree">${data.scenes.map((s, i) => `<div class="scene-row" data-scene-row="${esc(s.sceneId)}"><button data-scene-button="${esc(s.sceneId)}" aria-expanded="false" title="${esc(s.name)}"><span class="scene-title">Сцена ${i + 1}</span><span class="scene-name">${esc(s.name)}</span></button><iframe class="scene-thumb" title="Миниатюра сцены ${i + 1}" tabindex="-1" aria-hidden="true" loading="lazy" src="${url}/thumbnail/${encodeURIComponent(s.sceneId)}"></iframe></div><div class="scene-objects" data-scene-objects="${esc(s.sceneId)}" hidden></div>`).join("")}</div>
+      <button id="m-open-settings" class="settings-launch">Настройки</button></aside>
+      <div class="motion-workspace"><div class="viewer-toolbar"><div class="toolbar-actions"><button id="m-render" class="secondary">Экспорт MP4</button></div></div>
       <div class="video-stage"><iframe id="m-preview" title="Покадровый preview анимации"></iframe></div>
-      <div class="transport"><button id="m-play" class="quiet">▶ Воспроизвести</button><div id="m-timeline" role="slider" tabindex="0" aria-label="Позиция на таймлайне" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div><input type="range" min="0" value="0" id="m-scrub" hidden aria-hidden="true" tabindex="-1"><span id="m-time"></span></div>
-      <div class="prompt-composer"><label class="sr-only" for="m-ai">Опишите анимацию</label><textarea id="m-ai" placeholder="Опишите, как должна двигаться сцена…"></textarea><div class="composer-footer"><button id="m-inspector" class="secondary">Inspector</button><button id="m-cancel" hidden>Отменить</button><button id="m-generate">Сделать <span aria-hidden="true">↗</span></button></div></div>
+      <div class="transport"><button id="m-play" class="quiet">Воспроизвести</button><div id="m-timeline" role="slider" tabindex="0" aria-label="Позиция на таймлайне" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div><input type="range" min="0" value="0" id="m-scrub" hidden aria-hidden="true" tabindex="-1"><span id="m-time"></span></div>
+      <div class="prompt-composer"><label class="sr-only" for="m-ai">Опишите анимацию</label><textarea id="m-ai" placeholder="Опишите, как должна двигаться сцена…"></textarea><div class="composer-footer"><button id="m-inspector" class="secondary">Inspector</button><button id="m-cancel" hidden>Отменить</button><button id="m-generate">Сделать</button></div></div>
       <div class="execution-status"><p id="m-job" role="status"></p><p id="m-error" role="alert"></p><div id="m-proposal"></div></div></div>
-      <dialog id="m-settings-dialog" class="motion-settings"><div class="settings-heading"><h2>Настройки проекта</h2><button id="m-close-settings" class="quiet" aria-label="Закрыть настройки">✕</button></div>
+      <dialog id="m-settings-dialog" class="motion-settings"><div class="settings-heading"><h2>Настройки проекта</h2><button id="m-close-settings" class="quiet" aria-label="Закрыть настройки">Закрыть</button></div>
       <label>Тема<select id="m-theme"><option value="dark">Тёмная</option><option value="light">Светлая</option></select></label><h3>Видео</h3><div class="settings"><label>Длительность, с<input id="m-seconds" type="number" min="0.1" step="0.1"></label><label>FPS<input id="m-fps" type="number" min="1" max="60"></label><label>Ширина<input id="m-width" type="number" min="2" max="4096"></label><label>Высота<input id="m-height" type="number" min="2" max="4096"></label></div><button id="m-settings" class="secondary">Сохранить параметры видео</button>
       <div class="settings"><label>Текущий кадр<input id="m-frame" type="number" min="0" value="0"></label><label class="check-label"><input id="m-loop" type="checkbox" checked> Повторять видео</label></div><h3>Выбранный объект</h3><p id="m-selected"></p><label class="check-label"><input id="m-visible" type="checkbox"> Показывать объект</label>
       <details class="curve-inspector"><summary>Кривая движения</summary><label>Анимация<select id="m-curves"></select></label><svg id="m-curve" viewBox="0 0 260 124" role="img" aria-label="Кривая easing: время слева направо, прогресс снизу вверх"></svg><p id="m-curve-label"></p></details><h3>AI-агент</h3><p id="m-provider-status">Проверяем подключение…</p><label>Подключение<select id="m-provider"><option value="" disabled>Выберите подключение</option>${(data.availableProviders ?? ["codex-sdk", "codex-cli"]).map((id) => `<option value="${esc(id)}">${esc(PROVIDER_LABELS[id] ?? id)}</option>`).join("")}<option value="manual-response">Ручной обмен с Codex</option></select></label><label>Модель<input id="m-model" placeholder="По умолчанию провайдера"></label>
       <div id="m-manual" hidden><label>Запрос для Codex<textarea id="m-manual-request" readonly></textarea></label><label>Ответ JSON<textarea id="m-manual-response"></textarea></label><button id="m-read-response">Загрузить ответ</button></div>
-      <details><summary>Диагностика Motion Agent</summary><button id="m-debug-load" class="secondary">Последняя проверка</button><pre id="m-debug" style="white-space:pre-wrap;max-height:400px;overflow:auto"></pre><div id="m-debug-tasks"></div><img id="m-debug-sheet" style="width:100%" hidden alt="Контрольные кадры QA"></details><h3>Диагностика композиции</h3><ul>${(data.diagnostics ?? []).map((d) => `<li>${esc(d)}</li>`).join("") || "<li>Нет замечаний</li>"}</ul><h3>История запросов</h3><ol id="m-history"></ol><h3>Готовые видео</h3><div id="m-videos"></div><h3>Исходный дизайн</h3><button id="update" class="secondary">Обновить из Figma</button></dialog></div>`;
+      <details><summary>Диагностика Motion Agent</summary><button id="m-debug-load" class="secondary">Последняя проверка</button><pre id="m-debug" style="white-space:pre-wrap;max-height:400px;overflow:auto"></pre><div id="m-debug-tasks"></div><img id="m-debug-sheet" style="width:100%" hidden alt="Контрольные кадры QA"></details><h3>Диагностика композиции</h3><ul>${(data.diagnostics ?? []).map((d) => `<li>${esc(d)}</li>`).join("") || "<li>Нет замечаний</li>"}</ul><h3>История запросов</h3><ol id="m-history"></ol><h3>Готовые видео</h3><div id="m-videos"></div><h3>История изменений</h3><div class="actions"><button id="m-undo">Отменить изменение</button><button id="m-redo">Повторить изменение</button></div><h3>Исходный дизайн</h3><button id="update" class="secondary">Обновить из Figma</button></dialog></div>`;
     $("m-theme").value = document.documentElement.dataset.theme ?? "dark";
     $("m-theme").onchange = () => {
       document.documentElement.dataset.theme = $("m-theme").value;
@@ -730,9 +722,7 @@ export async function mountMotion(
     for (const action of ["undo", "redo"])
       $("m-" + action).onclick = guarded(async () => {
         pause();
-        data.document = (
-          await api(action, { expectedRevision: data.document.revision })
-        ).document;
+        data.document = (await api(action, { expectedRevision: data.document.revision })).document;
         refresh(true);
       });
     $("m-settings").onclick = guarded(async () => {

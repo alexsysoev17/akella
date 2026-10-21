@@ -1859,3 +1859,17 @@ Investigation revealed a dual architectural flaw in compiler and execution logic
   - Test O: Persistence and restart resilience (reloading project loads valid committed state) — PASSED
 - Full repository test suite (`node scripts/test.mjs`): **283/283 tests PASSED** (0 failed, 0 skipped, 106s).
 - Full TypeScript verification (`tsc --noEmit -p tsconfig.check.json`): **0 errors**.
+
+## AKELLA welcome and text-only interface — 2026-10-21
+
+Targeted UI change, not an agent/engine audit. `web/main.js` renders a welcome screen with Start followed by a project chooser backed by the existing `/api/projects` API. Both use the same left brand column (photo, original SVG logo, SVG live-text tagline with equal widths) and right welcome title/action panel. Desktop dimensions are viewport-proportional to the supplied 2048×1152 reference; narrow screens stack columns. Existing import-preview/import-commit dialogs and project hash routes are retained; route version prevents stale asynchronous responses from replacing the current route. Returning from an open project goes to the chooser during the same page session. New page load at `/` starts at welcome.
+
+Inter Light300 and Medium500 are local font resources. Text links/buttons use300 and hover/focus500; controls have no filled boxes/icons. UI palette is #1A1A1A/#F2F2F2 with transparency/opacity for timeline and disabled controls. Original photography and rendered scene content retain their own colors. Native preview warning/error HTML uses the same neutral palette; rasterization, animation state and pixel transport are unchanged. Renderer labels and toolbar undo/redo arrows are removed; Undo/Redo remain text commands under project Settings. Timeline dimensions, capture, FPS/time evaluation, seeking and playback are unchanged.
+
+`assets/akella_photo.png`, `akella.svg`, `Inter-Light.ttf`, `Inter-Medium.ttf` are local supplied resources, excluded from Git. `scripts/build-ui.mjs` copies ONLY these four files into generated `src/web/brand/`, then into dist. Server serves ONLY the explicit four `/brand/...` allowlisted URLs with exact MIME types; it does not expose arbitrary assets or reference screenshots. These four source assets must accompany a relocated installation. No new package/CDN/network dependency was added.
+
+Verification: desktop welcome screenshot inspected; photo/logo/tagline measured534.515625px each at2048px viewport; Light300→Medium500 hover confirmed; Start→real project list and New Project→existing import dialog confirmed;390px layout has no horizontal overflow; no browser page errors. Existing browser Motion/mentions/timeline suite20/20 passed, including captured drag, tick sizes, manual operation/Undo/Redo and playback. Isolated native fixture successfully displayed200×120 source frames, sought and played/paused; light/dark screenshots inspected. TypeScript and build passed; final completion checks below. No live AI request or user project mutation was needed.
+
+Architecture Change History: UI-only welcome/chooser and local brand allowlist; no Motion State schema, AI/provider/recovery contract or rendering-math changes.
+
+Completion:21/21 native API/renderer tests passed (including shared Preview/FFmpeg frame checks),20/20 Motion/mentions/timeline tests passed, TypeScript and production build passed. Native UI smoke used an isolated synthetic project and a real worker-backed frame; no live provider calls. Screenshot artifacts remain local outside tracked history.

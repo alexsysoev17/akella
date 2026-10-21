@@ -87,6 +87,15 @@ export async function servePlatform(projectsRoot: string, port = 4173) {
         });
         response.end(bytes);
       };
+      const brandFiles: Record<string, string> = {
+        "/brand/akella.svg": "image/svg+xml",
+        "/brand/akella_photo.png": "image/png",
+        "/brand/Inter-Light.ttf": "font/ttf",
+        "/brand/Inter-Medium.ttf": "font/ttf",
+      };
+      if (request.method === "GET" && Object.hasOwn(brandFiles, url.pathname)) {
+        return await sendFile(fileURLToPath(new URL(`./web${url.pathname}`, import.meta.url)), brandFiles[url.pathname]);
+      }
       if (
         request.method === "GET" &&
         [

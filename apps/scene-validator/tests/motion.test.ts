@@ -508,7 +508,8 @@ test("browser Motion UI selects objects, applies manual operation, seeks and per
     await page.locator("#m-open-settings").click();
     await page.locator("#m-frame").fill("30");
     await page.locator("#m-close-settings").click();
-    await page.getByRole("button", { name: "Отменить", exact: true }).click();
+    if (!(await page.locator("#m-settings-dialog").evaluate((el: HTMLDialogElement) => el.open))) await page.locator("#m-open-settings").click();
+    await page.locator("#m-undo").click();
     await page.waitForFunction(() =>
       document.querySelector("#m-undo")?.hasAttribute("disabled"),
     );
@@ -780,7 +781,7 @@ test("Enter starts direct workflow; manual response auto-applies and autoplays w
     );
     await page.locator("#m-read-response").click();
     await page.waitForFunction(
-      () => document.querySelector("#m-play")?.textContent === "❚❚ Пауза",
+      () => document.querySelector("#m-play")?.textContent === "Пауза",
     );
     assert.equal(
       (await readMotion(f.project)).state.animations[0].startFrame,
@@ -791,6 +792,7 @@ test("Enter starts direct workflow; manual response auto-applies and autoplays w
         Number((document.querySelector("#m-frame") as HTMLInputElement).value) >
         15,
     );
+    if (!(await page.locator("#m-settings-dialog").evaluate((el: HTMLDialogElement) => el.open))) await page.locator("#m-open-settings").click();
     await page.locator("#m-undo").click();
     await page.waitForFunction(() =>
       document.querySelector("#m-undo")?.hasAttribute("disabled"),
