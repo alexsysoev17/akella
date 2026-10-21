@@ -170,7 +170,35 @@ export class HarnessRun {
       (adapter.mode === "live" && !providerIds().includes(adapter.id))
     )
       throw new BudgetError("PROVIDER_NOT_REGISTERED");
-    if (this.calls.length >= this.config.maxLLMCalls)
+    const purpose = request.purpose ?? "motion-repair";
+    const semantic = purpose.startsWith("semantic");
+    const isCodeRepair = purpose.startsWith("code-repair");
+    const isRecovery = purpose.includes("recovery");
+    const semanticCalls = this.calls.filter((c) =>
+      (c.purpose ?? "").startsWith("semantic"),
+    ).length;
+    const repairCalls = this.calls.filter(
+      (c) =>
+        (c.purpose ?? "").includes("repair") ||
+        (c.purpose ?? "").includes("recovery"),
+    ).length;
+    if (semantic && semanticCalls >= this.config.maxLLMCalls)
+      throw new BudgetError("LLM_CALL_BUDGET");
+    if (
+      !semantic &&
+      !isCodeRepair &&
+      repairCalls >=
+        (this.config.recovery?.maxAttempts ??
+          this.config.maxRepairAttempts ??
+          3)
+    )
+      throw new BudgetError("RECOVERY_PROVIDER_BUDGET");
+    if (this.calls.length >= this.config.maxLLMCalls && !isRecovery && !isCodeRepair)
+      throw new BudgetError("LLM_CALL_BUDGET");
+    if (
+      this.calls.length >=
+      this.config.maxLLMCalls + (this.config.recovery?.maxAttempts ?? 3) + 2
+    )
       throw new BudgetError("LLM_CALL_BUDGET");
     const budget = providerBudget(
       adapter,
@@ -186,8 +214,6 @@ export class HarnessRun {
     )
       throw new BudgetError("COST_BUDGET");
     const now = performance.now();
-    const purpose = request.purpose ?? "motion-repair";
-    const semantic = purpose.startsWith("semantic");
     if (!semantic && this.repairStarted === undefined) this.repairStarted = now;
     const phaseRemaining = semantic
       ? this.config.semanticPlanningTimeoutMs - (now - this.started)

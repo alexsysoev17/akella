@@ -134,6 +134,48 @@ export async function recoverPreflight(project: LoadedProject, state: MotionStat
                     }
                 }
             }
+            if (
+                failure.invariant.includes("Timing dependency cycle") ||
+                failure.code === "Timing dependency cycle" ||
+                failure.code === "TEMPORAL_DEPENDENCY_CYCLE"
+            ) {
+                let fixed = false;
+                for (const r of plan.requirements) {
+                    if (
+                        r.timing.reference &&
+                        (Boolean(
+                            r.timing.reference.resolvedAnimationId &&
+                            r.animationIds?.includes(
+                                r.timing.reference.resolvedAnimationId,
+                            ),
+                        ) ||
+                            r.timing.reference.target.sourceNodeId ===
+                                r.target.sourceNodeId)
+                    ) {
+                        delete r.timing.reference;
+                        fixed = true;
+                    }
+                    if (r.timing.anchorRequirementId === r.requirementId) {
+                        r.timing.anchorRequirementId = null;
+                        fixed = true;
+                    }
+                }
+                if (fixed) {
+                    row.action = "deterministic-timing-cycle-resolution/1";
+                    row.outcome = "REVALIDATED";
+                    report.procedure = row.action;
+                    try {
+                        const prepared = preflightIntentPlan(project, state, plan, overrides);
+                        report.status = "Candidate Recovered";
+                        await hooks.record(report);
+                        return { plan, prepared, report };
+                    } catch (next) {
+                        error = next;
+                        await hooks.record(report);
+                        continue;
+                    }
+                }
+            }
             const bound = req.target.sourceNodeId ? inspectAnimations(project, candidate, { sceneId: req.sceneId ?? undefined, targetId: req.target.sourceNodeId, logicalObjectId: req.target.logicalObjectId ?? undefined }) : resolved.target ? inspectAnimations(project, candidate, { sceneId: resolved.target.sceneId, targetId: resolved.target.sourceNodeId }) : [];
             const legacy = req.techniques.includes("objectStateTransition") && (req.kind === "unsupported" || req.effectOperation?.action === "remove");
             const context = { failure, originalRequirement: req, resolution: resolved, projectRevision: hooks.revision, animations: bound.slice(0, 24), timeline: inspectTimeline(candidate), dependencies: bound.slice(0, 24).map(e => ({ id: e.id, ...inspectDependencies(candidate, e.id) })), previousInspections: evidence, verifiedProcedures: known };

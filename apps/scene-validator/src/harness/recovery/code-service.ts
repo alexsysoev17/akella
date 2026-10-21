@@ -16,9 +16,56 @@ export async function proposeCodeRepair(repository: string, failure: RecoveryFai
         return { status: "DISABLED", promotion: "DISABLED" };
     if (!failure.codeRepairEligible)
         return { status: "NOT_ELIGIBLE", reason: "A task failure alone is not evidence of an implementation defect" };
-    const workspace = await isolateCodeRepair(repository, failure, failure.code === "PROVIDER_SCHEMA_INVALID"
-      ? ["apps/scene-validator/src/harness/providers/schema.ts", "apps/scene-validator/src/motion/provider.ts"]
-      : [failure.category === "MISSING_CAPABILITY" ? "apps/scene-validator/src/motion/tools.ts" : "apps/scene-validator/src/motion/intent/execution.ts"]);
+    const filesToIsolate: string[] = [];
+    if (failure.code === "PROVIDER_SCHEMA_INVALID") {
+      filesToIsolate.push(
+        "apps/scene-validator/src/harness/providers/schema.ts",
+        "apps/scene-validator/src/motion/provider.ts",
+      );
+    } else if (failure.category === "MISSING_CAPABILITY") {
+      filesToIsolate.push(
+        "apps/scene-validator/src/motion/tools.ts",
+        "apps/scene-validator/src/motion/intent/execution.ts",
+      );
+    } else if (
+      failure.invariant?.includes("Timing dependency cycle") ||
+      failure.code === "Timing dependency cycle" ||
+      failure.invariant?.includes("retime")
+    ) {
+      filesToIsolate.push(
+        "apps/scene-validator/src/motion/intent/compiler.ts",
+        "apps/scene-validator/src/motion/intent/retime.ts",
+        "apps/scene-validator/src/motion/operations.ts",
+      );
+    } else if (
+      failure.code === "INVALID_EFFECT_PARAMETER" ||
+      failure.invariant?.includes("amplitude") ||
+      failure.invariant?.includes("frequency")
+    ) {
+      filesToIsolate.push(
+        "apps/scene-validator/src/motion-library/expressions/registry.ts",
+        "apps/scene-validator/src/motion/schema.ts",
+      );
+    } else if (
+      failure.code === "REQUIREMENT_OPERATIONS_INCOMPLETE" ||
+      failure.code === "INTENT_REQUIREMENT_MISMATCH"
+    ) {
+      filesToIsolate.push(
+        "apps/scene-validator/src/motion/intent/compiler.ts",
+        "apps/scene-validator/src/motion/intent/execution.ts",
+      );
+    } else {
+      filesToIsolate.push(
+        "apps/scene-validator/src/motion/intent/compiler.ts",
+        "apps/scene-validator/src/motion/intent/execution.ts",
+      );
+    }
+    const workspace = await isolateCodeRepair(
+      repository,
+      failure,
+      filesToIsolate.slice(0, 5),
+      { allowDirty: true },
+    );
     const directory = path.join(workspace.root, "coding-provider");
     await mkdir(directory);
     let usage: unknown = null;

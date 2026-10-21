@@ -506,40 +506,66 @@ export function requirementChecks(
           (a) => a.animationId === r.timing.reference!.resolvedAnimationId,
         )
       : requirementAnchor(state, anchorReq);
+    const isSelfAnchor = Boolean(
+      r.timing.reference?.endpoint !== "end" &&
+        ((r.timing.reference &&
+          (related.some(
+            (a) => a.animationId === r.timing.reference!.resolvedAnimationId,
+          ) ||
+            Boolean(
+              r.timing.reference.resolvedAnimationId &&
+                r.animationIds?.includes(r.timing.reference.resolvedAnimationId),
+            ))) ||
+          (anchor && related.some((a) => a.animationId === anchor.animationId))),
+    );
     const delay =
       r.timing.offsetFrames ??
       Math.round(r.timing.delaySeconds * state.settings.fps);
-    const expected = r.timing.reference
-      ? anchor!.startFrame +
-        (r.timing.reference.endpoint === "end" ? anchor!.durationFrames : 0) +
-        delay
-      : r.timing.startSeconds !== null
-        ? Math.round(r.timing.startSeconds * state.settings.fps) + delay
-        : r.timing.relation === "sceneStart"
-          ? block.startFrame + delay
-          : anchor
-            ? r.timing.relation === "afterRequirement"
-              ? anchor.startFrame + anchor.durationFrames + delay
-              : r.timing.relation === "withRequirement"
-                ? anchor.startFrame + delay
-                : r.timing.relation === "beforeRequirement"
-                  ? anchor.startFrame - primary.durationFrames + delay
-                  : null
-            : r.timing.relation === "sceneEnd"
-              ? block.startFrame +
-                block.durationFrames -
-                primary.durationFrames +
-                delay
-              : null;
+    const prevAnchor =
+      previous?.animations.find(
+        (a) => a.animationId === r.timing.reference?.resolvedAnimationId,
+      ) ??
+      previous?.animations.find((a) => a.animationId === primary.animationId);
+    const expected = isSelfAnchor
+      ? (prevAnchor?.startFrame ?? primary.startFrame - delay) + delay
+      : r.timing.reference
+        ? anchor!.startFrame +
+          (r.timing.reference.endpoint === "end" ? anchor!.durationFrames : 0) +
+          delay
+        : r.timing.startSeconds !== null
+          ? Math.round(r.timing.startSeconds * state.settings.fps) + delay
+          : r.timing.relation === "sceneStart"
+            ? block.startFrame + delay
+            : anchor
+              ? r.timing.relation === "afterRequirement"
+                ? anchor.startFrame + anchor.durationFrames + delay
+                : r.timing.relation === "withRequirement"
+                  ? anchor.startFrame + delay
+                  : r.timing.relation === "beforeRequirement"
+                    ? anchor.startFrame - primary.durationFrames + delay
+                    : null
+              : r.timing.relation === "sceneEnd"
+                ? block.startFrame +
+                  block.durationFrames -
+                  primary.durationFrames +
+                  delay
+                : null;
     if (expected !== null)
       checks.push({
         name: "requirementTiming",
         requirementId: r.requirementId,
-        status: related.every((a) => a.startFrame + (r.timing.align === "end" && r.timing.relation !== "sceneEnd" ? a.durationFrames : 0) === expected)
+        status: related.every(
+          (a) =>
+            a.startFrame +
+              (r.timing.align === "end" && r.timing.relation !== "sceneEnd"
+                ? a.durationFrames
+                : 0) ===
+            expected,
+        )
           ? "PASSED"
           : "FAILED",
       });
-    if (r.timing.anchorRequirementId || r.timing.reference)
+    if ((r.timing.anchorRequirementId || r.timing.reference) && !isSelfAnchor)
       checks.push({
         name: "persistedTemporalDependency",
         requirementId: r.requirementId,

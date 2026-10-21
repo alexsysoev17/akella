@@ -7,6 +7,7 @@ export const recoverySemanticsVersion = "motion-recovery/2";
 export const recoveryRecipes = Object.freeze([
     { id: "canonical-reference-rebind/1", regression: "recovery-runtime: stale reference repair", status: "VERIFIED" as const },
     { id: "dependent-tail-extension/1", regression: "native-motion-tools: ten-turn persistent lifecycle", status: "VERIFIED" as const },
+    { id: "deterministic-timing-cycle-resolution/1", regression: "temporal-editing: timing cycle recovery", status: "VERIFIED" as const },
 ]);
 const entry = z.object({ version: z.string().min(1).max(100), signature: z.string().regex(/^[a-f0-9]{64}$/), procedure: z.string().max(100), operationType: z.string().max(100).default("preflight"), preconditions: z.array(z.string().max(200)).max(8).default([]), capabilities: z.array(z.string().max(100)).max(12).default([]), validation: z.enum(["PASSED", "FAILED"]).default("FAILED"), motionSchemaVersion: z.literal("1.0.0").default("1.0.0"), status: z.enum(["SUGGESTED", "TESTED", "VERIFIED", "DEPRECATED"]), successes: z.number().int().nonnegative(), failures: z.number().int().nonnegative(), regression: z.string().nullable(), updatedAt: z.string() }).strict();
 export async function recoveryMemory(root: string) {

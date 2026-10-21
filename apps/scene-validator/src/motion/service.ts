@@ -827,7 +827,25 @@ export async function proposeMotion(
       let report = (error as { recoveryReport?: RecoveryReport }).recoveryReport;
       const outerFailure = recoveryFailure(error, "agent-execution", "unknown");
       if (!report && outerFailure.codeRepairEligible) report = {version:"project-recovery/1",status:"Failed Safely",originalFailure:outerFailure,terminalFailure:outerFailure,attempts:[],procedure:null,codeRepairProposed:false};
-      const codeFailure = report?.terminalFailure?.codeRepairEligible ? report.terminalFailure : report?.originalFailure;
+      const codeFailure =
+        report?.originalFailure?.codeRepairEligible &&
+        !["LLM_CALL_BUDGET", "RECOVERY_TIME_BUDGET", "RECOVERY_ATTEMPT_LIMIT"].includes(
+          report.originalFailure.code,
+        )
+          ? report.originalFailure
+          : report?.terminalFailure?.codeRepairEligible
+            ? report.terminalFailure
+            : report?.originalFailure;
+      if (
+        codeFailure &&
+        report?.terminalFailure &&
+        codeFailure !== report.terminalFailure
+      ) {
+        codeFailure.evidence = [
+          ...codeFailure.evidence,
+          { source: "terminal", detail: report.terminalFailure.code },
+        ];
+      }
       if (report?.status === "Failed Safely" && codeFailure?.codeRepairEligible && harness.config.recovery.codeRepair.enabled) {
         try {
           onStage("code-repair-proposed");

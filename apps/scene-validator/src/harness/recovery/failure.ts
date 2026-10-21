@@ -57,7 +57,7 @@ export function recoveryFailure(error: unknown, stage: string, revision: string,
                     ? "RENDERER_FAILURE"
                     : /MISSING_PATH|CAPABILITY/.test(code)
                       ? "MISSING_CAPABILITY"
-                      : /COMPILER_COVERAGE|REQUIREMENT_OPERATIONS_INCOMPLETE|RECOVERY_PROVIDER_BUDGET|RECOVERY_CONTEXT_BUDGET|INVALID_EFFECT_PARAMETER/.test(
+                      : /COMPILER_COVERAGE|REQUIREMENT_OPERATIONS_INCOMPLETE|RECOVERY_PROVIDER_BUDGET|RECOVERY_CONTEXT_BUDGET|INVALID_EFFECT_PARAMETER|PROVIDER_SCHEMA_INVALID/.test(
                             code,
                         )
                         ? "PROBABLE_DEFECT"

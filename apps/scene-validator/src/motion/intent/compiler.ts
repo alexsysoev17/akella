@@ -336,17 +336,34 @@ export function compileRequirement(
       r.kind === "editAnimation" || r.effectOperation?.action === "updateTiming"
         ? existingTargets[0]
         : undefined;
-    let start = r.timing.reference
-      ? anchor!.startFrame +
-        (r.timing.reference.endpoint === "end" ? anchor!.durationFrames : 0)
-      : r.timing.startSeconds !== null
-        ? Math.round(r.timing.startSeconds * fps)
-        : r.timing.relation === "afterRequirement"
-          ? anchor!.startFrame + anchor!.durationFrames
-          : r.timing.relation === "withRequirement"
-            ? anchor!.startFrame
-            : existingBase?.startFrame ?? block.startFrame;
-    start += r.timing.offsetFrames ?? Math.round(r.timing.delaySeconds * fps);
+    const isSelfAnchor = Boolean(
+      anchor &&
+        r.timing.reference?.endpoint !== "end" &&
+        (existingTargets.some((t) => t.animationId === anchor.animationId) ||
+          (r.target.sourceNodeId &&
+            anchor.targetId === r.target.sourceNodeId &&
+            r.sceneId === anchor.sceneId)),
+    );
+    const delta =
+      r.timing.offsetFrames ??
+      Math.round((r.timing.delaySeconds ?? 0) * fps);
+    let start: number;
+    if (isSelfAnchor) {
+      start = (existingBase?.startFrame ?? block.startFrame) + delta;
+    } else if (r.timing.reference) {
+      start =
+        anchor!.startFrame +
+        (r.timing.reference.endpoint === "end" ? anchor!.durationFrames : 0) +
+        delta;
+    } else if (r.timing.startSeconds !== null) {
+      start = Math.round(r.timing.startSeconds * fps) + delta;
+    } else if (r.timing.relation === "afterRequirement") {
+      start = anchor!.startFrame + anchor!.durationFrames + delta;
+    } else if (r.timing.relation === "withRequirement") {
+      start = anchor!.startFrame + delta;
+    } else {
+      start = (existingBase?.startFrame ?? block.startFrame) + delta;
+    }
     if (r.parameters.text)
       r.parameters.text = resolveTextSettings(
         r.parameters.text,
@@ -428,10 +445,13 @@ export function compileRequirement(
 
     if (
       r.effectOperation?.action === "updateTiming" &&
-      r.parameters.durationFactor == null && r.parameters.durationSeconds == null &&
+      r.parameters.durationFactor == null &&
+      r.parameters.durationSeconds == null &&
       !r.timing.reference &&
       !r.timing.anchorRequirementId &&
       r.timing.startSeconds === null &&
+      r.timing.offsetFrames == null &&
+      r.timing.delaySeconds === 0 &&
       !["sceneStart", "sceneEnd"].includes(r.timing.relation)
     )
       throw new Error("TIMING_RELATION_MISSING");
@@ -479,10 +499,21 @@ export function compileRequirement(
       if (r.timing.relation === "sceneEnd") start = block.startFrame + block.durationFrames - duration;
       if (r.timing.relation === "beforeRequirement") start = anchor!.startFrame - duration + Math.round(r.timing.delaySeconds * fps);
     }
-    if (start < 0) {
-      const originShift = -start;
+    const minStart =
+      existingTargets.length && (isSelfAnchor || r.kind === "editAnimation")
+        ? Math.min(
+            ...existingTargets.map((a) =>
+              isSelfAnchor
+                ? a.startFrame + delta
+                : start +
+                  (existingBase ? a.startFrame - existingBase.startFrame : 0),
+            ),
+          )
+        : start;
+    if (minStart < 0) {
+      const originShift = -minStart;
       operations.push({ type: "shiftProjectOrigin", deltaFrames: originShift });
-      start = 0;
+      start += originShift;
     }
     if (stateTransition) {
       const existing = transitionForTarget(project, state, r.sceneId!, r.target.sourceNodeId!);
@@ -559,8 +590,11 @@ export function compileRequirement(
           r.timing.delaySeconds !== 0 ||
           (r.effectOperation?.action === "updateTiming" && r.timing.relation !== "unchanged")
         ) {
-          next.startFrame = start;
-          if (anchor)
+          const trackOffset = existingBase ? a.startFrame - existingBase.startFrame : 0;
+          next.startFrame = isSelfAnchor
+            ? a.startFrame + delta
+            : start + trackOffset;
+          if (anchor && !isSelfAnchor)
             operations.push({
               type: "setTimingDependency",
               dependency: {
@@ -579,13 +613,13 @@ export function compileRequirement(
                       ? "before"
                       : "with",
                 offsetFrames:
-                  r.timing.offsetFrames ??
-                  Math.round(r.timing.delaySeconds * fps),
+                  (r.timing.offsetFrames ??
+                  Math.round(r.timing.delaySeconds * fps)) + trackOffset,
               },
             });
           else
             for (const dep of state.timingDependencies ?? [])
-              if (dep.animationId === a.animationId)
+              if (dep.animationId === a.animationId || (isSelfAnchor && dep.anchorAnimationId === a.animationId))
                 operations.push({
                   type: "removeTimingDependency",
                   dependencyId: dep.dependencyId,

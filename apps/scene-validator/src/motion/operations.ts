@@ -257,6 +257,10 @@ export function applyOperations(
         retimeScenes(state, op.starts);
         break;
       case "setTimingDependency":
+        if (op.dependency.animationId === op.dependency.anchorAnimationId)
+          throw new Error(
+            `Timing dependency cycle: ${op.dependency.animationId} -> ${op.dependency.anchorAnimationId}`,
+          );
         state.timingDependencies = [
           ...(state.timingDependencies ?? []).filter(
             (d) =>
@@ -391,7 +395,13 @@ export function applyOperations(
       case "shiftProjectOrigin": {
         const delta = op.deltaFrames;
         state.settings.durationFrames += delta;
-        for (const b of state.blocks) b.startFrame += delta;
+        if (state.blocks.length > 0) {
+          const sorted = [...state.blocks].sort((a, b) => a.startFrame - b.startFrame);
+          sorted[0].durationFrames += delta;
+          for (let i = 1; i < sorted.length; i++) {
+            sorted[i].startFrame += delta;
+          }
+        }
         for (const a of state.animations) a.startFrame += delta;
         for (const t of state.objectTransitions ?? []) t.startFrame += delta;
         for (const e of state.expressions ?? []) e.startFrame += delta;

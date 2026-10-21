@@ -4,13 +4,13 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-21 (Europe/Moscow) — autonomous motion recovery, global timeline & parameter constraint relaxation; targeted update, not a full audit |
+| Last Updated | 2026-10-21 (Europe/Moscow) — Temporal editing architecture fix (run 461cd34c), atomic existing-track retiming, self-anchor cycle elimination, separated model budgets, deterministic recovery & sandboxed code repair loop; targeted update, not a full audit |
 | Last Full Audit | 2026-10-13; unchanged, this update is not a full renderer/provider audit |
-| Git Commit | Baseline `e5cddb3`. Current changes uncommitted at this documentation snapshot. |
-| Git Branch | `main`, local only |
-| Working Tree Status | Global timeline, parameter bounds relaxation, offscreen QA, Level 1/2 recovery, reload/lock/corruption resilience source/config/tests/docs uncommitted at this snapshot. Original user projects unchanged. |
-| Documentation Version | 1.0.31 |
-| Scope of Last Update | Global timeline authorization across scene boundaries, shiftProjectOrigin for negative start frames, parameter limit removal across schemas/easings/expressions, offscreen motion QA relaxation, Level 1 deterministic recovery execution, Level 2 sandboxed defect reproduction and human-gated proposals, stale lock reclamation & corruption fallback. |
+| Git Commit | Baseline `82f3f80`. Working branch `temporal-recovery-loop`. Current changes uncommitted at this documentation snapshot. |
+| Git Branch | `temporal-recovery-loop`, local only |
+| Working Tree Status | Temporal editing compiler/execution fixes, operations cycle check & origin shift, separated model budgets, deterministic cycle recovery, sandboxed code repair expansion, and 15-test verification suite uncommitted at this snapshot. Original user projects unchanged. |
+| Documentation Version | 1.0.32 |
+| Scope of Last Update | Elimination of self-edge cycles in temporal editing (run 461cd34c-4276-4bac-94ad-14f0e7367607), atomic multi-track retiming preserving pairwise offsets and attached expressions, separation of Operation A/B/C, shiftProjectOrigin timeline extension fix, model budget separation between planning/recovery/repair, deterministic preflight timing cycle recovery recipe, Level 2 sandboxed code repair with strict human gate. |
 | Code snapshot SHA-256 | NOT RECALCULATED; refer to component digests and final source commit. |
 
 Git 2.54.0 (Apple Git-157): локальная история на main, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
@@ -1811,3 +1811,51 @@ Arbitrary artistic ceilings across schemas, easings, expressions, and QA have be
 - Full repository test execution (`node scripts/test.mjs`): **43/43 suites PASSED** (0 failed, 0 skipped), including all native Skia rendering, memory bounds, ownership, FFmpeg export, and compound edit suites.
 - Production UI build (`node scripts/build-ui.mjs`): PASSED, worker runtime and client bundles updated.
 - Full TypeScript verification (`tsc --noEmit -p tsconfig.check.json`): 0 errors.
+
+### Temporal Editing Architecture & Two-Level Self-Improvement Loop (v1.0.32)
+
+#### Root-Cause Resolution of Run `461cd34c-4276-4bac-94ad-14f0e7367607`
+Investigation revealed a dual architectural flaw in compiler and execution logic during relative temporal edits:
+1. **The Double Trap in Compiler (`compiler.ts`):** When retiming existing animations relative to their current start times, omitting a temporal reference previously triggered false rejection with `TIMING_RELATION_MISSING`. However, when providing a temporal reference pointing to the object or its existing track, the compiler generated a `setTimingDependency` referencing the same animation (`animationId === anchorAnimationId`), creating an illegal self-referential graph cycle.
+2. **Architectural Separation of Operations A, B, and C:**
+   - **Operation A (Relative Shift from Committed State):** Computes `newStart = oldStart + delta` directly without creating any temporal dependency edges. Prunes any preexisting stale self-referential dependencies.
+   - **Operation B (Relative Timing Against Another Animation):** Validated against cycles (`dependency.animationId !== dependency.anchorAnimationId`), records cross-animation dependency in `timingDependencies`.
+   - **Operation C (Absolute Timing):** Sets fixed frame or second timestamp without creating dependency.
+3. **Atomic Multi-Track Group Retiming:**
+   - Detects all existing tracks for target object/requirement.
+   - Preserves pairwise track start offsets (`trackOffset = a.startFrame - existingBase.startFrame`).
+   - Retimes attached expressions (e.g., inertial overshoots) by the exact same frame delta once without double propagation.
+   - Preserves all stable animation and expression IDs, durations, parameters, and easings.
+4. **`shiftProjectOrigin` Timeline Extension Fix (`operations.ts`):**
+   - Corrected negative timeline shifting: instead of improperly shifting block 0 start frame away from frame 0 (which violated the invariant `Первый блок должен начинаться с кадра 0`), `shiftProjectOrigin` extends block 0's duration by `deltaFrames` while shifting subsequent blocks and all timeline actions by `+deltaFrames`.
+5. **Separated Model Budgets (`runtime.ts` & `service.ts`):**
+   - Separated invocation counters for semantic planning (`semanticCalls`) versus recovery (`repairCalls`).
+   - Exhaustion of planning retry budget does not block autonomous recovery or code repair.
+   - Catch block in `service.ts` preserves original defect diagnostics instead of letting secondary budget errors mask the root cause.
+6. **Level 1 Deterministic Recovery (`runtime.ts` & `memory.ts`):**
+   - Registered deterministic preflight recovery recipe `deterministic-timing-cycle-resolution/1`.
+   - Cleanses malformed self-referential dependencies in memory without consuming model calls.
+7. **Level 2 Autonomous Sandboxed Code Repair (`code-service.ts` & `code-repair.ts`):**
+   - Intelligent multi-file context selection based on failure category, invariant code, and stack trace.
+   - Reproduces failure in isolated temporary sandbox (`akella-code-repair-XXXXXX`).
+   - macOS confinement enforced; human gate strictly preserved: proposed patches remain `AWAITING_APPROVAL`, and `promoteCodeRepair` strictly throws to guarantee no untrusted source modification without explicit human approval.
+
+#### Verification Results
+- Comprehensive 15-test suite in `apps/scene-validator/tests/temporal-editing-and-recovery-loop.test.ts`: **15/15 PASSED** (702ms).
+  - Test A: Original parsley request (Run 461cd34c: Parsley 1 +5 frames, Parsley 2 +10 frames, no cycle, atomic) — PASSED
+  - Test B: Negative frame shift (shifts earlier and shifts origin if negative) — PASSED
+  - Test C: External temporal anchor (B starts 5 frames after A ends) — PASSED
+  - Test D: Genuine dependency cycle (A -> B and B -> A rejected with error) — PASSED
+  - Test E: Compound animation (Slide + Fade + Inertia shifted by N without double shift) — PASSED
+  - Test F: Single-effect edit (shift only explicitly targeted Fade, leave movement intact) — PASSED
+  - Test G: Multiple independent targets (A +5, B +10, C -10 committed atomically) — PASSED
+  - Test H: Retry safety (same candidate re-execution produces idempotent result) — PASSED
+  - Test I: Automatic Project Recovery (resolves self-referential cycle deterministically) — PASSED
+  - Test J: Real Code Repair (sandboxed reproduction, diff, and human approval gate) — PASSED
+  - Test K: Approval security (unapproved patch cannot be promoted) — PASSED
+  - Test L: Budget exhausted during Recovery preserves original defect evidence — PASSED
+  - Test M: Recovery infrastructure defect (schema error classified as PROBABLE_DEFECT) — PASSED
+  - Test N: Generative regression tests (randomized seeds preserve invariants 1-12) — PASSED
+  - Test O: Persistence and restart resilience (reloading project loads valid committed state) — PASSED
+- Full repository test suite (`node scripts/test.mjs`): **283/283 tests PASSED** (0 failed, 0 skipped, 106s).
+- Full TypeScript verification (`tsc --noEmit -p tsconfig.check.json`): **0 errors**.
