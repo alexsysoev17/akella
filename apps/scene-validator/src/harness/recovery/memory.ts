@@ -2,9 +2,10 @@ import path from "node:path";
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import { atomicJson, noSymlinkPath, safeDirectory } from "../../files.js";
-export const recoverySemanticsVersion = "motion-recovery/2";
+export const recoverySemanticsVersion = "motion-recovery/3";
 // Executable procedures are reviewed TypeScript, never text loaded from memory.
 export const recoveryRecipes = Object.freeze([
+    { id: "deterministic-global-retiming/1", regression: "signed-time: dependency-aware preflight revalidation", status: "VERIFIED" as const },
     { id: "canonical-reference-rebind/1", regression: "recovery-runtime: stale reference repair", status: "VERIFIED" as const },
     { id: "dependent-tail-extension/1", regression: "native-motion-tools: ten-turn persistent lifecycle", status: "VERIFIED" as const },
     { id: "deterministic-timing-cycle-resolution/1", regression: "temporal-editing: timing cycle recovery", status: "VERIFIED" as const },

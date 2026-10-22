@@ -1,3 +1,4 @@
+import {codeSourceContext} from "./source-context.js";
 import { z } from "zod";
 import path from "node:path";
 import { mkdir } from "node:fs/promises";
@@ -28,6 +29,8 @@ export async function proposeCodeRepair(repository: string, failure: RecoveryFai
         "apps/scene-validator/src/motion/intent/execution.ts",
       );
     } else if (
+      failure.code === "TASK_SCOPE_VIOLATION" ||
+      failure.code === "INVALID_GLOBAL_FRAME" ||
       failure.invariant?.includes("Timing dependency cycle") ||
       failure.code === "Timing dependency cycle" ||
       failure.invariant?.includes("retime")
@@ -35,7 +38,9 @@ export async function proposeCodeRepair(repository: string, failure: RecoveryFai
       filesToIsolate.push(
         "apps/scene-validator/src/motion/intent/compiler.ts",
         "apps/scene-validator/src/motion/intent/retime.ts",
+        "apps/scene-validator/src/motion/intent/execution.ts",
         "apps/scene-validator/src/motion/operations.ts",
+        "apps/scene-validator/src/motion/time.ts",
       );
     } else if (
       failure.code === "INVALID_EFFECT_PARAMETER" ||
@@ -89,10 +94,12 @@ export async function proposeCodeRepair(repository: string, failure: RecoveryFai
         },
     });
     const scoped = scopedCodeProposalSchema(workspace);
-    const decision = await provider.structured({ failure: { code: failure.code, category: failure.category, stage: failure.stage, evidence: failure.evidence.map(e => ({ source: e.source, detail: failure.code })) }, files: workspace.files, baseCommit: workspace.baseCommit, regressionPath:scoped.regressionPath, emptyFileHash:"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" }, "Produce a narrow, reviewable source repair and a NEW synthetic regression test.", "You are the isolated Code Repair role, not the project agent. Read only supplied code. No shell/filesystem/network tools. Return action=propose with proposal only when evidence establishes a source defect; otherwise action=stop, proposal=null and reason. Prefer small exact find/replace edits on existing files with exact beforeHash; full content is required only for NEW regression tests. Each find must occur exactly once; new test beforeHash is SHA256 of empty text. Never change permissions, configuration, source Figma data, unrelated modules, tests already present, QA tolerances or validation to conceal a failure. Explain actual root cause; do not claim tests ran. The backend will sandbox tests. This proposal never activates itself. If the source does not establish a defect, do not invent a repair.", z.object({ action: z.enum(["propose", "stop"]), proposal: scoped.schema.nullable(), reason: z.string().max(2000) }).strict(), "code-repair");
+    const sourceContext = codeSourceContext(workspace.files, Math.floor(policy.codeRepair.maxContextBytes / 3));
+    await atomicJson(path.join(workspace.root,"source-context.json"),sourceContext);
+    const decision = await provider.structured({ failure: { code: failure.code, category: failure.category, stage: failure.stage, evidence: failure.evidence.map(e => ({ source: e.source, detail: failure.code })) }, files: sourceContext.files, sourceContext:sourceContext.metrics, baseCommit: workspace.baseCommit, regressionPath:scoped.regressionPath, emptyFileHash:"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" }, "Produce a narrow, reviewable source repair and a NEW synthetic regression test.", "You are the isolated Code Repair role, not the project agent. Read only supplied code. complete=false means exact numbered source spans, not a complete file. For existing files use unique find/replace edits on supplied exact text; never replace a partial file with full content. No shell/filesystem/network tools. Return action=propose with proposal only when evidence establishes a source defect; otherwise action=stop, proposal=null and reason. Prefer small exact find/replace edits on existing files with exact beforeHash; full content is required only for NEW regression tests. Each find must occur exactly once; new test beforeHash is SHA256 of empty text. Never change permissions, configuration, source Figma data, unrelated modules, tests already present, QA tolerances or validation to conceal a failure. Explain actual root cause; do not claim tests ran. The backend will sandbox tests. This proposal never activates itself. If the source does not establish a defect, do not invent a repair.", z.object({ action: z.enum(["propose", "stop"]), proposal: scoped.schema.nullable(), reason: z.string().max(2000) }).strict(), "code-repair");
     if (decision.action === "stop" || !decision.proposal)
         return { status: "INSUFFICIENT_EVIDENCE", reason: decision.reason, workspace: workspace.root, promotion: "DISABLED", metrics: usage };
-    return finalizeCodeRepair(repository, workspace, decision.proposal, failure, usage, controller);
+    return finalizeCodeRepair(repository, workspace, decision.proposal, failure, {provider:usage,sourceContext:sourceContext.metrics}, controller);
 }
 /** Also supports verification of a previously returned proposal without another
  * provider call. It never applies a patch outside the quarantine workspace. */

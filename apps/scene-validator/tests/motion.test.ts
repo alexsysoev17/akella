@@ -160,7 +160,7 @@ test("fade + slide deterministic seek, shift +15, easing and duration edits pres
     await f.cleanup();
   }
 });
-test("unknown targets, conflicting properties, negative/outside timing and invalid AI JSON are rejected atomically", async () => {
+test("unknown targets, conflicting properties and invalid AI JSON reject atomically; signed/outside motion is valid", async () => {
   const f = await fixture();
   try {
     const state = defaultMotion(f.project);
@@ -193,32 +193,12 @@ test("unknown targets, conflicting properties, negative/outside timing and inval
         ),
       /Конфликт/,
     );
-    assert.throws(() =>
-      applyOperations(
-        state,
-        [
-          {
-            type: "addAnimation",
-            animation: { ...animation(), startFrame: -1 },
-          },
-        ],
-        f.project,
-      ),
-    );
-    assert.throws(
-      () =>
-        applyOperations(
-          state,
-          [
-            {
-              type: "addAnimation",
-              animation: { ...animation(), startFrame: 119 },
-            },
-          ],
-          f.project,
-        ),
-      /длительность/,
-    );
+    for (const startFrame of [-1,119]) {
+      const next=applyOperations(state,[{type:"addAnimation",animation:{...animation(),startFrame}}],f.project);
+      assert.equal(next.animations[0].startFrame,startFrame);
+      assert.deepEqual(next.settings,state.settings);
+      assert.equal(state.animations.length,0);
+    }
     assert.throws(() =>
       planSchema.parse({
         operations: [{ type: "executeJavaScript", code: "bad" }],

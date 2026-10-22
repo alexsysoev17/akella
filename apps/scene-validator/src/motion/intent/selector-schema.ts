@@ -1,3 +1,4 @@
+import {globalFrameSchema} from "../time.js";
 import { z } from "zod";
 import { editingContract } from "../../motion-library/editing-contract.js";
 import {
@@ -28,7 +29,7 @@ export const selectorEditSchema = z.object({
         delayFrames: z.number().int().optional(),
         delayPolicy: z.enum(["slightlyLater"]).optional(),
         align: z.enum(["start", "end"]).optional(),
-        startFrame: z.number().int().min(0).optional(),
+        startFrame: globalFrameSchema.optional(),
         timingRelation: z
           .enum(["sceneStart", "sceneEnd", "unchanged"])
           .optional(),

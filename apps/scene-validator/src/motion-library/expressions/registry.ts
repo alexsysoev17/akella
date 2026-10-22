@@ -1,3 +1,4 @@
+import {globalFrameSchema, intervalDurationSchema} from "../../motion/time.js";
 import { z } from "zod";
 import { springParameters, bounceParameters } from "../easings/registry.js";
 const finite = (lo: number, hi: number) => z.number().finite().min(lo).max(hi);
@@ -17,8 +18,8 @@ const common = {
   sceneId: id,
   targetId: id,
   property: propertySchema,
-  startFrame: z.number().int().min(0).max(108000),
-  durationFrames: z.number().int().min(1).max(108000),
+  startFrame: globalFrameSchema,
+  durationFrames: intervalDurationSchema,
   enabled: z.boolean(),
 };
 const amplitude = finite(0, 100000),

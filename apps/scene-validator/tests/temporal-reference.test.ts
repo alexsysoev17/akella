@@ -433,7 +433,8 @@ test("absolute project frames and cross-scene end references use current FPS wit
         absolute.animations.find((a) => a.animationId === "B2")!.startFrame,
         boundary + 15,
       );
-      assert.equal(absolute.timingDependencies?.length, 0);
+      assert.equal(absolute.timingDependencies?.length, 1);
+      assert.equal(absolute.timingDependencies?.[0].offsetFrames,15);
     }
     const b = state.animations.find((a) => a.animationId === "B2")!;
     assert.equal(evaluateAnimation(b, b.startFrame).opacity, 0);

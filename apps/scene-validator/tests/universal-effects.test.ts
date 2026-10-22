@@ -94,7 +94,8 @@ test("continuous Wiggle creates independent deterministic X/Y channels through f
     const objects = new Map(f.project.inspection.document.scenes.flatMap(objectsIn).map(o => [`${o.sceneId}/${o.targetId}`, o]));
     validateExpressions(next, objects);
     const finite = structuredClone(next); finite.expressions!.find(e => e.type === "inertialOvershoot")!.durationFrames = 120 - 24;
-    assert.throws(() => validateExpressions(finite, objects), /INVALID_LIFECYCLE_INTERVAL.*settled endpoint/);
+    validateExpressions(finite, objects); // The output window may end before the mathematical settling interval.
+    assert.equal(finite.settings.durationFrames,next.settings.durationFrames);
     assert.equal(expressionRegistry.find(e => e.id === "wiggle")?.lifecycle, "continuous");
   } finally { await f.cleanup(); }
 });

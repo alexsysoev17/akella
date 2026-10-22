@@ -1,9 +1,12 @@
+import {globalFrameSchema, intervalDurationSchema, nonnegativeFrameSchema, coordinateSchema, MAX_FLOAT32} from "./time.js";
 import { presetIdSchema } from "../motion-library/presets/registry.js";
 import { z } from "zod";
 const id = z.string().min(1).max(180);
-const frame = z.number().int().min(0).max(108000);
-const duration = z.number().int().min(1).max(108000);
-const scalar = z.number().finite().min(-100000).max(100000);
+const frame = globalFrameSchema;
+const outputFrame = z.number().int().min(0).max(108000);
+const outputDuration = z.number().int().min(1).max(108000);
+const duration = intervalDurationSchema;
+const scalar = coordinateSchema;
 export { easingSchema } from "../motion-library/easings/registry.js";
 import { easingSchema } from "../motion-library/easings/registry.js";
 import {
@@ -37,7 +40,7 @@ const fade = z
   .strict();
 const slide = z
   .object({
-    distance: z.number().min(0).max(100000).default(100),
+    distance: z.number().min(0).max(MAX_FLOAT32).default(100),
     mode: z.enum(["in", "out"]).default("in"),
   })
   .strict();
@@ -51,7 +54,7 @@ const wave = z
   })
   .strict();
 export const keyframeSchema = z
-  .object({ frame: frame, value: scalar })
+  .object({ frame: nonnegativeFrameSchema, value: scalar })
   .strict();
 export const animationSchema = z.discriminatedUnion("effect", [
   z
@@ -172,15 +175,15 @@ export const animationSchema = z.discriminatedUnion("effect", [
     .strict(),
 ]);
 export const transitionSchema = z
-  .object({ type: z.enum(["cut", "crossfade"]), durationFrames: frame })
+  .object({ type: z.enum(["cut", "crossfade"]), durationFrames: outputFrame })
   .strict();
 export const blockSchema = z
   .object({
     blockId: id,
     sceneId: id,
     name: z.string().max(200),
-    startFrame: frame,
-    durationFrames: duration,
+    startFrame: outputFrame,
+    durationFrames: outputDuration,
     transition: transitionSchema,
   })
   .strict();
@@ -189,7 +192,7 @@ export const settingsSchema = z
     fps: z.number().int().min(1).max(60),
     width: z.number().int().min(2).max(4096),
     height: z.number().int().min(2).max(4096),
-    durationFrames: duration,
+    durationFrames: outputDuration,
     strictDuration: z.boolean(),
     relativeTimingOffsetSeconds: z.number().min(0.01).max(1).optional(),
     tailPolicy: z.literal("holdLastScene").optional(),
@@ -233,12 +236,13 @@ export const timingDependencySchema = z
     animationId: id,
     anchorAnimationId: id,
     relation: z.enum(["after", "with", "before", "endWith"]),
-    offsetFrames: z.number().int().min(-108000).max(108000),
+    offsetFrames: frame,
   })
   .strict();
 export const motionSchema = z
   .object({
     schemaVersion: z.literal("1.0.0"),
+    sceneAnchors: z.array(z.object({sceneId:id,startFrame:frame}).strict()).max(1000).optional(),
     staticObjects: z.array(z.object({ logicalObjectId: id, sceneId: id, targetId: id }).strict()).max(1000).optional(),
     settings: settingsSchema,
     blocks: z.array(blockSchema).min(1).max(1000),
@@ -353,7 +357,7 @@ export const operationSchema = z.discriminatedUnion("type", [
     .object({
       type: z.literal("shiftAnimation"),
       ...animRef,
-      deltaFrames: z.number().int().min(-108000).max(108000),
+      deltaFrames: frame,
     })
     .strict(),
   z
@@ -444,7 +448,7 @@ export const operationSchema = z.discriminatedUnion("type", [
       type: z.literal("stagger"),
       animationIds: z.array(id).min(1).max(500),
       startFrame: frame,
-      stepFrames: frame,
+      stepFrames: nonnegativeFrameSchema,
     })
     .strict(),
 ]);

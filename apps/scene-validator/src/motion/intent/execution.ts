@@ -20,8 +20,8 @@ import {
   expandInheritance,
   type IntentTask,
 } from "./compiler.js";
-import { applyOperations, channels } from "../operations.js";
-import { resolveTimingDependencies } from "./retime.js";
+import { applyOperations, channels, motionDiff } from "../operations.js";
+import { resolveTimingDependencies, reanchorExpressions } from "./retime.js";
 import { parsePlan } from "../schema.js";
 const desiredChannels = (r: IntentRequirement) =>
   new Set(
@@ -167,7 +167,9 @@ export function assertIntentScope(
       ...(next.objectTransitions ?? []).filter(allowedTransition),
     ];
   }
-  resolveTimingDependencies(baseline);
+  const scoped = structuredClone(baseline);
+  resolveTimingDependencies(scoped);
+  reanchorExpressions(scoped, before, new Set((scoped.expressions ?? []).filter(exprAllowed).map(e=>e.expressionId)));
   const canonical = (s: MotionState) => ({
     ...s,
     expressions: [...(s.expressions ?? [])].sort((a, b) =>
@@ -180,16 +182,17 @@ export function assertIntentScope(
       a.animationId.localeCompare(b.animationId),
     ),
   });
-  if (!isDeepStrictEqual(canonical(baseline), canonical(next)))
-    throw new Error(
+  if (!isDeepStrictEqual(canonical(scoped), canonical(next)))
+    throw Object.assign(new Error(
       "TASK_SCOPE_VIOLATION: operations modify targets/techniques outside this requirement; fade and timing allowed only where present in contract",
-    );
+    ), {scopeDiff:motionDiff(canonical(scoped),canonical(next))});
 }
 export function requirementChecks(
   state: MotionState,
   r: IntentRequirement,
   plan: IntentPlan,
   previous?: MotionState,
+  committed: MotionState | undefined = previous,
 ) {
   if (r.techniques.includes("objectStateTransition")) {
     const matches = (state.objectTransitions ?? []).filter(t => t.logicalObjectId === r.target.logicalObjectId && [t.fromSceneId, t.toSceneId].includes(r.sceneId!) && (!r.parameters.toSceneId || t.toSceneId === r.parameters.toSceneId));
@@ -488,7 +491,7 @@ export function requirementChecks(
   }
   const primary =
       related.find((a) => !a.effect.startsWith("fade")) ?? related[0],
-    block = state.blocks.find((b) => b.sceneId === r.sceneId);
+    block = state.blocks.map(b=>({...b,startFrame:state.sceneAnchors?.find(a=>a.sceneId===b.sceneId)?.startFrame ?? b.startFrame})).find((b) => b.sceneId === r.sceneId);
   if (
     primary &&
     block &&
@@ -522,11 +525,11 @@ export function requirementChecks(
       r.timing.offsetFrames ??
       Math.round(r.timing.delaySeconds * state.settings.fps);
     const prevAnchor =
-      previous?.animations.find(
+      committed?.animations.find(
         (a) => a.animationId === r.timing.reference?.resolvedAnimationId,
       ) ??
-      previous?.animations.find((a) => a.animationId === primary.animationId);
-    const expected = isSelfAnchor
+      committed?.animations.find((a) => a.animationId === primary.animationId);
+    const expected = isSelfAnchor || (r.kind === "editAnimation" && !r.timing.reference && !r.timing.anchorRequirementId && r.timing.startSeconds === null && r.timing.relation === "unchanged")
       ? (prevAnchor?.startFrame ?? primary.startFrame - delay) + delay
       : r.timing.reference
         ? anchor!.startFrame +
@@ -556,7 +559,7 @@ export function requirementChecks(
         requirementId: r.requirementId,
         status: related.every(
           (a) =>
-            a.startFrame +
+            a.startFrame - (r.timing.align !== "end" ? (committed?.animations.find(old=>old.animationId===a.animationId)?.startFrame ?? primary.startFrame) - (committed?.animations.find(old=>old.animationId===primary.animationId)?.startFrame ?? primary.startFrame) : 0) +
               (r.timing.align === "end" && r.timing.relation !== "sceneEnd"
                 ? a.durationFrames
                 : 0) ===
@@ -681,7 +684,7 @@ export async function runIntentTasks(
 ) {
   const preflightStarted = performance.now();
   const plan = expandInheritance(input),
-    tasks = compileTasks(project, plan),
+    tasks = compileTasks(project, plan, initial),
     pending = tasks.filter((t) => t.status === "PENDING"),
     plans: Plan[] = [];
   let current = initial;
@@ -732,7 +735,7 @@ export async function runIntentTasks(
             task.compilationSource = prepared?.beforeDigest === motionStateDigest(current) ? "validated-preflight" : "compiled";
             generated = task.compilationSource === "validated-preflight"
               ? structuredClone(prepared!.compiled)
-              : compileRequirement(project, current, plan, task);
+              : compileRequirement(project, current, plan, task, initial);
           } catch (error) {
             throw new Error("COMPILER_COVERAGE_ERROR: " + String(error));
           }
@@ -751,7 +754,7 @@ export async function runIntentTasks(
         let next: MotionState;
         let checks: ReturnType<typeof requirementChecks>;
         try {
-          ({ next, checks } = admitCompiledTask(project, current, plan, task, generated));
+          ({ next, checks } = admitCompiledTask(project, current, plan, task, generated, initial));
         } catch (error) {
           throw new Error(
             (attempt === 1
@@ -961,6 +964,7 @@ export async function runIntentTasks(
       r,
       plan,
       taskBefore.get(task.taskId),
+      initial,
     );
     const persisted =
       task.status === "PASSED" && checks.every((c) => c.status === "PASSED");
@@ -1096,10 +1100,10 @@ export async function runIntentTasks(
 }
 
 /** The same admission rules are used by preflight and execution. Schema/geometry writes remain in applyOperations. */
-export function admitCompiledTask(project: LoadedProject, before: MotionState, plan: IntentPlan, task: IntentTask, compiled: Plan) {
+export function admitCompiledTask(project: LoadedProject, before: MotionState, plan: IntentPlan, task: IntentTask, compiled: Plan, committed: MotionState = before) {
   const next = applyOperations(before, compiled.operations, project);
   assertIntentScope(project, before, next, plan, task);
-  const checks = plan.requirements.filter(r => task.requirementIds.includes(r.requirementId)).flatMap(r => requirementChecks(next, r, plan, before));
+  const checks = plan.requirements.filter(r => task.requirementIds.includes(r.requirementId)).flatMap(r => requirementChecks(next, r, plan, before, committed));
   return { next, checks };
 }
 /** Full deterministic candidate preflight; no persistence, renderer or provider call. */
@@ -1111,7 +1115,7 @@ export function preflightIntentPlan(
 ) {
   const preflightStarted = performance.now();
   const plan = expandInheritance(input),
-    tasks = compileTasks(project, plan),
+    tasks = compileTasks(project, plan, state),
     done = new Set<string>();
   let candidate = structuredClone(state);
   const reports: unknown[] = [];
@@ -1135,9 +1139,9 @@ export function preflightIntentPlan(
       let admitted: ReturnType<typeof admitCompiledTask> | undefined, compiled: Plan | undefined;
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          const proposed = overrides.get(task.taskId) ?? compileRequirement(project, working, plan, task);
+          const proposed = overrides.get(task.taskId) ?? compileRequirement(project, working, plan, task, state);
           compiled = { ...proposed, operations: [...prefix, ...proposed.operations] };
-          admitted = admitCompiledTask(project, initial, plan, task, compiled);
+          admitted = admitCompiledTask(project, initial, plan, task, compiled, state);
           break;
         } catch (error) {
           const required = error instanceof TimelineConstraintError ? error.requiredDurationFrames : error instanceof MotionToolError && error.issue.code === "TIMELINE_CONFLICT" ? Number(error.issue.details.requiredDurationFrames) : NaN;
@@ -1188,6 +1192,7 @@ export function preflightIntentPlan(
             taskId: task.taskId,
             reports,
             failure: String(error),
+            scopeDiff:(error as {scopeDiff?:unknown}).scopeDiff,
             toolIssue: error instanceof MotionToolError ? error.issue : undefined,
             diagnostic: { target: task.targetReference, techniques: task.techniques, code: String(error).replace(/^Error: /, "").split(":")[0], invariant: String(error) },
             checks: (error as { checks?: unknown }).checks,

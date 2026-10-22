@@ -1,3 +1,4 @@
+import {coordinateSchema, MAX_FLOAT32} from "../time.js";
 import { textAnimationSchema } from "../schema.js";
 import { z } from "zod";
 import { easingSchema } from "../../motion-library/easings/registry.js";
@@ -146,12 +147,12 @@ export const intentRequirementSchema = z
         fromSceneId: z.string().nullable().default(null),
         toSceneId: z.string().nullable().default(null),
         moveToCenter: z.boolean().nullable().default(null),
-        x: z.number().finite().min(-100000).max(100000).nullable().default(null),
-        y: z.number().finite().min(-100000).max(100000).nullable().default(null),
+        x: coordinateSchema.nullable().default(null),
+        y: coordinateSchema.nullable().default(null),
         scaleFrom: z.number().positive().max(100000).nullable().default(null),
         scaleTo: z.number().positive().max(100000).nullable().default(null),
         durationSeconds: z.number().positive().max(3600).nullable(),
-        distance: z.number().positive().max(100000).nullable(),
+        distance: z.number().finite().min(0).max(MAX_FLOAT32).nullable(),
         direction: z
           .enum(["forward", "reverse", "leftToRight", "rightToLeft"])
           .nullable(),
@@ -181,7 +182,7 @@ export const intentRequirementSchema = z
       .strict(),
     timing: z
       .object({
-        startSeconds: z.number().min(0).max(3600).nullable(),
+        startSeconds: z.number().finite().nullable(),
         relation: z.enum([
           "sceneStart",
           "sceneEnd",

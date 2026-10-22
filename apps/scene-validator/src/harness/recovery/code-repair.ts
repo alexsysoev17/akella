@@ -21,7 +21,7 @@ const fileChange = z.union([
 export const codeProposalSchema = z.object({ rootCause: z.string().min(1).max(3000), changes: z.array(fileChange).min(1).max(6), regressionTests: z.array(z.string().max(250)).min(1).max(3), risks: z.array(z.string().max(1000)).max(10) }).strict();
 export type CodeProposal = z.infer<typeof codeProposalSchema>;
 const sourceAllowed = (p: string) =>
-    /^apps\/scene-validator\/src\/(?:motion\/(?:intent\/(?:compiler|execution|retime|planner|schema)|provider|tools|operations|contextual-resolution|base-motion|transitions|validate-expressions|schema|constraints|intervals|effect-edit|service)|motion-library\/(?:expressions\/registry|easings\/registry|techniques\/registry)|harness\/(?:recovery\/(?:failure|memory|runtime)|providers\/(?:schema|types|codex))|native\/(?:qa|renderer)|files)\.ts$/.test(
+    /^apps\/scene-validator\/src\/(?:motion\/(?:intent\/(?:compiler|execution|retime|planner|schema)|provider|tools|operations|contextual-resolution|base-motion|transitions|validate-expressions|schema|constraints|intervals|time|effect-edit|service)|motion-library\/(?:expressions\/registry|easings\/registry|techniques\/registry)|harness\/(?:recovery\/(?:failure|memory|runtime)|providers\/(?:schema|types|codex))|native\/(?:qa|renderer)|files)\.ts$/.test(
         p,
     );
 const testAllowed = (p: string) => /^apps\/scene-validator\/tests\/[a-z0-9-]+\.test\.ts$/.test(p);
@@ -104,8 +104,6 @@ export async function isolateCodeRepair(
     }
     const files = await Promise.all(requestedFiles.map(async (rel) => { const content = await readFile(within(root, rel), "utf8"); if (redactSecrets(content) !== content)
         throw new Error("CODE_REPAIR_SENSITIVE_SOURCE_REQUIRES_MANUAL_REPRODUCTION"); return { path: rel, hash: hash(content), content }; }));
-    if (files.reduce((n, f) => n + Buffer.byteLength(f.content), 0) > 100000)
-        throw new Error("CODE_REPAIR_CONTEXT_BUDGET");
     await exec("git", ["init", "-q", "-b", "codex/repair-" + id], { cwd: root });
     await exec("git", ["add", "--all"], { cwd: root });
     await exec("git", ["-c", "user.name=AKELLA Repair", "-c", "user.email=repair@localhost", "commit", "-qm", "Isolated reviewed source baseline"], { cwd: root });

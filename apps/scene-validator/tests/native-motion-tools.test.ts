@@ -110,24 +110,24 @@ test("AI semantic graph → typed motion tools → atomic state → native Previ
   } finally { stop(); await closeNativeRenderer(); await f.cleanup(); }
 });
 
-test("typed tools return structured timeline conflicts, preserve failed candidates, extend only explicitly and keep legacy transition rules", async () => {
+test("typed tools accept global intervals, reject invalid durations atomically and extend output only explicitly", async () => {
   const f = await circleFixture();
   try {
     const doc = await readMotion(f.project), t = { transitionId: "t", logicalObjectId: logicalId("Circle"), fromSceneId: "s0", toSceneId: "s1", startFrame: 0, durationFrames: 60, easing: "linear" as const, timelinePolicy: "referenceStates" as const, proceduralEffects: [], layerPolicy: { type: "switch" as const, switchProgress: 1 } };
     const old = structuredClone(doc.state);
-    const failed = prepareMotionTools(f.project, doc.state, [{ tool: "createStateTransition", transition: t }]);
-    assert.equal(failed.ok, false); if (failed.ok) throw Error("must fail");
-    assert.equal(failed.issue.code, "TIMELINE_CONFLICT"); assert.ok(failed.issue.allowedActions.includes("adjustTimeline"));
-    assert.deepEqual(doc.state, old);
+    const outside=prepareMotionTools(f.project,doc.state,[{tool:"createStateTransition",transition:t}]);
+    assert.ok(outside.ok);assert.equal(outside.candidate.settings.durationFrames,doc.state.settings.durationFrames);
+    const failed=prepareMotionTools(f.project,doc.state,[{tool:"createStateTransition",transition:{...t,durationFrames:0}}]);
+    assert.equal(failed.ok,false);assert.deepEqual(doc.state,old);
     const success = prepareMotionTools(f.project, doc.state, [{ tool: "adjustTimeline", policy: "extendProject", durationFrames: 61 }, { tool: "createStateTransition", transition: t }]);
     assert.ok(success.ok); assert.equal(success.candidate.settings.durationFrames, 61);
     assert.equal(inspectAnimations(f.project, success.candidate).find(e => e.id === "t")?.composition, "state");
     const { timelinePolicy, ...legacy } = { ...t, durationFrames: 12 };
-    assert.throws(() => applyOperations(doc.state, [{ type: "animateObjectStateTransition", ...legacy }], f.project), /исходном блоке/);
+    assert.equal(applyOperations(doc.state, [{type:"animateObjectStateTransition",...legacy}],f.project).objectTransitions![0].durationFrames,12);
     const independent = applyOperations(doc.state, lowerMotionTool(f.project, doc.state, { tool: "createStateTransition", transition: { ...t, durationFrames: 12 } }), f.project);
     assert.equal(presentedTransitions(independent, 40)[0].transitionId, "t");
     const withLaterScene = { ...independent, blocks: [...independent.blocks, { ...independent.blocks[0], blockId: "later", sceneId: "unrelated", startFrame: 36, durationFrames: 12 }] };
-    assert.equal(presentedTransitions(withLaterScene, 40).length, 0, "presentation holds cannot suppress a later unrelated authored scene");
+    assert.equal(presentedTransitions(withLaterScene,40).length,1,"logical pose persists; native rendering detaches its subtree from unrelated scene backgrounds");
     const noTargetBlock = { ...doc.state, blocks: [{ ...doc.state.blocks[0], durationFrames: 48 }] };
     const referencesOnly = applyOperations(noTargetBlock, lowerMotionTool(f.project, noTargetBlock, { tool: "createStateTransition", transition: { ...t, durationFrames: 12 } }), f.project);
     const referenceFrame = await renderNativeFrame(f.project, referencesOnly, 40, { encoding: "rgba" });
@@ -243,7 +243,7 @@ test("logical ownership validates source identity, preserves absolute noise phas
   } finally { await closeNativeRenderer(); await f.cleanup(); }
 });
 
-test("recoverable preflight: exact retime, bounded timeline extension, dependent deletion, undo and recreation", async () => {
+test("global preflight: exact retime, unchanged output window, dependent deletion, undo and recreation", async () => {
   const f = await circleFixture(); let response: unknown;
   const stop = registerProvider("recover-circle", () => ({ id: "recover-circle", mode: "mock", capabilities: () => ({ structuredOutput: true, nativeToolCalling: false, cancellation: true, usage: false, nativeOutputTokenLimit: false }), generate: async () => ({ output: response, usage: null, estimatedCost: null, latencyMs: 0, diagnostics: ["mock semantics, real execution"], toolCalls: [] }) }));
   const turn = async (prompt: string, technique: string, kind: string, parameters: {key:string;value:string|number}[] = [], extra: object = {}, fixed = false) => {
@@ -259,18 +259,18 @@ test("recoverable preflight: exact retime, bounded timeline extension, dependent
     await turn("Circle добавь инерцию после движения", "inertialOvershoot", "objectAnimation");
     const before = await readMotion(f.project), blocks = structuredClone(before.state.blocks);
     const timing = { start:{unit:"seconds",value:1}, effectOperation:{storage:"transition",action:"updateTiming"} };
-    await assert.rejects(() => turn("Circle движение с 1 до 3 секунд, общая длительность фиксирована", "objectStateTransition", "editAnimation", [{key:"durationSeconds",value:2}], timing, true));
+    await assert.rejects(changeMotion(f.project.root,{expectedRevision:before.revision,request:"invalid zero duration",operations:[{type:"animateObjectStateTransition",...before.state.objectTransitions![0],durationFrames:0}]}));
     assert.deepEqual((await readMotion(f.project)).state,before.state);
     const moved = await turn("Circle движение с 1 до 3 секунд", "objectStateTransition", "editAnimation", [{key:"durationSeconds",value:2}], timing, true);
     assert.equal(moved.doc.state.objectTransitions![0].startFrame,12); assert.equal(moved.doc.state.objectTransitions![0].durationFrames,24);
     assert.ok(moved.doc.state.expressions!.every(e=>e.startFrame===36));
-    assert.ok(moved.doc.state.settings.durationFrames>48); assert.deepEqual(moved.doc.state.blocks,blocks);
+    assert.equal(moved.doc.state.settings.durationFrames,48); assert.deepEqual(moved.doc.state.blocks,blocks);
     const last = moved.doc.state.settings.durationFrames - 1;
     const tail = await renderProjectFrame(f.project,last,{encoding:"rgba"});
     assert.ok(tail.hits.some(h=>h.targetId==="c1"),"extended tail holds the actual destination object");
     const video = await exportVideo(f.project.root,()=>{},{renderer:"native"});assert.ok("frameDigests" in video);assert.equal(video.frames,moved.doc.state.settings.durationFrames);assert.equal(video.frameDigests.find(d=>d.frame===last)?.sha256,hash(tail.png));
     const report = JSON.parse(await readFile(path.join(f.project.root,"motion/ai",moved.run,"compilation-preflight.json"),"utf8"));
-    assert.equal(report.classification,"VALID"); assert.ok(report.recoveries.some((r:{code:string})=>r.code==="DEPENDENT_EFFECT_EXCEEDS_TIMELINE"));
+    assert.equal(report.classification,"VALID"); assert.equal(report.recoveries.length,0);
     await turn("Circle инерция вдвое слабее", "inertialOvershoot", "editAnimation", [{key:"amplitudeFactor",value:.5}], {effectOperation:{storage:"expression",action:"update"},relation:"unchanged"});
     await turn("Circle добавь wiggle", "wiggle", "objectAnimation");
     await turn("Circle wiggle слабее", "wiggle", "editAnimation", [{key:"amplitudeFactor",value:.5}], {effectOperation:{storage:"expression",action:"update"},relation:"unchanged"});

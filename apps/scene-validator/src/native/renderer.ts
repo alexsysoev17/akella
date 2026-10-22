@@ -1,3 +1,6 @@
+import {buildRegistry} from "../motion/registry.js";
+import {motionPresentationHosts} from "../motion/presentation-lifetime.js";
+import {MAX_FLOAT32} from "../motion/time.js";
 import type {
   CanvasKit,
   Canvas,
@@ -510,19 +513,22 @@ export class NativeRenderer {
     const overrides = new Map<string, { wrapper: Matrix; opacity: number }>(),
       blocks = { ...evaluation.blocks };
     let transitions = presentedTransitions(state, frame);
+    const detachedTransitions=new Set<string>();
     if (transitions.length) {
-      const latest = Math.max(...transitions.map((t) => t.startFrame));
-      transitions = transitions.filter((t) => t.startFrame === latest);
       const first = transitions[0],
         host =
           (frame - first.startFrame) / first.durationFrames >=
           first.layerPolicy.switchProgress
             ? first.toSceneId
             : first.fromSceneId;
+      const pairVisible=presentationBlocks(state).some(b=>[first.fromSceneId,first.toSceneId].includes(b.sceneId)&&(blocks[b.blockId]??0)>0);
+      if (!pairVisible) for(const t of transitions) detachedTransitions.add(t.transitionId);
       for (const b of presentationBlocks(state))
-        if (first.timelinePolicy === "referenceStates" || [first.fromSceneId, first.toSceneId].includes(b.sceneId))
+        if (pairVisible && (first.timelinePolicy === "referenceStates" || [first.fromSceneId, first.toSceneId].includes(b.sceneId)))
           blocks[b.blockId] = b.sceneId === host ? 1 : 0;
       for (const t of transitions) {
+        const host=(frame-t.startFrame)/t.durationFrames>=t.layerPolicy.switchProgress?t.toSceneId:t.fromSceneId;
+        if(!presentationBlocks(state).some(b=>b.sceneId===host&&(blocks[b.blockId]??0)>0))detachedTransitions.add(t.transitionId);
         const refs = presentation[t.logicalObjectId],
           current = refs?.[host];
         if (!current)
@@ -569,27 +575,28 @@ export class NativeRenderer {
     };
     const frozenMembers = new Set((state.staticObjects ?? []).flatMap(o => [...staticObjectMembers(this.project, o.logicalObjectId).members]));
     let drawingStatic = false, currentStaticRoot: string | null = null, onlyActive = false;
-    const nodeActive = (sceneId: string, nodeId: string): boolean => {
-      return state.animations.some(
-        (a) =>
-          a.enabled &&
-          a.sceneId === sceneId &&
-          a.targetId === nodeId &&
-          frame >= a.startFrame &&
-          frame < a.startFrame + a.durationFrames,
-      ) || (state.expressions ?? []).some(
-        (e) =>
-          e.enabled &&
-          e.sceneId === sceneId &&
-          e.targetId === nodeId &&
-          frame >= e.startFrame &&
-          frame < e.startFrame + e.durationFrames,
-      );
-    };
-    const subtreeActive = (node: NativeNode, sceneId: string): boolean => {
-      if (nodeActive(sceneId, node.figmaNodeId)) return true;
-      return (node.children ?? []).some((c) => subtreeActive(c as NativeNode, sceneId));
-    };
+    const visibleScenes=new Set(presentationBlocks(state).filter(b=>(blocks[b.blockId]??0)>0).map(b=>b.sceneId));
+    const hosts=motionPresentationHosts(state,frame,buildRegistry(this.project.inspection.document,this.project.inspection.fingerprint).objects.filter(o=>!transitions.some(t=>t.logicalObjectId===o.logicalObjectId)).flatMap(o=>o.ambiguousScenes.length?o.sourceInstances.map(i=>({sourceInstances:[i]})):[o]),visibleScenes);
+    for(const t of transitions.filter(t=>detachedTransitions.has(t.transitionId))) {
+      const object=buildRegistry(this.project.inspection.document,this.project.inspection.fingerprint).objects.find(o=>o.logicalObjectId===t.logicalObjectId);
+      const chosen=object?.sourceInstances.find(i=>overrides.has(JSON.stringify([i.sceneId,i.sourceNodeId])));
+      if(chosen)for(const i of object!.sourceInstances)hosts.set(JSON.stringify([i.sceneId,i.sourceNodeId]),chosen);
+    }
+    const globalRoots=new Set([...hosts.values()].map(i=>JSON.stringify([i.sceneId,i.sourceNodeId])));
+    const globalScenes=new Set([...hosts.values()].map(i=>i.sceneId));
+    const activeTree=new Set<string>(), globalContent=new Set<string>();
+    for (const scene of this.project.inspection.document.scenes) {
+      const walk=(n:NativeNode,inside=false):boolean=>{
+        const key=JSON.stringify([scene.sceneId,n.figmaNodeId]);
+        inside ||= globalRoots.has(key);
+        if(inside) globalContent.add(key);
+        const children=(n.children ?? []).map(c=>walk(c,inside));
+        const active=inside||children.some(Boolean);
+        if(active) activeTree.add(key);
+        return active;
+      };
+      walk(scene as unknown as NativeNode);
+    }
     const drawNode = (
       n: NativeNode,
       parent: Matrix,
@@ -597,7 +604,11 @@ export class NativeRenderer {
       sceneId: string,
       maskOnly = false,
     ) => {
-      if (onlyActive && !subtreeActive(n, sceneId)) return;
+      const nodeKey=JSON.stringify([sceneId,n.figmaNodeId]);
+      if (onlyActive && !maskOnly && !activeTree.has(nodeKey)) return;
+      const globalHost=hosts.get(nodeKey);
+      if (!drawingStatic && globalHost && (globalHost.sceneId!==sceneId || globalHost.sourceNodeId!==n.figmaNodeId)) return;
+      if (onlyActive && !globalContent.has(nodeKey)) n={...n,properties:{...n.properties,fills:[],strokes:[]}};
       const p = n.properties ?? {},
         key = JSON.stringify([sceneId, n.figmaNodeId]),
         visible =
@@ -628,6 +639,8 @@ export class NativeRenderer {
             y: world[1][0] * x + world[1][1] * y + world[1][2],
           })),
         });
+      if (![...combined.flat(), ...world.flat()].every(v=>Number.isFinite(v)&&Math.abs(v)<=MAX_FLOAT32))
+        throw new NativeRenderError("NUMERIC_TRANSFORM_OVERFLOW", n.figmaNodeId);
       canvas.save();
       canvas.concat(affine(combined));
       const contents = () => {
@@ -645,7 +658,7 @@ export class NativeRenderer {
           return;
         }
 
-        if (p.clipsContent === true) {
+        if (p.clipsContent === true && n.figmaNodeId !== this.project.inspection.document.scenes.find(s=>s.sceneId===sceneId)?.figmaNodeId) {
           const path = this.geometry({ ...n, type: "RECTANGLE" })[0];
           canvas.clipPath(path, k.ClipOp.Intersect, true);
         }
@@ -1280,26 +1293,13 @@ export class NativeRenderer {
       canvas.restore();
     };
     try {
-      for (const block of presentationBlocks(state).sort(
-        (a, b) => a.startFrame - b.startFrame,
-      )) {
+      const renderBlocks=presentationBlocks(state);
+      for(const scene of this.project.inspection.document.scenes)
+        if(!renderBlocks.some(b=>b.sceneId===scene.sceneId)&&globalScenes.has(scene.sceneId))
+          renderBlocks.push({blockId:"motion-reference:"+scene.sceneId,sceneId:scene.sceneId,name:scene.name,startFrame:0,durationFrames:0,transition:{type:"cut",durationFrames:0}});
+      for (const block of renderBlocks.sort((a,b)=>a.startFrame-b.startFrame)) {
         const opacity = blocks[block.blockId] ?? 0;
-        const hasActiveMotion =
-          opacity <= 0 &&
-          (state.animations.some(
-            (a) =>
-              a.enabled &&
-              a.sceneId === block.sceneId &&
-              frame >= a.startFrame &&
-              frame < a.startFrame + a.durationFrames,
-          ) ||
-            (state.expressions ?? []).some(
-              (e) =>
-                e.enabled &&
-                e.sceneId === block.sceneId &&
-                frame >= e.startFrame &&
-                frame < e.startFrame + e.durationFrames,
-            ));
+        const hasActiveMotion=globalScenes.has(block.sceneId);
         if (opacity <= 0 && !hasActiveMotion) continue;
         onlyActive = opacity <= 0;
         const effectiveOpacity = opacity > 0 ? opacity : 1;
@@ -1309,11 +1309,6 @@ export class NativeRenderer {
         const fit = canvasMatrix(scene, state.settings);
         canvas.save();
         canvas.concat(affine(fit));
-        canvas.clipRect(
-          k.XYWHRect(0, 0, scene.width, scene.height),
-          k.ClipOp.Intersect,
-          true,
-        );
         layer(effectiveOpacity, () =>
           drawNode(scene as unknown as NativeNode, unit, fit, scene.sceneId),
         );

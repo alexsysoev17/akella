@@ -1,11 +1,8 @@
-/** Canonical temporal bounds, shared by tools and state validators.
- * A renderable endpoint is required for settling/state-transition completion;
- * a continuous effect may occupy the last visible frame without settling. */
+import { intervalEnd } from "./time.js";
 export type MotionLifecycle = "finite" | "continuous" | "settling" | "transition";
-export function intervalConflict(interval: { startFrame: number; durationFrames: number }, projectDuration: number, lifecycle: MotionLifecycle) {
-  const endFrame = interval.startFrame + interval.durationFrames;
-  const needsEndpoint = lifecycle === "settling" || lifecycle === "transition";
-  const requiredDurationFrames = endFrame + (needsEndpoint ? 1 : 0);
-  if (requiredDurationFrames <= projectDuration) return undefined;
-  return { code: "TIMELINE_CONFLICT", lifecycle, endFrame, needsEndpoint, requiredDurationFrames, actualDurationFrames: projectDuration };
+/** Validate mathematical intervals. A visible output window is not an animation boundary.
+ * Retained signature for existing callers; clipping is decided by QA/Preview/export. */
+export function intervalConflict(interval: {startFrame:number;durationFrames:number}, projectDuration:number, lifecycle:MotionLifecycle): {code:string;lifecycle:MotionLifecycle;endFrame:number;needsEndpoint:boolean;requiredDurationFrames:number;actualDurationFrames:number}|undefined {
+  intervalEnd(interval);
+  return undefined;
 }

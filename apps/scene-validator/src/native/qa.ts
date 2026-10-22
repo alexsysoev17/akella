@@ -55,18 +55,6 @@ export async function nativeMotionQA(
     warnings = new Set<string>(),
     before = nativeDigest(project.inspection.document),
     frames = [...new Set([...numeric.frames, ...(state.staticObjects?.some(o => scope(o.sceneId,o.targetId)) ? [0, Math.floor(state.settings.durationFrames / 2), state.settings.durationFrames - 1] : [])])]
-      .filter(
-        (frame) =>
-          !targetScope || state.staticObjects?.some(o => scope(o.sceneId,o.targetId)) ||
-          state.blocks.some(
-            (b) =>
-              b.sceneId === targetScope.sceneId &&
-              frame >= b.startFrame &&
-              frame < b.startFrame + b.durationFrames,
-          ) || (state.expressions ?? []).some(e => scope(e.sceneId, e.targetId) && (
-            e.ownership?.scope === "logicalObject" && frame >= e.startFrame && frame < e.startFrame + e.durationFrames ||
-            e.transitionId && presentedTransitions(state, frame).some(t => t.transitionId === e.transitionId))),
-      )
       .slice(0, 24);
   const report = {
     scope: "native Skia objective checks; artistic quality NOT_TESTED",
@@ -287,10 +275,10 @@ export async function nativeMotionQA(
       (a) =>
         a.enabled && a.effect === "trimPath" && scope(a.sceneId, a.targetId),
     )) {
-      const at = Math.min(
+      const at = Math.max(0, Math.min(
           state.settings.durationFrames - 1,
           track.startFrame + Math.floor(track.durationFrames * 0.5),
-        ),
+        )),
         result = await render(state, at),
         full = await render(
           {
@@ -336,13 +324,17 @@ export async function nativeMotionQA(
             ? "PASSED"
             : "FAILED",
       });
+      const intervalVisible=track.startFrame < state.settings.durationFrames && track.startFrame+track.durationFrames > 0;
+      const targetHits=result.hits.filter(h=>h.targetId===track.targetId);
+      const offscreen=targetHits.length>0 && targetHits.every(h=>Math.max(...h.points.map(p=>p.x))<0 || Math.min(...h.points.map(p=>p.x))>=result.width || Math.max(...h.points.map(p=>p.y))<0 || Math.min(...h.points.map(p=>p.y))>=result.height);
       checks.push({
         name: "renderedPathReveal",
         category: "render",
         target: track.targetId,
         required: true,
-        status: difference.changedPixels > 0 ? "PASSED" : "FAILED",
-        reason: difference.changedPixels
+        status: !intervalVisible || offscreen ? "NOT_TESTED" : difference.changedPixels > 0 ? "PASSED" : "FAILED",
+        ...( !intervalVisible || offscreen ? {required:false} : {}),
+        reason: !intervalVisible ? "Reveal interval lies outside exported window; parameter/geometry checks still run" : offscreen ? "Actual transformed bounds lie outside viewport; no visible reveal expected" : difference.changedPixels
           ? "Actual native geometric reveal differs from untrimmed counterfactual"
           : "No visible reveal in sampled frame: inspect scene timing, clipping, occlusion or fully offscreen geometry",
         metrics: {

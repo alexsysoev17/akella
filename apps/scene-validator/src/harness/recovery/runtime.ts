@@ -83,6 +83,16 @@ export async function recoverPreflight(project: LoadedProject, state: MotionStat
     try {
         if (!hooks.policy.enabled || !hooks.policy.maxAttempts)
             throw initialError;
+        if (/TASK_SCOPE_VIOLATION|TECHNICAL_VALIDATION_FAILED|REQUIREMENT_OPERATIONS_INCOMPLETE/.test(report.originalFailure.code) && plan.requirements.some(r=>r.effectOperation?.action==="updateTiming")) {
+            try {
+                const prepared=preflightIntentPlan(project,state,plan);
+                report.attempts.push({attempt:1,failure:report.originalFailure,action:"deterministic-global-retiming/1",tools:[],outcome:"REVALIDATED"});
+                report.procedure="deterministic-global-retiming/1";
+                report.status="Candidate Recovered";
+                await hooks.record(report);
+                return {plan,prepared,report};
+            } catch { /* Remains a real failure; preserve evidence and continue bounded recovery. */ }
+        }
         for (let attempt = 1; attempt <= hooks.policy.maxAttempts; attempt++) {
             hooks.checkpoint();
             if (performance.now() - started > hooks.policy.maxDurationMs)

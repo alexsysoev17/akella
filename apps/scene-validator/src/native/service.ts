@@ -31,6 +31,7 @@ export async function renderProjectFrame(
   }
   if (options.revision && options.revision !== saved.doc.revision)
     throw new Error("STALE_PROJECT_REVISION");
+  if (!Number.isSafeInteger(frame) || frame < 0 || frame >= saved.doc.state.settings.durationFrames) throw new Error("FRAME_OUTSIDE_OUTPUT_WINDOW");
   const rendered = await renderNativeFrame(
     project,
     saved.doc.state,

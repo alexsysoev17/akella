@@ -1,3 +1,4 @@
+import {safeFrame} from "./time.js";
 import { presentationBlocks } from "./transition-runtime.js";
 import { inverse } from "./geometry.js";
 import { scopedExpressionValue } from "./transition-effects.js";
@@ -120,10 +121,7 @@ export function evaluateAnimation(a: Animation, frame: number): Values {
   }
 }
 export function evaluateMotion(state: MotionState, frame: number, presentation: StatePresentation = {}) {
-  frame = Math.max(
-    0,
-    Math.min(state.settings.durationFrames - 1, Math.floor(frame)),
-  );
+  frame = safeFrame(Math.floor(frame));
   const nodes: Record<string, Values> = {};
   const tracks = new Map<string, Animation[]>();
   // Non-overlapping effects on one property form a track: first initial value holds before entry;

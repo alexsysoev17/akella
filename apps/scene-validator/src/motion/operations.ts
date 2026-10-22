@@ -1,6 +1,6 @@
 import { requiredProjectFrames, TimelineConstraintError } from "./constraints.js";
 import { intervalConflict } from "./intervals.js";
-import { retimeScenes, resolveTimingDependencies } from "./intent/retime.js";
+import { retimeScenes, resolveTimingDependencies, reanchorExpressions } from "./intent/retime.js";
 import { instantiatePreset } from "../motion-library/presets/registry.js";
 import { validateExpressions } from "./validate-expressions.js";
 import { validateObjectTransitions } from "./transitions.js";
@@ -43,6 +43,8 @@ export function validateMotion(
     if (!object.sourceInstances.some(i => i.sceneId === entry.sceneId && i.sourceNodeId === entry.targetId)) throw new Error("STATIC_SOURCE_NOT_FOUND");
     if (state.animations.some(a => members.has(`${a.sceneId}/${a.targetId}`)) || state.expressions?.some(e => members.has(`${e.sceneId}/${e.targetId}`)) || staticObjectTransitions(project,state,members).length) throw new Error("STATIC_OBJECT_HAS_MOTION");
   }
+  const anchorIds=new Set<string>();
+  for(const a of state.sceneAnchors ?? []) {if(anchorIds.has(a.sceneId)||!project.inspection.document.scenes.some(s=>s.sceneId===a.sceneId))throw new Error("INVALID_SCENE_ANCHOR");anchorIds.add(a.sceneId);}
   const ids = new Set<string>(),
     sceneIds = new Set(
       project.inspection.document.scenes.map((s) => s.sceneId),
@@ -463,41 +465,19 @@ export function applyOperations(
         break;
     }
   }
-  resolveTimingDependencies(state);
-  for (const e of state.expressions ?? []) {
-    if (e.type !== "inertialOvershoot" || e.parameters.mode !== "ae") continue;
-    const old = previous.expressions?.find(
-      (p) => p.expressionId === e.expressionId,
-    );
-    if (
-      !old ||
-      old.type !== "inertialOvershoot" ||
-      old.sourceAnimationId !== e.sourceAnimationId ||
-      ops.some(
-        (op) =>
-          op.type === "setExpression" &&
-          op.expression.expressionId === e.expressionId &&
-          op.expression.startFrame !== old.startFrame,
-      )
-    )
-      continue;
-    const before = [...previous.animations, ...(previous.objectTransitions ?? []).map(t => ({ ...t, animationId: t.transitionId }))].find(
-        (a) => a.animationId === e.sourceAnimationId,
-      ),
-      after = [...state.animations, ...(state.objectTransitions ?? []).map(t => ({ ...t, animationId: t.transitionId }))].find(
-        (a) => a.animationId === e.sourceAnimationId,
-      );
-    if (
-      before &&
-      after &&
-      old.startFrame >= before.startFrame + before.durationFrames
-    )
-      e.startFrame =
-        old.startFrame +
-        after.startFrame +
-        after.durationFrames -
-        (before.startFrame + before.durationFrames);
-  }
+  const explicitStarts = new Set(ops.flatMap(op => {
+    if (op.type === "updateAnimation") return op.animation.startFrame !== previous.animations.find(a=>a.animationId===op.animationId)?.startFrame ? [op.animationId] : [];
+    return op.type === "setStartFrame" || op.type === "shiftAnimation" ? [op.animationId] : op.type === "stagger" ? op.animationIds : [];
+  }));
+  const explicitEdges = new Set(ops.filter(op=>op.type==="setTimingDependency").map(op=>op.dependency.dependencyId));
+  const unscheduled = structuredClone(state);
+  resolveTimingDependencies(state, explicitStarts, explicitEdges);
+  const explicitEffects=new Set(ops.filter(op=>op.type==="setExpression").filter(op=>op.expression.startFrame!==previous.expressions?.find(e=>e.expressionId===op.expression.expressionId)?.startFrame).map(op=>op.expression.expressionId));
+  reanchorExpressions(state, previous, explicitEffects);
+  // Explicit effect timestamps were compiled against the unscheduled candidate.
+  // Account for any further transitive anchor movement exactly once.
+  const scheduledEffects = { ...state, expressions: state.expressions?.filter(e=>explicitEffects.has(e.expressionId)) };
+  reanchorExpressions(scheduledEffects, unscheduled);
   if (
     state.expressions?.some(
       (e) =>
@@ -533,6 +513,7 @@ export function motionDiff(before: MotionState, after: MotionState) {
   diff(before.settings, after.settings, "settings");
   diff(before.blocks, after.blocks, "blocks");
   diff(before.visibility, after.visibility, "visibility");
+  diff(before.sceneAnchors ?? [], after.sceneAnchors ?? [], "sceneAnchors");
   diff(before.staticObjects ?? [], after.staticObjects ?? [], "staticObjects");
   diff(before.timingDependencies ?? [], after.timingDependencies ?? [], "timingDependencies");
   diff(

@@ -95,20 +95,7 @@ export function validateObjectTransitions(
     const blocks = [...state.blocks].sort(
       (a, b) => a.startFrame - b.startFrame,
     );
-    if (t.timelinePolicy !== "referenceStates" && blocks.indexOf(b) !== blocks.indexOf(a) + 1)
-      throw new Error(
-        "Переходы поддерживают соседние состояния timeline; разбейте длинный путь на последовательные переходы",
-      );
-    if (
-      (t.timelinePolicy !== "referenceStates" && (t.startFrame < a.startFrame ||
-      t.startFrame >= a.startFrame + a.durationFrames ||
-      end < b.startFrame ||
-      end >= b.startFrame + b.durationFrames)) ||
-      intervalConflict(t, state.settings.durationFrames, "transition")
-    )
-      throw new Error(
-        t.timelinePolicy === "referenceStates" ? "TIMELINE_CONFLICT: reference transition endpoint must be within the project" : "Переход начинается в исходном блоке и заканчивается в целевом, включая его первый кадр. Конечный кадр должен существовать.",
-      );
+    intervalConflict(t, state.settings.durationFrames, "transition");
     if (
       Math.sign(
         decompose(presentation[t.logicalObjectId][t.fromSceneId].normalized)

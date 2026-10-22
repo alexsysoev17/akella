@@ -100,16 +100,10 @@ export function presentationBlocks(state: MotionState): MotionState["blocks"] {
   return blocks;
 }
 export function presentedTransitions(state: MotionState, frame: number) {
-  const started = (state.objectTransitions ?? []).filter(t => frame >= t.startFrame);
-  const latest = Math.max(-1, ...started.map(t => t.startFrame));
-  return started.filter(t => {
-    if (t.startFrame !== latest) return false;
-    const end = t.startFrame + t.durationFrames;
-    if (t.timelinePolicy !== "referenceStates") return frame <= end || (state.expressions ?? []).some(e => e.enabled && e.type === "inertialOvershoot" && e.transitionId === t.transitionId && frame >= e.startFrame && frame < e.startFrame + e.durationFrames);
-    // Hold the target after arrival, but never suppress a later unrelated authored scene.
-    const nextScene = Math.min(Infinity, ...state.blocks.filter(b => ![t.fromSceneId, t.toSceneId].includes(b.sceneId) && b.startFrame >= end).map(b => b.startFrame));
-    return frame < nextScene;
-  });
+  const started=(state.objectTransitions ?? []).filter(t=>frame>=t.startFrame);
+  const latest=new Map<string,number>();
+  for(const t of started)latest.set(t.logicalObjectId,Math.max(latest.get(t.logicalObjectId)??-Infinity,t.startFrame));
+  return started.filter(t=>t.startFrame===latest.get(t.logicalObjectId));
 }
 
 /** Keep the selected source/target tree intact. One scene composite owns the entire pair

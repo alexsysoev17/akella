@@ -1,3 +1,4 @@
+import {globalFrameSchema, intervalDurationSchema} from "./time.js";
 import { TimelineConstraintError } from "./constraints.js";
 import { intervalConflict } from "./intervals.js";
 import { z } from "zod";
@@ -12,7 +13,7 @@ import { buildRegistry } from "./registry.js";
 import { freezeObjectOperations } from "./static-object.js";
 
 const id = z.string().min(1).max(180);
-const timingPatch = { startFrame: z.number().int().nonnegative().optional(), durationFrames: z.number().int().positive().optional() };
+const timingPatch = { startFrame: globalFrameSchema.optional(), durationFrames: intervalDurationSchema.optional() };
 const parameters = z.record(z.string(), z.union([z.number().finite(), z.string(), z.boolean(), z.null()]));
 export const motionToolSchema = z.discriminatedUnion("tool", [
   z.object({ tool: z.literal("freezeObject"), logicalObjectId: id }).strict(),

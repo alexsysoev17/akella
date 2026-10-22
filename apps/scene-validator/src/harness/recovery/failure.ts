@@ -57,7 +57,7 @@ export function recoveryFailure(error: unknown, stage: string, revision: string,
                     ? "RENDERER_FAILURE"
                     : /MISSING_PATH|CAPABILITY/.test(code)
                       ? "MISSING_CAPABILITY"
-                      : /COMPILER_COVERAGE|REQUIREMENT_OPERATIONS_INCOMPLETE|RECOVERY_PROVIDER_BUDGET|RECOVERY_CONTEXT_BUDGET|INVALID_EFFECT_PARAMETER|PROVIDER_SCHEMA_INVALID/.test(
+                      : /COMPILER_COVERAGE|REQUIREMENT_OPERATIONS_INCOMPLETE|INVALID_EFFECT_PARAMETER|PROVIDER_SCHEMA_INVALID/.test(
                             code,
                         )
                         ? "PROBABLE_DEFECT"
@@ -65,11 +65,12 @@ export function recoveryFailure(error: unknown, stage: string, revision: string,
                           ? "UNSUPPORTED_OPERATION"
                           : "INVALID_CANDIDATE";
     // A model's assertion is never evidence of a code defect. These signals are produced by admission/rendering.
-    const codeRepairEligible =
+    const codeRepairEligible = !/BUDGET|TIMEOUT|CANCEL|RATE_LIMIT|AUTH/.test(code) && (
         category === "PROBABLE_DEFECT" ||
+        (code === "TASK_SCOPE_VIOLATION" && stage === "preflight" && requirement?.effectOperation?.action === "updateTiming") ||
         code === "ENGINE_CAPABILITY_MISSING" ||
         code === "PROVIDER_SCHEMA_INVALID" ||
-        /BUDGET|INTERNAL|ASSERTION/.test(code);
+        /INTERNAL|ASSERTION/.test(code));
     return { version: "recovery-failure/1", stage, code, category,
         signature: createHash("sha256").update(JSON.stringify([stage, code, requirement?.kind, requirement?.techniques])).digest("hex"),
         revision, requirementId: requirement?.requirementId, target: requirement?.target ?? null,

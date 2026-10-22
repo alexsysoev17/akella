@@ -49,7 +49,7 @@ export function numericQA(state: MotionState, request = "", presentation: StateP
       status: values.every((v, i) => Number.isFinite(v) && Math.abs(v) <= e.parameters.amplitude + 1e-8 && v === scopedExpressionValue(state, e, e.startFrame + e.durationFrames * (i + .5) / count, presentation)) ? "PASSED" : "FAILED",
       metrics: { samples: count, frequency: e.parameters.frequency, maximumOffset: Math.max(...values.map(Math.abs)), temporalMode: e.parameters.temporalMode ?? "legacyWindow" } });
     if (e.parameters.temporalMode === "continuous") checks.push({ name: "wiggleContinuousInterval", target: e.expressionId, category: "mathematics", required: true,
-      status: e.startFrame + e.durationFrames <= state.settings.durationFrames ? "PASSED" : "FAILED" });
+      status: Number.isSafeInteger(e.startFrame + e.durationFrames) ? "PASSED" : "FAILED" });
   }
   for (const e of state.expressions ?? []) {
     if (!e.enabled || e.type !== "inertialOvershoot") continue;

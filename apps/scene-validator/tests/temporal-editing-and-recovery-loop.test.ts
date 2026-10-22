@@ -201,7 +201,7 @@ test("Test A: Original parsley request (Parsley 1 +5 frames, Parsley 2 +10 frame
 });
 
 // Test B: Negative frame shift
-test("Test B: Negative frame shift (shifts earlier and shifts origin if negative)", async () => {
+test("Test B: Negative frame shift preserves signed pre-roll and output range", async () => {
   const f = await identityFixture(1, (scenes) => {
     scenes[0].children = [node("box", "коробка", 50, 50)];
   });
@@ -245,9 +245,10 @@ test("Test B: Negative frame shift (shifts earlier and shifts origin if negative
     const tasks2 = compileTasks(f.project, planB2);
     const compiled2 = compileRequirement(f.project, next1, planB2, tasks2[0]);
     const next2 = applyOperations(next1, compiled2.operations, f.project);
-    // Origin shifted: anim starts at frame 0, duration is extended
-    assert.equal(next2.animations[0].startFrame, 0);
-    assert.ok(next2.settings.durationFrames >= 150 + 13);
+    // Signed mathematical time does not move the visible output window.
+    assert.equal(next2.animations[0].startFrame, -13);
+    assert.equal(next2.settings.durationFrames, next1.settings.durationFrames);
+    assert.deepEqual(next2.blocks, next1.blocks);
   } finally {
     await f.cleanup();
   }

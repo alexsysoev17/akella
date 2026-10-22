@@ -4,13 +4,13 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-21 (Europe/Moscow) — AKELLA welcome/project chooser and text-only two-tone UI; targeted update, not a full audit |
+| Last Updated | 2026-10-22 (Europe/Moscow) — signed mathematical time, dependency-preserving retiming, global object presentation and bounded source retrieval; targeted update, not a full audit |
 | Last Full Audit | 2026-10-13; unchanged, this update is not a full renderer/provider audit |
-| Git Commit | UI implementation `3f295de`, documentation baseline `e52bf18`; natural tagline sizing correction uncommitted at this snapshot. |
+| Git Commit | Baseline `2955e6d`; clean local checkpoint `838b726` before this task. Signed-time/runtime/test/doc changes uncommitted at this snapshot. |
 | Git Branch | `temporal-recovery-loop`, local only |
-| Working Tree Status | Only tagline HTML/font fitting, its CSS and this documentation changed at this snapshot. Local supplied artwork and user projects unchanged. |
-| Documentation Version | 1.0.34 |
-| Scope of Last Update | Two welcome screens, existing-project chooser/import entry, local brand/font allowlist, Inter Light/Medium hover, two-tone text controls and removal of renderer labels/toolbar arrows. Existing timeline and Motion Engine retained. |
+| Working Tree Status | Signed-time source/contracts/native/recovery/tests/docs uncommitted at snapshot. Original test37 and Figma source data unchanged; historical replays ran in isolated copies. |
+| Documentation Version | 1.1.0 |
+| Scope of Last Update | Runs 9da58a18 and 680b606c; signed frames and spatial representation limits; committed-snapshot retiming/dependency closure; scene anchors vs presentation blocks; native output window and lifetimes; deterministic recovery; bounded Level2 source spans; actual test evidence below. |
 | Code snapshot SHA-256 | NOT RECALCULATED; refer to component digests and final source commit. |
 
 Git 2.54.0 (Apple Git-157): локальная история, текущая ветка указана в Document Status, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
@@ -1877,3 +1877,74 @@ Completion:21/21 native API/renderer tests passed (including shared Preview/FFmp
 Tagline correction (2026-10-21): removed SVG textLength/spacingAndGlyphs. SOFTWARE THAT CREATES is native HTML Inter Medium500 with letter-spacing:-0.1em. After local fonts load, a ResizeObserver measures actual text advance and adjusts only font-size to match the brand column. No scale transform, glyph stretching or spacing redistribution; observer disconnects on routing. Other controls retain Light→Medium hover.
 
 Tagline verification: browser measured width534.453125px against534.515625px photo at2048px viewport, Medium500, spacing/font-size=-0.1, transform:none, zero textLength attributes.390px resize retains width within0.1px; Start/chooser route and observer lifecycle ran without page errors. UI build passed.
+
+## Signed global time and dependency correctness — 2026-10-22
+
+Targeted implementation update, not a full architecture audit. Technical source of truth remains current local code. The previous documentation's automatic origin shifts, shortened-scene compression and universal output-bound interval restrictions are historical behavior superseded here.
+
+### Confirmed causes and historical evidence
+
+Original runs are in `projects/test37/motion/ai/9da58a18-cf93-4144-abb3-1c782b598730` and `680b606c-adb4-4a48-91e1-367ad455bc43`. Saved authoritative revision is232b6cca-597c-4f93-a85f-f0a9513aa6cc, matching the source project's current revision at replay. Both exact saved semantic interpretations were reused through production execution on separate copies; originals were not updated.
+
+1. `motion/intent/compiler.ts` removed incoming dependencies AND outgoing edges of a self-relative retime. Scope admission correctly objected to deleting another target's edge. New shifts retain edges; an explicitly moved dependent updates only its incoming offset.
+2. `assertIntentScope` built baseline arrays from shared before/next entity references, then scheduled those arrays in place. Dependency resolution could mutate the authoritative before snapshot, corrupting both effect propagation and final reconciliation. Scheduling now runs on an independent scoped copy; a real mismatch includes an actual scopeDiff in preflight diagnostics.
+3. Sequential group tasks could evaluate the second relative shift against an already propagated candidate, applying the offset twice. Compiler/admission/final requirement checks now share the original committed snapshot for one-time shifts. Task ordering incorporates existing anchor→dependent edges; reverse order in the user's requirement array is tested.
+4. Global starts were nonnegative at several schema/tool boundaries; the dependency resolver rejected starts below0. Compiler attempted a compensating shiftProjectOrigin, while evaluateMotion clamped global time into the output range. Those assumptions were inconsistent with pre-roll. Output caps had also been incorrectly applied to mathematical finite/settling/transition intervals.
+5. Native presentation previously exposed an out-of-scene object only DURING its active interval, dropping completed pre-roll poses and their children. Root scene clipping also treated the reference frame as an intermediate spatial boundary.
+6. Code Repair copied compiler/execution-related full files into model context and separately enforced a100KB pre-provider source limit despite the configured140KB request budget. Selected temporal files now total132,399bytes; bounded exact source spans transmit27,476bytes within a46,666byte source share. Full source remains in quarantine for hashing/materialization/tests.
+7. Generic BUDGET errors were considered code defects, allowing an unnecessary coding-model call after an intentional context-budget refusal. Budget/auth/rate-limit/timeout/cancel failures alone no longer qualify for source repair. Compiler-generated temporal scope contradictions retain defect eligibility; Level1 attempts safe revalidation first.
+
+### Authoritative contracts and flow
+
+```mermaid
+flowchart LR
+  I[Existing semantic planner] --> C[Compile against committed snapshot]
+  C --> O[Typed existing Motion Operations]
+  O --> D[Dependency offsets + topological scheduler]
+  D --> E[Reanchor attached effects exactly once]
+  E --> A[Scope / original-intent admission]
+  A --> M[Global mathematical evaluation]
+  M --> N[Skia world transforms and final viewport]
+  N --> P[Visible Preview window]
+  N --> V[Same frames to FFmpeg]
+```
+
+`motion/time.ts` defines signed safe-integer frame coordinates, positive safe-integer durations, checked endpoint/dependency arithmetic, and float32 coordinate representation limits. It does not define a canvas-derived position clamp. Mathematical intervals may precede0, cross0 or end beyond the output. `motion/intervals.ts` retains its adapter signature but validates mathematical interval safety, not containment in an export window. Output settings retain their existing108,000-frame/60FPS/4096px constraints; native frame size and memory budgets remain enforced. Keyframe-local indices remain nonnegative. Positions/distances use finite float32-representable bounds; composed native transforms are checked before Skia submission.
+
+Motion State remains schemaVersion1.0.0 with additive optional `sceneAnchors:[{sceneId,startFrame}]`. Missing anchors fall back to existing block starts, so existing persisted files require no rewrite. Scene anchors are organizational default times and may be signed/outside output. `retimeScenes` translates associated tracks/expressions/transitions without compressing durations. It updates default visual blocks only when their existing contiguous output representation can express the requested markers; otherwise blocks/output stay fixed while anchors/motion move. Duplicate/unknown anchors are rejected. This is a distinction between reference organization and visible composition, not another Motion State or timeline engine.
+
+`compileRequirement(..., committed)` derives one-time self/relative shifts from the original committed time. External references derive persistent relationships. Existing `shiftAnimation`, `setStartFrame`, `setTimingDependency`, `removeTimingDependency` and animation updates remain the typed mutation surface; no synthetic IDs or raw state patching was introduced. `applyOperations` preserves existing edges, adjusts incoming offset when a dependent is explicitly relocated, then invokes `resolveTimingDependencies` once. Attached effects retain source-relative offsets; explicit expression edits and subsequent graph propagation are accounted for separately. Real cycles, missing anchors, duplicate dependencies and overlapping replace channels remain invalid.
+
+The scheduler's relations retain their existing meanings: with=start alignment, after=anchor end, before=target end at anchor start, endWith=end alignment; signed offsets handle earlier/later starts relative to either endpoint. Removing/replacing an edge remains an explicit typed action. Scope admission permits only the deterministic transitive timing closure, preserving unrelated parameters/tracks. Preflight and final reconciliation use the same committed snapshot. Failure never bypasses reconciliation/transaction revision checks.
+
+`evaluateMotion` accepts signed global frame coordinates without rebasing/clamping to the export range; local interpolation remains globalFrame-startFrame. `valueAtTime`/`velocityAtTime`, easing, expressions, true path trimming and existing evaluators are reused. Preview `renderProjectFrame` validates frames against the nonnegative saved output window. FFmpeg still iterates exactly0..durationFrames-1 and consumes the identical native frame bytes. Direct mathematical/native QA sampling may inspect other global times without changing output settings.
+
+### Native lifetime, coordinates and QA
+
+`motion/presentation-lifetime.ts` indexes begun motion by canonical scene/target. An active interval takes precedence over a default presentation marker; a completed pose holds until a selected reference instance is presented. Unique logical identity prevents duplicate instances. Ambiguous registry identities are treated as independent source instances rather than guessed continuity. `native/renderer.ts` preserves hierarchy/transforms/ancestor effects while drawing only the owned subtree outside a nominal scene interval. Ancestors used solely for transport do not paint unrelated backgrounds. Missing presentation blocks can be supplied internally as nonvisible reference wrappers; no project blocks are synthesized on disk.
+
+Logical transition selection is per logicalObjectId, supports negative starts and retains completed poses. Outside the source/target's visible pair, native rendering transports only that logical subtree; unrelated scene backgrounds are preserved. Existing in-pair whole-scene transition composition fallback remains; arbitrary multi-pair compositing/complex hierarchy interactions REQUIRES REVIEW. Static overlays retain their prior explicit restrictions.
+
+The output surface is the final rectangular viewport. The reference-scene blanket clip is removed; explicit nested Figma clips and masks remain. Full offscreen transforms remain in mathematical state and hit geometry. Float32-overflow transforms report NUMERIC_TRANSFORM_OVERFLOW instead of producing invalid Skia values. Actual source rendering limitations (including filters/font-axis mapping) remain explicit warnings, not hidden browser fallbacks.
+
+Native QA no longer filters relevant samples solely by a scene block's visible interval. Real rendering, geometry integrity, path parameters and numeric evaluator checks remain. A path interval entirely outside output or an objectively offscreen target can have renderedPathReveal=NOT_TESTED with an explicit reason; it is not falsely labeled as an observed reveal. Intersecting visible path reveals still require an actual raster difference. Numeric settling/velocity tests may sample the full mathematical interval even when its endpoint is outside output. Render caches, frame limits and bounded numerical sampling remain.
+
+### Recovery, source retrieval and verification
+
+Level1 retries a known stale temporal scope/technical/coverage candidate by deterministic recompile+full admission against the ORIGINAL intent; no model is called if this succeeds. The reviewed procedure is deterministic-global-retiming/1. Recovery semantics are motion-recovery/3 so older cached procedures become DEPRECATED. Candidate recovery is not commitment: objective QA and final reconciliation/revision-checked transaction still follow.
+
+Level2 remains separate and controlled by recovery.codeRepair.enabled (current default:true), with independent existing call/time/context/token budgets. `harness/recovery/source-context.ts` sends complete small files or bounded exact numbered spans of larger selected files, with full-file hashes and explicit complete=false. Imports and invariant/scheduler/scoping sites are prioritized. The full provider request is still charged against maxContextBytes; actual usage is recorded. No repository-wide or client data is sent. A tiny configured budget may still correctly block preparation and report the measured operational reason. A source excerpt does not prove arbitrary-defect repair coverage.
+
+One live gpt-6-sol coding qualification was actually run for a controlled object-envelope defect in a source-only copy:14,921 input/1,638 output tokens, provider33.044s, total35.966s. Source payload27,236→4,261bytes. The provider returned a real code edit and new anyOf/oneOf regressions. Baseline regressions FAILED; patched typecheck and both tests PASSED under confinement. Result AWAITING_APPROVAL; patchIdentity c354f137a5140b6b39cbcdf09f4d2ac022c8175cbbed2864aa4dabb8c6a2a4c8. No source promotion or application occurred. This is a real isolated coding-model test of a controlled defect, not proof that arbitrary temporal bugs can be repaired automatically.
+
+Exact historical replay A succeeded2/2 in11.243s; B succeeded1/1 in6.209s. Both retained original Trim Paths IDs, duration21, edge relation after/offset0 and starts30/51; output remained240frames. These times include native QA and use saved semantic answers, NOT live interpretation calls. Existing font590→600 and image-color-filter warnings remained visible. Historical failed runs consumed64,270input/1,286output over3 calls (A) and43,716input/670output over2 calls (B); these are historical observations, not a fair live before/after latency benchmark. Current replay inference tokens are not applicable. New controlled compound pre-roll E2E uses one prepared-provider call, actual execution/native QA/commit/FFmpeg and exact frame-input digest comparison.
+
+New tests: `tests/signed-time.test.ts` and `tests/native-signed-time.test.ts` cover signed interpolation/hold, all compound properties, custom easing, negative velocity sampling, safe numeric/resource invariants, scene anchors, A→B→C propagation and reverse-order group shifts, offset editing, true cycles, scope protection, attached inertia, deterministic recovery/final reconciliation,120 seeded dependency shifts plus108 mixed-FPS/duration cases, offscreen/large finite coordinates, partial native Trim Paths, logical transition pre-roll, transactional persistence and exact output-window/video frame bytes. Existing tests whose old expectation was rejection/clamping/unlinking at an output boundary now verify the new valid state while retaining genuine invalid-duration/unknown-target/cycle/duplicate/scope checks. The old web workflow fixture was updated to the already-implemented Start→project-list/text-button UI; production web UI was not changed in this task.
+
+Durable local evidence: `data/harness/reports/signed-global-time-2026-10-22/summary.json`, replay-A/B.json, native QA frame41 PNGs and synthetic-code-repair.patch (all ignored runtime/client artifacts). Final full-test results recorded below at completion.
+
+Known limits: live natural-language planning was not rerun; historical real-provider interpretations were replayed. Browser-compat global subtree-presentation parity is NOT VERIFIED; native is the supported default. Native in-pair whole-scene transition compositing, source text/filter warnings and static overlay restrictions remain as described. UI scrubber displays only the visible nonnegative window. Source-patch application still requires external explicit human review; there is no authenticated in-app apply endpoint. Provider cost unavailable. No user project/source file, canonical object ID, asset or geometry was rewritten.
+
+Architecture Change History: signed-safe mathematical time, separate optional organizational anchors, dependency-preserving operations and immutable admission snapshots, global native subtree lifetime/viewport rules, selective QA window diagnostics, deterministic temporal recovery, bounded source excerpts and actual isolated live patch preparation. No second planner/engine/renderer, arbitrary LLM code execution, blanket validation bypass or production auto-promotion.
+
+Completion verification (2026-10-22): final full `npm run check` PASSED291/291 base/compat +2/2 browser +47/47 native (340 tests), TypeScript and production build, after the final source-context/version, lifetime-index and transitive-group changes. Task ordering follows transitive ancestors, including unselected intermediate nodes; selected [C,A] in A→B→C shifts once. Explicit dependent offsets are derived after their anchor is resolved. Native export-window regression also decodes the actual MP4 to count frames, separately from exact shared-renderer input digests. Durable full log: `data/harness/reports/signed-global-time-2026-10-22/full-check.log`. No existing numerical/visual tolerances were increased.
