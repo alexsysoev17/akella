@@ -6,9 +6,9 @@
 |---|---|
 | Last Updated | 2026-10-22 (Europe/Moscow) — signed mathematical time, dependency-preserving retiming, global object presentation and bounded source retrieval; targeted update, not a full audit |
 | Last Full Audit | 2026-10-13; unchanged, this update is not a full renderer/provider audit |
-| Git Commit | Baseline `2955e6d`; clean local checkpoint `838b726` before this task. Signed-time/runtime/test/doc changes uncommitted at this snapshot. |
+| Git Commit | Verified source/tests `e1261e3`; baseline `2955e6d`, pre-task checkpoint `838b726`. This status-only documentation follow-up is outside the source commit. |
 | Git Branch | `temporal-recovery-loop`, local only |
-| Working Tree Status | Signed-time source/contracts/native/recovery/tests/docs uncommitted at snapshot. Original test37 and Figma source data unchanged; historical replays ran in isolated copies. |
+| Working Tree Status | Source/contracts/native/recovery/tests committed in `e1261e3`; status-only documentation follow-up pending at snapshot. Original test37 and Figma source data unchanged; historical replays ran in isolated copies. |
 | Documentation Version | 1.1.0 |
 | Scope of Last Update | Runs 9da58a18 and 680b606c; signed frames and spatial representation limits; committed-snapshot retiming/dependency closure; scene anchors vs presentation blocks; native output window and lifetimes; deterministic recovery; bounded Level2 source spans; actual test evidence below. |
 | Code snapshot SHA-256 | NOT RECALCULATED; refer to component digests and final source commit. |
