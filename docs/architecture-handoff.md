@@ -6,9 +6,9 @@
 |---|---|
 | Last Updated | 2026-10-25 (Europe/Moscow) — causal recovery, reserved execution, durable continuation and iterative source investigation; targeted update, not a full audit |
 | Last Full Audit | 2026-10-13; unchanged, this update is not a full renderer/provider audit |
-| Git Commit | Pre-change checkpoint `4a24f04`, baseline `782e72a`. Causal recovery implementation is UNCOMMITTED at this documentation snapshot. |
+| Git Commit | Verified implementation/tests/docs: `2f1e102`; pre-change checkpoint `4a24f04`, baseline `782e72a`. This status-only follow-up is outside the implementation commit. |
 | Git Branch | `temporal-recovery-loop`, local only |
-| Working Tree Status | Task-owned source/tests/docs/script changes pending. Client project/source/motion data not edited; historical execution only replayed in temporary copies. |
+| Working Tree Status | Implementation committed in `2f1e102`; only this status follow-up pending at snapshot. Client project/source/motion data not edited; historical execution only replayed in temporary copies. |
 | Documentation Version | 1.1.4 |
 | Scope of Last Update | Run5e184d6e causal chain; Project Recovery budget isolation/reservation; persisted continuation; non-overlapping entrance/transition composition; exact transition inertia identity; read-only source tools and bounded investigation. Partial audit only. |
 | Code snapshot SHA-256 | NOT RECALCULATED; refer to component digests and final source commit. |
