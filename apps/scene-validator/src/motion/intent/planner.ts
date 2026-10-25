@@ -1,3 +1,4 @@
+import {compactRepairSchema,mergeCompactRepair} from "./repair.js";
 import {validateMentions,type ObjectMention} from "../mentions.js";
 import { assertCoverageScope } from "./coverage.js";
 import { resolveTextSettings } from "../../motion-library/techniques/text.js";
@@ -82,7 +83,9 @@ export class SemanticProvider implements IntentProvider {
     this.phases.set(phase, count);
     return this.providerFor(count === 1 ? phase : `${phase}-${count}`);
   }
-  constructor(private providerFor: (phase: string) => Promise<CodexProvider>) {}
+  constructor(private providerFor: (phase: string) => Promise<CodexProvider>,private recovery?:{
+    recover:(error:unknown,stage:string,replay:()=>Promise<IntentPlan>)=>Promise<IntentPlan>;
+  }) {}
   async interpret(context: unknown, request: string, feedback?: unknown) {
     const referenceRepair = (
       feedback as {
@@ -199,6 +202,7 @@ export class SemanticProvider implements IntentProvider {
           ),
         ),
       );
+      const execute=async()=>{
       const patch = await (
         await this.provider("coverage-audit")
       ).structured(
@@ -218,6 +222,24 @@ export class SemanticProvider implements IntentProvider {
         "semantic-repair",
       );
       return mergeTargetedRepair(plan, patch, feedback.issues, request);
+      };
+      try{return await execute();}catch(error){
+        if(!this.recovery)throw error;
+        return this.recovery.recover(error,"semantic-repair",async()=>{
+          const ids=new Set(feedback.issues.flatMap(i=>i.requirementIds));
+          const affected=plan.requirements.filter(r=>ids.has(r.requirementId));
+          const minimal=affected.map(r=>({...r,parameters:Object.fromEntries(Object.entries(r.parameters).filter(([,v])=>v!==null&&v!==undefined))}));
+          const patch=await (await this.provider("compact-coverage-recovery")).structured({
+            project:(context as Record<string,unknown>).project,
+            sceneIndex:(context as Record<string,unknown>).sceneIndex,
+            objectIndex:((context as Record<string,unknown>).objectIndex as {sourceNodeId:string;sceneId:string;name:string}[]|undefined)?.filter(o=>affected.some(r=>r.target.sourceNodeId===o.sourceNodeId||r.target.name===o.name)||feedback.issues.some(i=>i.sourceText.includes(o.name))),
+            failedRelationships:feedback.issues,
+            affectedRequirements:minimal,
+            anchors:plan.requirements.filter(r=>minimal.some(m=>m.timing.anchorRequirementId===r.requirementId||m.inheritFromRequirementId===r.requirementId)).map(r=>({requirementId:r.requirementId,target:r.target,techniques:r.techniques,timing:r.timing})),
+          },request,"Return a MINIMAL semantic repair: field deltas on affected requirement IDs, and addedRequirements only for proven missing instructions. Preserve exact source clauses, real target IDs and all unrelated actions. Do not reproduce unchanged fields, the full plan or null defaults. A disappearance uses fadeOut; source scene/reference scene are distinct. Full validation follows the protected merge.",compactRepairSchema,"semantic-recovery");
+          return mergeCompactRepair(plan,patch,feedback.issues,request);
+        });
+      }
     }
     if ((context as { contextualEditHint?: boolean })?.contextualEditHint)
       return normalizeSelectorPlan(
@@ -866,6 +888,7 @@ export async function semanticPlan(
     activeSceneId?: string;
     selectedObjectId?: string;
     mentions?: ObjectMention[];
+    recover?:(error:unknown,stage:string,replay:()=>Promise<IntentPlan>)=>Promise<IntentPlan>;
   } = {
     auditAlways: true,
   },
@@ -955,7 +978,12 @@ export async function semanticPlan(
     let correctionUsed = false;
     try {
       calls++;
-      const draft = await provider.interpret(context, request, feedback);
+      let draft:IntentPlan;
+      try{draft=await provider.interpret(context, request, feedback);}
+      catch(error){
+        if(!options.recover || !/OUTPUT_TRUNCATED|INVALID_OUTPUT|PROVIDER_TIMEOUT/.test(String(error)))throw error;
+        draft=await options.recover(error,"semantic-planning",()=>provider.interpret(context,request,{compactOutput:true,reason:"No complete initial plan exists. Group identical target behavior; preserve every source clause, temporal dependency and technique. Omit redundant explanations."}));
+      }
       await trace("draft-" + attempt, draft);
       if (attempt > 1)
         await trace("semantic-retry-result-" + attempt, {

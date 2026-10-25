@@ -558,6 +558,7 @@ test("Test I: Automatic Project Recovery (resolves self-referential cycle determ
       preflightErr,
       {
         policy: {
+          supervisorMaxAttempts:6,supervisorMaxDurationMs:180000,semanticRecoveryCalls:2,
           enabled: true,
           model: "gpt-6-sol",
           effort: "low",

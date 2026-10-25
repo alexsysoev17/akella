@@ -1,5 +1,8 @@
 import { z } from "zod";
 export const recoveryPolicySchema = z.object({
+    supervisorMaxAttempts: z.number().int().min(1).max(12).default(6),
+    supervisorMaxDurationMs: z.number().int().min(1000).max(600000).default(180000),
+    semanticRecoveryCalls: z.number().int().min(0).max(3).default(2),
     enabled: z.boolean().default(true),
     model: z.string().min(1).max(200).default("gpt-6-sol"),
     effort: z.enum(["low", "medium", "high"]).default("low"),

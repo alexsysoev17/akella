@@ -4,7 +4,7 @@ import type { HarnessRun } from "../runtime.js";
 export function recoveryProviderRuntime(run: HarnessRun, firstCall: number, remainingMs?: number) {
     const runtime = run.providerRuntime(), policy = run.config.recovery;
     const check = () => {
-        const calls = run.calls.slice(firstCall);
+        const calls = run.calls.slice(firstCall).filter(c=>c.purpose==="semantic-recovery"||!c.purpose?.startsWith("semantic")&&c.purpose!=="code-repair");
         const measured = calls.reduce((n, c) => n + (c.usage ? c.usage.inputTokens + c.usage.outputTokens : 0), 0);
         const knownCost = calls.reduce((n, c) => n + (c.cost ?? 0), 0);
         if (measured > policy.maxTokens || policy.maxEstimatedCost !== null && knownCost > policy.maxEstimatedCost)

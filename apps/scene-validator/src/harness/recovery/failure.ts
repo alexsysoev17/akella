@@ -79,5 +79,5 @@ export function recoveryFailure(error: unknown, stage: string, revision: string,
         writeSet: [...(requirement?.animationIds ?? []), ...(requirement?.expressionIds ?? [])],
         remediation: report?.availableResolutions ?? report?.toolIssue?.allowedActions ?? ["inspectObject", "inspectAnimations", "inspectDependencies"],
         recoverable: !["MISSING_CAPABILITY","PROVIDER_OUTPUT_LIMIT","PROVIDER_FAILURE","CONTEXT_ADMISSION"].includes(category) && !/CANCEL|BUDGET|TIMEOUT|DEPENDENCY_CYCLE|FIXED|PROVIDER_SCHEMA_INVALID/.test(code),
-        codeRepairEligible, evidence: [{ source: stage, detail: redactSecrets(report?.failure ?? message).replace(/\/Users\/[^/\s]+/g,"<home>").slice(0,2000) }] };
+        codeRepairEligible, evidence: [{ source: stage, detail: redactSecrets(report?.failure ?? message).replace(/\/Users\/[^/\s]+/g,"<home>").slice(0,2000) },...(error instanceof Error&&error.stack?[{source:"stack",detail:redactSecrets(error.stack).replace(/\/Users\/[^/\s]+/g,"<home>").slice(0,2000)}]:[])] };
 }

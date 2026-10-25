@@ -17,7 +17,8 @@ const original = path.resolve(arg("project")),
 const request = JSON.parse(
   await readFile(path.join(saved, "request.json"), "utf8"),
 );
-const response = JSON.parse(
+const live=args.includes("--live-original-provider");
+const response = live?undefined:JSON.parse(
   await readFile(
     args.includes("--response-file") ? path.resolve(arg("response-file")) : path.join(saved, "semantic-interpret/raw-response.json"),
     "utf8",
@@ -36,9 +37,12 @@ await cp(original, root, {
     ].some((pattern) => pattern.test(src)),
 });
 if (args.includes("--recorded-state")) {
-  const context = JSON.parse(
-    await readFile(path.join(saved, "context.json"), "utf8"),
-  );
+  const context = await readFile(path.join(saved,"context.json"),"utf8").then(JSON.parse).catch(async error=>{
+    if(error.code!=="ENOENT")throw error;
+    const doc=await readMotion(await loadProject(root));
+    if(doc.revision!==request.revision)throw Error("RECORDED_STATE_UNAVAILABLE_FOR_CHANGED_PROJECT");
+    return {motion:doc.state,projectRevision:doc.revision,scenes:(await loadProject(root)).inspection.document.scenes.map(s=>({sceneId:s.sceneId,objects:[]})),unprojectedStartup:true};
+  });
   const doc = await readFile(path.join(root,"motion/motion.json"),"utf8").then(JSON.parse).catch(async error=>{
     if(error.code!=="ENOENT"||request.revision!=="initial")throw error;
     return readMotion(await loadProject(root));
@@ -53,7 +57,7 @@ if (args.includes("--recorded-state")) {
       s.objects.map((o) => o.targetId),
     ),
   );
-  const projectState = (state: MotionState) =>
+  const projectState = (state: MotionState) => context.unprojectedStartup?state:
     JSON.parse(
       JSON.stringify({
         ...state,
@@ -99,7 +103,7 @@ if (args.includes("--recorded-state")) {
 const project = await loadProject(root),
   before = await readMotion(project);
 let calls = 0;
-const stop = registerProvider("saved-run-reference", () => ({
+const stop = live?()=>{}:registerProvider("saved-run-reference", () => ({
   id: "saved-run-reference",
   mode: "mock",
   capabilities: () => ({
@@ -128,7 +132,7 @@ try {
       {
         ...request.request,
         expectedRevision: before.revision,
-        settings: { provider: "saved-run-reference", model: "" },
+        settings: live?request.request.settings:{ provider: "saved-run-reference", model: "" },
       },
       () => {},
       { config: { maxLLMCalls: resolution ? 2 : 1, maxRepairAttempts: resolution ? 1 : 0 } },
@@ -142,7 +146,7 @@ try {
       {
         copy: root,
         sourceRun: run,
-        providerMode: "saved-output-replay",
+        providerMode: live?"live-original-provider":"saved-output-replay",
         llmFixtureCalls: calls,
         latencyMs: performance.now() - started,
         reconciliation: result.reconciliation,
@@ -151,6 +155,7 @@ try {
       2,
     ),
   );
+  if(args.includes("--report-file"))await writeFile(path.resolve(arg("report-file")),JSON.stringify({copy:root,resultFile:path.join(root,"replay-result.json"),sourceRun:run,reconciliation:result.reconciliation,providerMode:live?"live-original-provider":"saved-output-replay"}),{flag:"wx"});
   if (result.reconciliation?.status !== "SUCCESS") process.exitCode = 1;
 } finally {
   stop();

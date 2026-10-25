@@ -1,5 +1,5 @@
 import {reviewForApproval,approveCodeRepair} from "../apps/scene-validator/src/harness/recovery/promotion.ts";
-import {verifyOriginalRun} from "../apps/scene-validator/src/harness/recovery/replay.ts";
+import {verifyOriginalRun,publishOriginalReplay} from "../apps/scene-validator/src/harness/recovery/replay.ts";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { reviewCodeRepair } from "../apps/scene-validator/src/harness/recovery/code-repair.ts";
@@ -12,7 +12,9 @@ else if(command === "apply") {
     const workspace=value("--workspace"), identity=args[args.indexOf("--approve-patch")+1];
     if(!args.includes("--approve-patch")||!args.includes("--run"))throw Error("Explicit --approve-patch HASH and original --run UUID required");
     const review=await reviewForApproval(process.cwd(),workspace,identity);
-    console.log(JSON.stringify(await approveCodeRepair(process.cwd(),workspace,identity,review.approvalToken,isolated=>verifyOriginalRun(isolated,value("--project"),args[args.indexOf("--run")+1],process.cwd())),null,2));
+    const result=await approveCodeRepair(process.cwd(),workspace,identity,review.approvalToken,isolated=>verifyOriginalRun(isolated,value("--project"),args[args.indexOf("--run")+1],process.cwd(),args.includes("--allow-live-replay")));
+    const resume=await publishOriginalReplay(process.cwd(),value("--project"),args[args.indexOf("--run")+1],result.replay);
+    console.log(JSON.stringify({...result,resume},null,2));
 }
 else if (command === "review" || command === "export") {
     const root = value("--workspace"), report = await reviewCodeRepair(root);

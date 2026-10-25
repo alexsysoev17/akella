@@ -1,3 +1,5 @@
+import {supervisorExperience,rememberSupervisor} from "./recovery/supervisor-memory.js";
+import {GlobalFailureSupervisor} from "./recovery/supervisor.js";
 import { collectImprovements } from "./improvements.js";
 import { recoveryFailure } from "./recovery/failure.js";
 import { failureDiagnostic, type FailureDiagnostic } from "./failure.js";
@@ -12,7 +14,7 @@ import { hostname, tmpdir } from "node:os";
 import path from "node:path";
 import type { LoadedProject } from "../types.js";
 import { atomicJson, noSymlinkPath, safeDirectory } from "../files.js";
-import { harnessConfig, type HarnessConfig } from "./config.js";
+import { harnessConfig,harnessConfigSchema, type HarnessConfig } from "./config.js";
 import type {
   ProviderAdapter,
   ProviderRequest,
@@ -30,6 +32,9 @@ export class HarnessRun {
   readonly controller = new AbortController();
   readonly signal: AbortSignal;
   readonly createdAt = new Date().toISOString();
+  readonly supervisor:GlobalFailureSupervisor;
+  readonly recoverySignal:AbortSignal;
+  readonly externalSignal?:AbortSignal;
   calls: {
     purpose?: ProviderRequest["purpose"];
     inputBudget?: ReturnType<typeof prepareProviderRequest>["budget"];
@@ -64,6 +69,7 @@ export class HarnessRun {
       this.providerInitializationStatus,
       this.config.privacy === "full",
     );
+    if(!this.supervisor.report.events.length)await this.supervisor.settle(error,this.failure.failureStage,{}, {evidence:[{stack:this.failure.safeStackTrace}]});
     await this.diagnostic("structured-failure", recoveryFailure(error, this.phase, "unknown"));
     this.failures.push(this.failure.errorCode);
     await this.diagnostic("run-failed", this.failure);
@@ -91,6 +97,15 @@ export class HarnessRun {
     readonly scratch: boolean,
     external?: AbortSignal,
   ) {
+    this.externalSignal=external;
+    this.recoverySignal=external??new AbortController().signal;
+    this.supervisor=new GlobalFailureSupervisor({
+      request:"",revision:"unknown",reserveSourceAttempt:config.recovery.codeRepair.enabled,maxAttempts:config.recovery.supervisorMaxAttempts,maxDurationMs:config.recovery.supervisorMaxDurationMs,signal:external,
+      resources:()=>({primaryCalls:this.calls.filter(c=>!c.purpose?.includes("recovery")&&c.purpose!=="code-repair").length,recoveryCalls:this.calls.filter(c=>c.purpose?.includes("recovery")).length,codeInvestigationCalls:this.calls.filter(c=>c.purpose==="code-repair").length,maxPrimaryCalls:config.maxLLMCalls,projectRecoveryAttempts:config.recovery.maxAttempts,codeInvestigationEnabled:config.recovery.codeRepair.enabled}),
+      known:async fingerprint=>(await supervisorExperience(project.root)).filter(r=>r.fingerprint===fingerprint&&r.codeVersion===digest(this.references)&&r.status==="VERIFIED").map(r=>({strategy:r.strategy,procedure:r.procedure,validation:r.validation})),
+      trace:()=>this.events.slice(-12).map(e=>({stage:e.stage,at:e.at,durationMs:e.durationMs})),
+      persist:async report=>{await this.diagnostic("global-recovery",{status:report.status,latestFailure:report.events.at(-1)?.errorCode,eventCount:report.events.length,attemptCount:report.attempts.length,reason:report.finalReason});if(config.privacy==="full")await atomicJson(path.join(directory,"global-recovery.json"),redact(report));},
+    });
     this.signal = AbortSignal.any([
       this.controller.signal,
       ...(external ? [external] : []),
@@ -119,7 +134,8 @@ export class HarnessRun {
     signal?: AbortSignal,
     override?: Partial<HarnessConfig>,
   ) {
-    const config = await harnessConfig(project.root, override);
+    let config:HarnessConfig,startupError:unknown;
+    try{config=await harnessConfig(project.root,override);}catch(error){config=harnessConfigSchema.parse({});startupError=error;}
     const directory =
       config.privacy === "full"
         ? await safeDirectory(project.root, `motion/ai/${runId}`)
@@ -133,6 +149,8 @@ export class HarnessRun {
       signal,
     );
     try {
+      run.supervisor.setRequest(request);
+      if(startupError){run.phase="harness-configuration";throw startupError;}
       await run.record("received", { request, provider, model });
       await run.persist("RUNNING");
       return run;
@@ -166,18 +184,20 @@ export class HarnessRun {
   async invoke(adapter: ProviderAdapter, request: ProviderRequest) {
     this.phase = "provider-startup";
     this.providerInitializationStatus = "ADAPTER_READY";
-    this.checkpoint();
+    const reservedRecovery=request.purpose==="semantic-recovery";
+    if(reservedRecovery){if(this.recoverySignal.aborted)throw Error("CANCELLED");}
+    else this.checkpoint();
     if (
       !PROVIDER_ID_PATTERN.test(adapter.id) ||
       (adapter.mode === "live" && !providerIds().includes(adapter.id))
     )
       throw new BudgetError("PROVIDER_NOT_REGISTERED");
     const purpose = request.purpose ?? "motion-repair";
-    const semantic = purpose.startsWith("semantic");
+    const semantic = purpose.startsWith("semantic") && purpose!=="semantic-recovery";
     const isCodeRepair = purpose.startsWith("code-repair");
     const isRecovery = purpose.includes("recovery");
     const semanticCalls = this.calls.filter((c) =>
-      (c.purpose ?? "").startsWith("semantic"),
+      (c.purpose ?? "").startsWith("semantic") && c.purpose!=="semantic-recovery",
     ).length;
     const repairCalls = this.calls.filter(
       (c) =>
@@ -195,7 +215,7 @@ export class HarnessRun {
           3)
     )
       throw new BudgetError("RECOVERY_PROVIDER_BUDGET");
-    if (this.calls.length >= this.config.maxLLMCalls && !isRecovery && !isCodeRepair)
+    if (this.calls.filter(c=>!c.purpose?.includes("recovery")).length >= this.config.maxLLMCalls && !isRecovery && !isCodeRepair)
       throw new BudgetError("LLM_CALL_BUDGET");
     if (
       this.calls.length >=
@@ -207,12 +227,16 @@ export class HarnessRun {
       admission=prepareProviderRequest(adapter,request,this.config.maxContextBytes,this.config.modelProfiles);
     }catch(error){
       const report=(error as {contextAdmission?:unknown}).contextAdmission;
-      if(report)await this.diagnostic("context-admission",{purpose,...report as object,llmCalls:this.calls.length});
+      if(report){await this.diagnostic("context-admission",{purpose,...report as object,llmCalls:this.calls.length});await this.supervisor.observe(error,"context-admission",{evidence:[report]});}
       throw error;
     }
     const {budget}=admission;
     request=admission.request;
     await this.diagnostic("context-admission",{purpose,...admission.report,llmCalls:this.calls.length});
+    if(admission.report.compactedCategories.length){
+      const event=await this.supervisor.observe(Object.assign(Error("CONTEXT_EXHAUSTED before lossless packing"),{code:"CONTEXT_EXHAUSTED"}),"context-admission",{evidence:[admission.report]});
+      await this.supervisor.attempt(event,{strategy:"deterministic",procedure:"lossless-context-packing/1",reason:"Full request was safely repacked before any provider call",run:async()=>admission.report,verify:async r=>{if(r.status!=="ADMITTED")throw Error("CONTEXT_ADMISSION_FAILED");return {status:"PASSED",before:r.beforeBytes,after:r.afterBytes,budget:r.budgetBytes,lossless:true};}});
+    }
     request = { ...request, maxOutputTokens: budget.outputTokens };
     const known = this.calls.reduce((n, c) => n + (c.cost ?? 0), 0);
     if (
@@ -225,7 +249,7 @@ export class HarnessRun {
     const phaseRemaining = semantic
       ? this.config.semanticPlanningTimeoutMs - (now - this.started)
       : this.config.repairBudgetMs - (now - this.repairStarted!);
-    const totalRemaining = this.config.maxDurationMs - (now - this.started);
+    const totalRemaining = reservedRecovery ? this.config.recovery.maxDurationMs-(now-this.repairStarted!) : this.config.maxDurationMs - (now - this.started);
     const available = Math.min(phaseRemaining, totalRemaining);
     const completed = this.calls.filter((c) => c.status === "SUCCESS");
     const estimated = Math.max(
@@ -285,7 +309,7 @@ export class HarnessRun {
     this.phase = "provider-call";
     this.providerInitializationStatus = "STARTED";
     const start = performance.now();
-    await this.record("provider-started", {
+    await this.diagnostic("provider-started", {
       callIndex: this.calls.length,
       provider: adapter.id,
       model: call.model,
@@ -296,7 +320,8 @@ export class HarnessRun {
     });
     try {
       const limit = AbortSignal.any([
-        this.signal,
+        reservedRecovery?this.recoverySignal:this.signal,
+        ...(request.signal?[request.signal]:[]),
         AbortSignal.timeout(timeoutMs),
       ]);
       const pending = adapter.generate({
@@ -319,11 +344,12 @@ export class HarnessRun {
         known + result.estimatedCost > this.config.maxEstimatedCost
       )
         throw new BudgetError("COST_BUDGET");
-      this.checkpoint();
+      if(!reservedRecovery)this.checkpoint();
       this.providerInitializationStatus = "READY";
       this.phase = request.purpose ?? "semantic-planning";
       return { ...result, callIndex: this.calls.indexOf(call) + 1 };
     } catch (e) {
+      await this.supervisor.observe(e,request.purpose??"provider-call",{evidence:[{provider:adapter.id,requestBytes:call.requestBytes,stack:e instanceof Error?e.stack:undefined}]});
       call.status = String(e);
       this.providerInitializationStatus = "CALL_FAILED";
       throw e;
@@ -465,6 +491,10 @@ export class HarnessRun {
     request?: string,
   ) {
     if (this.finished) return;
+    const verified=status==="SUCCESS" && (result?.reconciliation as {status?:string}|undefined)?.status==="SUCCESS";
+    if(status!=="SUCCESS"&&!this.supervisor.report.events.length)await this.supervisor.settle(Error("UNVERIFIED_RESULT: "+status),"final-reconciliation",{}, {evidence:[result?.reconciliation]});
+    await this.supervisor.complete(verified,result?.reconciliation);
+    if(!this.scratch&&this.config.privacy==="full")await rememberSupervisor(this.project.root,this.supervisor.report,digest(this.references)).catch(error=>console.warn("Recovery experience persistence failed:",String(error)));
     this.finished = true;
     clearTimeout(this.timer);
     clearInterval(this.memoryTimer);

@@ -270,7 +270,7 @@ export class AIClient implements AIProvider {
       purpose:
         mode === "semantic" || mode === "semantic-planning"
           ? "semantic-planning"
-          : mode === "semantic-repair"
+          : mode === "semantic-recovery" ? "semantic-recovery" : mode === "semantic-repair"
             ? "semantic-repair"
             : "motion-repair",
       messages: [

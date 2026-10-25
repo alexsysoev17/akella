@@ -48,7 +48,8 @@ export function providerBudget(adapter: ProviderAdapter, request: ProviderReques
 /** Try a lossless context encoding before rejecting. Never spends a provider call. */
 export function prepareProviderRequest(adapter: ProviderAdapter, request: ProviderRequest, maxBytes: number, profiles: ModelProfile[] = []) {
     const beforeBytes = serializedRequestBytes(request);
-    const report = { version: "context-admission/1", beforeBytes, afterBytes: beforeBytes, budgetBytes: maxBytes, compactedCategories: [] as string[], lossless: true, promptPreserved: true, instructionsPreserved: true, schemaPreserved: true, requirementCount: null as number | null, requirementCountStatus: "NOT_PLANNED", llmCalls: 0, status: "ADMITTED", reason: null as string | null };
+    const mandatoryBytes=request.messages.reduce((sum,m)=>{if(m.role!=="user")return sum+Buffer.byteLength(m.content);try{const p=JSON.parse(m.content);return sum+Buffer.byteLength(typeof p.userRequest==="string"?p.userRequest:m.content);}catch{return sum+Buffer.byteLength(m.content);}},0)+Buffer.byteLength(JSON.stringify(request.responseSchema))+Buffer.byteLength(JSON.stringify(request.tools??[]));
+    const report = { mandatoryBytes,version: "context-admission/1", beforeBytes, afterBytes: beforeBytes, budgetBytes: maxBytes, compactedCategories: [] as string[], lossless: true, promptPreserved: true, instructionsPreserved: true, schemaPreserved: true, requirementCount: null as number | null, requirementCountStatus: "NOT_PLANNED", llmCalls: 0, status: "ADMITTED", reason: null as string | null };
     let initial: unknown;
     try {
         return { request, budget: providerBudget(adapter, request, maxBytes, profiles), report };

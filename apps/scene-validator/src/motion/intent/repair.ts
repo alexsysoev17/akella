@@ -112,3 +112,22 @@ export function mergeTargetedRepair(
     coverage: [...coverage, ...rows.values()],
   });
 }
+
+// Field deltas avoid re-emitting every null/default field of large valid requirements.
+const editableFields=['techniques','target','sceneId','timing','parameters','inheritFromRequirementId','inheritanceExplanation','kind','unresolvedReason','sourceText','sourceClauseId'] as const;
+const changeOptions=editableFields.map(field=>z.object({field:z.literal(field),value:intentRequirementSchema.shape[field]}).strict());
+export const compactRepairSchema=z.object({
+ updates:z.array(z.object({requirementId:z.string(),changes:z.array(z.union(changeOptions as unknown as [typeof changeOptions[number],...typeof changeOptions[number][]])).min(1).max(12)}).strict()).max(30),
+ addedRequirements:z.array(intentRequirementSchema).max(12),coverageRows:z.array(intentPlanSchema.shape.coverage.element).max(200),
+}).strict();
+export function mergeCompactRepair(plan:IntentPlan,input:unknown,issues:Parameters<typeof mergeTargetedRepair>[2],request:string){
+ const patch=compactRepairSchema.parse(input),seen=new Set<string>();
+ const requirements=patch.updates.map(update=>{
+  if(seen.has(update.requirementId))throw Error('DUPLICATE_REPAIR_REQUIREMENT');seen.add(update.requirementId);
+  const original=plan.requirements.find(r=>r.requirementId===update.requirementId);if(!original)throw Error('REPAIR_UNKNOWN_REQUIREMENT');
+  const result=structuredClone(original),fields=new Set<string>();
+  for(const change of update.changes){if(fields.has(change.field))throw Error('DUPLICATE_REPAIR_FIELD');fields.add(change.field);Object.assign(result,{[change.field]:change.field==='parameters'&&change.value&&typeof change.value==='object'?{...result.parameters,...Object.fromEntries(Object.entries(change.value).filter(([,v])=>v!==null&&v!==undefined))}:change.value});}
+  return intentRequirementSchema.parse(result);
+ });
+ return mergeTargetedRepair(plan,{requirements:[...requirements,...patch.addedRequirements],coverageRows:patch.coverageRows},issues,request);
+}

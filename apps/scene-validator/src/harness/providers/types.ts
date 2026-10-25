@@ -15,7 +15,7 @@ export interface ProviderUsage {
   cachedInputTokens?: number;
 }
 export interface ProviderRequest {
-  purpose?: "semantic-planning" | "semantic-repair" | "motion-repair";
+  purpose?: "semantic-planning" | "semantic-repair" | "semantic-recovery" | "code-repair" | "motion-repair";
   messages: { role: "system" | "user" | "assistant"; content: string }[];
   responseSchema: unknown;
   model?: string;

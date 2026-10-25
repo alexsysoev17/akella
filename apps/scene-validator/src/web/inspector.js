@@ -73,19 +73,19 @@ export function attachInspector(container, url) {
     try {
       const review = await post("code-repair-review", payload);
       const dialog = document.createElement("dialog");
-      dialog.innerHTML = `<h3>Изменение исходного кода</h3><p>Проверяются точный патч, чистота Git и повтор исходного сценария в изолированной копии. После успешного применения потребуется перезапуск сервера. Пользовательский проект не изменится.</p><pre style="max-height:50vh;overflow:auto">${esc(review.patchText)}</pre><button data-approve>Подтвердить этот патч</button> <button data-dismiss>Отмена</button>`;
+      dialog.innerHTML = `<h3>Изменение исходного кода</h3><p>Проверяются точный патч, чистота Git и повтор исходного сценария в изолированной копии. После успешного применения проверенный результат исходного запроса будет записан в проект, если его версия не менялась. Если сохранённого ответа нет, повтор использует настроенный AI Provider и может расходовать его лимит. Для загрузки нового кода потребуется перезапуск сервера.</p><pre style="max-height:50vh;overflow:auto">${esc(review.patchText)}</pre><button data-approve>Подтвердить этот патч</button> <button data-dismiss>Отмена</button>`;
       panel.append(dialog); dialog.showModal();
       dialog.querySelector("[data-dismiss]").onclick=()=>dialog.close();
       dialog.addEventListener("close",()=>dialog.remove(),{once:true});
       dialog.querySelector("[data-approve]").onclick=async()=>{
         dialog.close();status.textContent="Проверка исходного сценария…";
         try {
-          const job=await post("code-repair-approve",{...payload,approvalToken:review.approvalToken});
+          const job=await post("code-repair-approve",{...payload,approvalToken:review.approvalToken,allowLiveReplay:true});
           while(!disposed){
             await new Promise(resolve=>setTimeout(resolve,1000));
             const response=await fetch(url+"/jobs/"+job.jobId);const result=await response.json();
             if(!response.ok||result.status==="failed")throw Error(result.error);
-            if(result.status==="completed"){status.textContent="Патч применён. Перезапустите сервер; исходный проект сохранён.";break;}
+            if(result.status==="completed"){status.textContent=result.result?.resume?.status==="APPLIED"?"Патч применён, исходный запрос восстановлен. Перезапустите сервер для загрузки нового кода.":"Патч применён. Повтор остановлен: "+(result.result?.resume?.reason??"см. диагностику")+". Перезапустите сервер.";break;}
           }
         }catch(error){status.textContent=error.message;}
       };
@@ -139,6 +139,7 @@ export function attachInspector(container, url) {
           : "<p>NOT_AVAILABLE</p>");
     if (tab === 2)
       body.innerHTML =
+        block("Автоматическое восстановление — решения и проверки",data.globalRecovery) +
         `<h3>Уровень 1 — восстановление проекта</h3><p>${esc(data.recovery?.status ?? "Не запускалось")}</p>` +
         block("Исходная и текущая ошибка, операции и попытки", data.recovery) +
         `<h3>Уровень 2 — ремонт кода в изоляции</h3><p>${esc(data.codeRepair?.status ?? "Не запускалось")}</p>` +

@@ -436,7 +436,7 @@ test("invalid provider enum commits zero changes and creates no successful actio
       recentSuccessfulActions(after),
       recentSuccessfulActions(before),
     );
-    assert.equal(calls, 1);
+    assert.equal(calls, 3); // Primary rejection + one reserved semantic repair + one isolated source investigation, all fail safely.
   } finally {
     stop();
     await f.cleanup();

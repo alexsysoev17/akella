@@ -4,13 +4,13 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-25 (Europe/Moscow) — full-request context admission repair; targeted update, not a full audit |
+| Last Updated | 2026-10-25 (Europe/Moscow) — global recovery supervision and bounded semantic/source recovery; targeted update, not a full audit |
 | Last Full Audit | 2026-10-13; unchanged, this update is not a full renderer/provider audit |
-| Git Commit | Verified source/tests `8c986a0`; pre-change checkpoint `d946928`. This status-only follow-up is outside that source commit. |
+| Git Commit | Pre-change checkpoint `c69ff62` (baseline `ab9db86`). Global recovery changes are UNCOMMITTED at this documentation snapshot; not attributed to either commit. |
 | Git Branch | `temporal-recovery-loop`, local only |
-| Working Tree Status | Source/tests committed in `8c986a0`; only this status follow-up pending at snapshot. Original test40 project/source/motion unchanged. |
-| Documentation Version | 1.1.2 |
-| Scope of Last Update | Run d9fb875d; lossless context packing, complete envelope budget, no-call rejection/retry policy, state transform preservation, Inspector admission diagnostics and actual offline reproduction. |
+| Working Tree Status | Task-owned source/tests/scripts/documentation changes pending. Client project/source/motion data not edited. |
+| Documentation Version | 1.1.3 |
+| Scope of Last Update | Central failure supervision; semantic recovery reserve/minimal patches; dynamic isolated source investigation; versioned experience; explicit Inspector status; human-approved replay publication. Full renderer/provider audit NOT PERFORMED. |
 | Code snapshot SHA-256 | NOT RECALCULATED; refer to component digests and final source commit. |
 
 Git 2.54.0 (Apple Git-157): локальная история, текущая ветка указана в Document Status, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
@@ -1943,7 +1943,7 @@ New tests: `tests/signed-time.test.ts` and `tests/native-signed-time.test.ts` co
 
 Durable local evidence: `data/harness/reports/signed-global-time-2026-10-22/summary.json`, replay-A/B.json, native QA frame41 PNGs and synthetic-code-repair.patch (all ignored runtime/client artifacts). Final full-test results recorded below at completion.
 
-Known limits: live natural-language planning was not rerun; historical real-provider interpretations were replayed. Browser-compat global subtree-presentation parity is NOT VERIFIED; native is the supported default. Native in-pair whole-scene transition compositing, source text/filter warnings and static overlay restrictions remain as described. UI scrubber displays only the visible nonnegative window. Source-patch application still requires external explicit human review; there is no authenticated in-app apply endpoint. Provider cost unavailable. No user project/source file, canonical object ID, asset or geometry was rewritten.
+Known limits: live natural-language planning was not rerun; historical real-provider interpretations were replayed. Browser-compat global subtree-presentation parity is NOT VERIFIED; native is the supported default. Native in-pair whole-scene transition compositing, source text/filter warnings and static overlay restrictions remain as described. UI scrubber displays only the visible nonnegative window. Historical state at that update: source-patch application required external human review. Superseded by the human-gated Inspector flow documented below. Provider cost unavailable. No user project/source file, canonical object ID, asset or geometry was rewritten.
 
 Architecture Change History: signed-safe mathematical time, separate optional organizational anchors, dependency-preserving operations and immutable admission snapshots, global native subtree lifetime/viewport rules, selective QA window diagnostics, deterministic temporal recovery, bounded source excerpts and actual isolated live patch preparation. No second planner/engine/renderer, arbitrary LLM code execution, blanket validation bypass or production auto-promotion.
 
@@ -1970,7 +1970,7 @@ This targeted update supersedes historical statements that no in-app human apply
 2. Inspector reviews the actual `motion/ai/<runId>/code-repair.json`, checks attestation and patch identity, shows exact diff and issues a single-use five-minute token. The model-facing `promoteCodeRepair()` remains disabled.
 3. Human approval requires idle jobs, clean Git, exact base commit and a source lock. Original-request replay runs in a FRESH source copy from the clean repository plus reviewed contents, not in the generated test's mutable sandbox. Source copy contains no client assets; the local replay separately copies the original project. No external call occurs during replay.
 4. Replay uses the saved provider answer and verified historical state, including initial projects without motion.json, then production execution, native QA and reconciliation. Unavailable history or an invalid saved answer blocks application. Only success permits writing/committing reviewed source/test files. Rollback preserves concurrent edits. Receipts live under `data/harness/code-repairs/applied/`; replay logs under `replays/`.
-5. Restart is explicit; this is not hot reload. The original client project is not automatically changed. CLI: `npm run recovery -- apply --workspace PATH --approve-patch SHA256 --project PATH --run UUID`. No automatic production-code or knowledge activation.
+5. Restart is explicit; this is not hot reload. As of v1.1.3, after human-approved source integration the verified original-task candidate can be published transactionally (see global recovery update below). CLI: `npm run recovery -- apply --workspace PATH --approve-patch SHA256 --project PATH --run UUID`. No automatic production-code or knowledge activation.
 
 **Actual evidence**
 
@@ -2016,3 +2016,77 @@ Completion verification: final full check passed 347/347 (297 base/compat, 2 bro
 Architecture Change History: complete provider-envelope admission with lossless oversized-context encoding; deferred premature projection checks; terminal no-call exhaustion; retained authoritative transforms; added compact Inspector diagnostics and permanent context-preservation/production planner regressions. Reused the current planner, adapter interface, compiler, engine, renderer and persistence; no new agent or partial-plan execution.
 
 Completion verification (2026-10-25): full `npm run check` PASSED352/352 (302 base/compat,2 browser,48 native), TypeScript and build. Final context-packing focused suite passed5/5 after the exact Russian prompt/custom-curve/transition-state fixture refinements and Inspector count changes. No external provider call. No changes to test40 project files; code changes only affect context/admission/diagnostics.
+
+
+## Global autonomous recovery supervision — 2026-10-25 (v1.1.3)
+
+**Scope: IMPLEMENTED integration, not a claim of universal autonomous repair.** Existing semantic planner, protected provenance merge, operation executor, preflight recovery, native Skia QA, isolated code-patch testing, human approval and project transactions remain the execution authorities. There is one new lifecycle supervisor/ledger, not another planner or Motion Engine.
+
+### Verified causes and historical runs
+
+- `572d44eb-25f4-4575-8ba4-599f7de421f2`: previously verified coverage accumulator attached unrelated QR/logo targets to a following ribbon clause. The earlier targeted correction remains. This update removes the further dependency on a static `codeRepairEligible` flag/late Failed Safely report before implementation investigation. No new live replay of this client run was performed.
+- `d9fb875d-6532-48e7-aeee-7521d46dcc15`: local full-envelope refusal and duplicated larger retry, not model misunderstanding (see v1.1.2 measurements above). Existing lossless packing remains the first deterministic remedy, recorded in the supervisor. Proven irreducible mandatory-context overflow is an objective capacity block, not a reason to delete requirements or repeatedly invoke a provider.
+- `36b5e383-c59f-4161-b54f-7bc421ac7c44`: persisted initial response succeeded (26,239 input /4,493 output tokens, approximately64.054s). Coverage then falsely required fadeIn for disappearance and treated reference-state phrases “как в сцене N” as new scene declarations. There was also a distinct incorrect local grow/return dependency. Semantic audit output was truncated; legacy terminal routing offered neither project recovery nor source investigation. No original changes, rendered verification or QA were committed in that historical run. These are historical measurements, not results of the new implementation.
+- Architectural gates: terminal source escalation required an opaque eligibility flag; source context assumed compiler/execution files; recovery reused the expired primary cancellation/time lane; full-requirement audit had no minimal patch fallback. A failure during repair could strand an otherwise valid draft. New source routing uses actual stack/contract/stage evidence; it does not assert that every semantic failure is a source bug.
+
+### Execution and contracts
+
+```mermaid
+flowchart TD
+  P[Existing semantic planning] --> V[Protected validation and compilation]
+  V --> X[Candidate operations / preflight / native QA]
+  X --> C[Atomic commit and reconciliation]
+  P -.failure.-> S[GlobalFailureSupervisor]
+  V -.failure.-> S
+  X -.failure.-> S
+  S --> D[Known deterministic stage recovery]
+  S --> R[Bounded project / compact semantic recovery]
+  D --> V
+  R --> V
+  S --> I[Isolated Code Repair investigation]
+  I --> T[Baseline fails / patched test passes]
+  T --> H[Explicit human source approval]
+  H --> A[Reviewed source commit / verified original replay]
+  A --> C
+  S --> B[Objective block / exhausted resources with evidence]
+```
+
+- `apps/scene-validator/src/harness/recovery/supervisor.ts`: `GlobalFailureSupervisor.observe/attempt/settle/complete`; `FailureEvent` contains stage, code, evidence-backed root cause/category, revision, original request, actual affected IDs/operations, fingerprint, prior attempts, resources and bounded trace. `RecoveryAction` provides strategy/procedure/run(signal)/verify(result). No arbitrary model code is executed.
+- Existing handler sites in `motion/service.ts` invoke deterministic/semantic, preflight or task recovery and verify the resulting candidate through existing full validation/execution. Terminal `superviseRunFailure` collects bounded saved contract/preflight/stack evidence and offers isolated code investigation without the legacy eligibility gate. Provider startup/request preparation and runtime failure capture are also supervised. Failure before run storage can be created remains an external storage block; no durable record can be promised on an unwritable filesystem.
+- `motion/intent/repair.ts` adds `compactRepairSchema` / `mergeCompactRepair`: field deltas on affected requirement IDs, optional genuinely missing requirements, coverage rows. Unspecified parameters and unaffected requirements survive; original provenance/scope merge and full semantic validation run again. Empty coverageRows means retain existing rows, not bypass coverage.
+- `motion/intent/planner.ts` uses this only after a failed targeted audit. Initial truncation/invalid output has no complete draft and can use bounded fresh grouped interpretation; an existing valid draft is never replaced with a full regeneration merely to fix one relationship. After recovery the complete contract must pass normal validation before compilation. No per-object recovery calls.
+- `motion/intent/coverage.ts`: disappearance maps to fadeOut; reference-state scene mentions do not reassign current scope; absolute-time local grow/return sequences use local anchors and still require the correct end dependency. Actual missing Fade/incorrect timing continue failing.
+- `harness/recovery/source-routing.ts` selects up to5 relevant TypeScript source files from stack + subsystem contracts. Runtime, provider, coverage, resolution, native and recovery implementations are investigable. Approval/confinement controls `security.ts`, `promotion.ts`, `code-repair.ts` are readable but not model-writable. Client projects/assets, arbitrary paths, secrets and existing test rewriting remain excluded. Investigation is a bounded one-call proposal, not unrestricted terminal debugging.
+- Preflight verification replays the recovered prepared operation plans through `preflightIntentPlan` with explicit overrides. Recompiling only the semantic requirement would drop a typed recovery decision such as `removeDependents`; the existing native production recovery regression exposed this and remains unchanged. The supervisor now validates the actual recovered operations instead of reconstructing the rejected ones.
+- Every repaired stage is distinct from full verified success. A candidate can be `CANDIDATE_PENDING_EXECUTION_QA`; no stage-only result becomes `RECOVERY_SUCCEEDED`. Final reconciliation must explicitly be SUCCESS. Existing successful independent work is preserved according to existing transaction semantics.
+
+### Bounded resources, repeated failures and persistence
+
+- `harness/recovery/config.ts` retains existing project60s and code120s limits; adds configurable supervisor180s,6 attempts and semantic recovery2 calls (maximum3). Primary semantic call limits remain unchanged. The reserved semantic lane starts its own timer when needed and uses user cancellation, not an expired primary timer. Project/code token and cost limits remain separate. Unknown usage/cost remains null. No claim of a single combined monetary cap across all lanes.
+- Full semantic requests still pass unchanged60KB full-envelope/model admission; Project Recovery payload construction retains its20KB bound. This does NOT imply every semantic-recovery envelope including mandatory schema is <=20KB. Code investigation has its own140KB/12k-output/60k-token defaults. No global timeout was increased. The overall execution deadline remains enforced after stage recovery; a reserved provider call does not grant unlimited subsequent rendering/execution time.
+- The supervisor bounds attempts and total recovery wall time, reserves a source attempt where enabled, and refuses identical fingerprint+procedure retries without progress. Handler deadlines apply even if an adapter ignores cancellation (the underlying adapter must still release its own resources). User cancellation/authentication/provider unavailability/transport timeouts, permission/disk failures, proven capacity exhaustion and unresolved identity ambiguity get explicit blocker diagnostics; no futile coding call to the same unavailable provider.
+- A failure inside Project/Code Repair is itself observed. Escalation is finite and never recursively launches another coding agent without limit. Missing safe transformations, disabled recovery, insufficient source evidence and exhausted budgets have recorded reasons. This is not a guarantee that a fix exists.
+- Ledger persistence failure blocks further unrecorded repair actions and preserves an in-memory storage diagnosis; it cannot guarantee disk persistence. Corrupt optional experience lookup is recorded as evidence and cannot suppress original diagnosis. Run creation/storage failure before a supervisor exists remains a limitation.
+- `motion/ai/<runId>/global-recovery.json`: version `global-recovery/1`, full bounded ledger under existing full privacy mode. Compact stage summaries go into existing traces. New runs distinguish RECOVERY_NOT_NEEDED, ATTEMPTED, SUCCEEDED, EXHAUSTED, BLOCKED and PATCH_AWAITING_APPROVAL. Legacy artifacts remain legacy rather than manufactured attempts.
+- `motion/harness/recovery/cases.json`: version `supervisor-experience/1`, at most200 cases with fingerprint, code digest, root cause, procedure, actual validation and replay outcome. Only matching code-version VERIFIED cases are retrieved as compact provenance. They are not executable arbitrary recipes. Existing deterministic recipe handlers remain the only executable transformations. Failed and patch-only outcomes are never labeled full success.
+- `data/harness/code-repairs/`: existing isolated workspaces, attestations, source proposal index, location records and replay logs; an exact still-applicable baseline/hash-matching awaiting-approval proposal is reused without another provider call. Current source/schemas are included in `harness/versions.ts` fingerprints. No production code or knowledge self-modification.
+
+### Human-approved source integration and original-task continuation
+
+`recovery/replay.ts`, new `recovery/resume.ts`, `scripts/replay-agent-run.ts`, `scripts/resume-verified-run.ts`, existing API/Inspector/CLI extend the earlier controlled flow:
+
+1. Baseline regression must fail, patched test/typecheck pass in confinement; patch waits for approval. Active source and client project remain unchanged during investigation.
+2. Human review issues existing one-use token and requires a clean exact source baseline. Saved response is replayed first in an isolated project copy with a freshly built worker. If there is no complete saved response, a separately explicit approval (`allowLiveReplay`, CLI `--allow-live-replay`) permits original-provider replanning; the dialog explains data transmission. No such live replay was run during this task.
+3. Only a full SUCCESS replay authorizes reviewed source integration. Then a fresh child process can publish that exact verified candidate via existing `commitChanges`, preserving Undo history and checking original revision, source fingerprint, result SHA256, normalized operation batches, candidate state, per-requirement QA and reconciliation.
+4. Stale edits/tampering block publication; source may remain fixed while client data stays intact. Receipt `motion/ai/<originalRun>/resume-receipt.json` supports idempotency. The original recovery ledger is updated only after actual commit. Source restart remains explicit; no unsafe hot reload.
+
+### Verification and limitations
+
+- `tests/global-recovery.test.ts`: stage-routing injections across packing, planning/repair, coverage, resolution, compilation, timeline, preflight, execution, rendering, QA, reconciliation and recovery; auth/capacity blocks; bounded attempts/cancellation; no-progress; versioned experience; actual early-stage source routing through a mock coding adapter; native production execution after initial truncation and after truncated repair; true missing Fade and incorrect local dependency rejection; source regression baseline-fail/patched-pass with active source unchanged; cached proposal reuse; replay hash/stale revision guards, transactional publication/idempotency; storage/experience failures.
+- Production E2E cases use a MOCK provider and actual planner/parser/compiler/execution/native Skia QA/pixels/commit; isolated patch tests use synthetic defects and real local Git/sandbox tests. They are not live-provider tests. No new external calls, input/output token measurements or live provider-latency improvements were measured. New mock timings are test-runtime observations only. No new MP4 export was run specifically for global recovery; existing full-suite Preview/MP4 checks remain separate evidence.
+- Final exact test/typecheck/build counts are appended at completion. The historical client Run3 has not been fully re-executed through a live provider or certified as a finished animation. Remaining missing/ambiguous targets and genuine bad dependencies still require valid semantic correction; they are not silently guessed.
+- Recovery experience is project-local and version-bound; full cross-project learning and automatic production Knowledge activation are NOT IMPLEMENTED. One-call source repair may report insufficient evidence, and macOS confinement remains the supported generated-test sandbox. External filesystem failures cannot be made durable on failed storage. The supervisor is integrated with existing paths, not a promise of successful repair of arbitrary defects.
+
+Architecture Change History: centralized diagnosis and bounded stage/source escalation; separate semantic reserve/minimal field repairs; evidence-based source routing/cache; versioned recovery experience; explicit Inspector ledger; human-approved original-task candidate publication with transaction safeguards. Preserved validation, protected source integration, engine, renderer and client data. Actual final checks recorded below.
+
+Completion verification (2026-10-25): final full `npm run check` PASSED379/379 (329 base/compat,2 browser,48 native), TypeScript and production build. This includes27 new global-recovery tests; final focused suite27/27, adapter-timeout regression1/1, existing production native-recovery/Undo1/1. Final Inspector export tests and JavaScript syntax passed. Evidence: ignored `data/harness/reports/global-recovery-2026-10-25/verification.json` and logs. Existing native suite exercised real Preview/FFmpeg pixel transport; no new live provider or full historical-client animation success is claimed.

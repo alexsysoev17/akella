@@ -1,5 +1,5 @@
 import {reviewForApproval,approveCodeRepair,sourcePromotionBusy} from "../harness/recovery/promotion.js";
-import {verifyOriginalRun} from "../harness/recovery/replay.js";
+import {verifyOriginalRun,publishOriginalReplay} from "../harness/recovery/replay.js";
 import { harnessConfig } from "../harness/config.js";
 import { recoveryPolicySchema } from "../harness/recovery/config.js";
 import { recoveryMemory } from "../harness/recovery/memory.js";
@@ -423,7 +423,7 @@ export async function motionApi(
     if(sourcePromotionBusy && action!=="cancel")throw Error("Идёт применение проверенного исправления кода");
     if(action==="code-repair-review"||action==="code-repair-approve"){
       if(!request.headers["content-type"]?.startsWith("application/json"))throw Error("application/json required");
-      const value=z.object({runId:z.uuid(),patchIdentity:z.string().regex(/^[a-f0-9]{64}$/),approvalToken:z.string().optional()}).strict().parse(JSON.parse((await body(request,4000)).toString()));
+      const value=z.object({runId:z.uuid(),patchIdentity:z.string().regex(/^[a-f0-9]{64}$/),approvalToken:z.string().optional(),allowLiveReplay:z.boolean().optional()}).strict().parse(JSON.parse((await body(request,4000)).toString()));
       const file=path.join(project.root,"motion/ai",value.runId,"code-repair.json");await noSymlinkPath(project.root,file);
       const proposal=JSON.parse(await readFile(file,"utf8"));
       if(proposal.patchIdentity!==value.patchIdentity||proposal.status!=="AWAITING_APPROVAL")throw Error("PATCH_NOT_REVIEWABLE");
@@ -431,8 +431,10 @@ export async function motionApi(
       if(action==="code-repair-review"){json(await reviewForApproval(repository,proposal.workspace,value.patchIdentity));return true;}
       if([...jobs.values()].some(j=>j.status==="running"))throw Error("Дождитесь завершения текущих заданий");
       const id=randomUUID();jobs.set(id,{projectId:project.config.projectId,status:"running",stage:"source-repair-verification"});json({jobId:id},202);
-      void approveCodeRepair(repository,proposal.workspace,value.patchIdentity,value.approvalToken??"",isolated=>verifyOriginalRun(isolated,project.root,value.runId,repository)).then(async result=>{
-        await atomicJson(file,{...proposal,...result});jobs.set(id,{projectId:project.config.projectId,status:"completed",result});
+      void approveCodeRepair(repository,proposal.workspace,value.patchIdentity,value.approvalToken??"",isolated=>verifyOriginalRun(isolated,project.root,value.runId,repository,value.allowLiveReplay===true)).then(async result=>{
+        const resumed=await publishOriginalReplay(repository,project.root,value.runId,result.replay);
+        const outcome={...result,resume:resumed,originalProjectChanged:resumed.status==="APPLIED"};
+        await atomicJson(file,{...proposal,...outcome});jobs.set(id,{projectId:project.config.projectId,status:"completed",result:outcome});
       }).catch(error=>jobs.set(id,{projectId:project.config.projectId,status:"failed",error:String(error)}));
       return true;
     }

@@ -1,3 +1,4 @@
+import {repairSourceAllowed,repairSourceReadable} from "./source-routing.js";
 /** LEVEL 2. The model has NO process/filesystem tools. Trusted backend materializes
  * bounded file proposals only in a quarantine copy; generated tests run under OS confinement. */
 import path from "node:path";
@@ -5,7 +6,7 @@ import os from "node:os";
 import { createHash, randomUUID } from "node:crypto";
 import { promisify } from "node:util";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, writeFile, copyFile, lstat, realpath } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile, copyFile, lstat, realpath, readdir } from "node:fs/promises";
 import { z } from "zod";
 import { createRequire } from "node:module";
 import { noSymlinkPath, relativePath, within, atomicJson } from "../../files.js";
@@ -20,10 +21,7 @@ const fileChange = z.union([
 ]);
 export const codeProposalSchema = z.object({ rootCause: z.string().min(1).max(3000), changes: z.array(fileChange).min(1).max(6), regressionTests: z.array(z.string().max(250)).min(1).max(3), risks: z.array(z.string().max(1000)).max(10) }).strict();
 export type CodeProposal = z.infer<typeof codeProposalSchema>;
-const sourceAllowed = (p: string) =>
-    /^apps\/scene-validator\/src\/(?:motion\/(?:intent\/(?:compiler|execution|retime|planner|schema|coverage|provenance)|provider|tools|operations|contextual-resolution|base-motion|transitions|validate-expressions|schema|constraints|intervals|time|effect-edit|service)|motion-library\/(?:expressions\/registry|easings\/registry|techniques\/registry)|harness\/(?:recovery\/(?:failure|memory|runtime)|providers\/(?:schema|types|codex))|native\/(?:qa|renderer)|files)\.ts$/.test(
-        p,
-    );
+const sourceAllowed = repairSourceAllowed;
 const testAllowed = (p: string) => /^apps\/scene-validator\/tests\/[a-z0-9-]+\.test\.ts$/.test(p);
 export type CodeRepairWorkspace = {
     id: string;
@@ -37,7 +35,7 @@ export type CodeRepairWorkspace = {
 };
 export function scopedCodeProposalSchema(workspace: CodeRepairWorkspace) {
     const regressionPath = `apps/scene-validator/tests/code-repair-${workspace.id}.test.ts`;
-    const paths = z.enum([regressionPath,...workspace.files.map(f=>f.path)] as [string,...string[]]);
+    const paths = z.enum([regressionPath,...workspace.files.filter(f=>repairSourceAllowed(f.path)).map(f=>f.path)] as [string,...string[]]);
     return {regressionPath,schema:codeProposalSchema.extend({
         changes:z.array(z.union([fileChange.options[0].extend({path:paths}),fileChange.options[1].extend({path:paths})])).min(1).max(6),
         regressionTests:z.array(z.literal(regressionPath)).min(1).max(1),
@@ -84,14 +82,18 @@ export async function isolateCodeRepair(
 ): Promise<CodeRepairWorkspace> {
     if (!failure.codeRepairEligible)
         throw new Error("CODE_REPAIR_EVIDENCE_INSUFFICIENT");
-    if (!requestedFiles.length || requestedFiles.length > 5 || requestedFiles.some(p => !sourceAllowed(p)))
+    if (!requestedFiles.length || requestedFiles.length > 5 || requestedFiles.some(p => !repairSourceReadable(p)))
         throw new Error("CODE_REPAIR_SOURCE_SCOPE");
     const baseCommit = (await exec("git", ["rev-parse", "HEAD"], { cwd: repository })).stdout.trim();
     if (!options.allowDirty && (await exec("git", ["status", "--porcelain"], { cwd: repository })).stdout.trim())
         throw new Error("CODE_REPAIR_REQUIRES_CLEAN_BASELINE");
     const root = await mkdtemp(path.join(await realpath(os.tmpdir()), "akella-code-repair-")), id = randomUUID();
     const tracked = (await exec("git", ["ls-files", "-z"], { cwd: repository, maxBuffer: 2000000 })).stdout.split("\0").filter(Boolean);
-    for (const rel of tracked) {
+    // Current local implementation includes new source modules awaiting a reviewed commit.
+    const appSource=path.join(repository,"apps/scene-validator/src");
+    for(const rel of await readdir(appSource,{recursive:true}).catch(()=>[] as string[]))if(rel.endsWith(".ts"))tracked.push("apps/scene-validator/src/"+rel);
+    const selectedFiles=[...new Set(tracked)];
+    for (const rel of selectedFiles) {
         if (!/^(?:apps\/scene-validator\/(?:src|tests)\/|figma-motion-exporter\/src\/|scripts\/|package(?:-lock)?\.json$|tsconfig(?:\.[a-z]+)?\.json$)/.test(rel))
             continue;
         const src = within(repository, rel);
@@ -273,6 +275,7 @@ export async function reviewCodeRepair(root: string) {
     }
     await noSymlinkPath(root, reportFile);
     const report = JSON.parse(await readFile(reportFile, "utf8"));
+    await noSymlinkPath(root,path.join(root,"proposal.patch"));
     if (saved.patchDigest !== hash(await readFile(path.join(root, "proposal.patch"), "utf8")))
         throw new Error("CODE_REPAIR_DIFF_CHANGED");
     if (report.patchIdentity !== identity)

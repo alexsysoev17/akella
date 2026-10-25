@@ -330,6 +330,7 @@ export async function inspectorRun(root: string, id: string, raw = false) {
     request,
     understanding: tasks,
     semanticTaskGraph,
+    globalRecovery:full ? await saved(root,`motion/ai/${id}/global-recovery.json`) : {status:"REDACTED",reason:"Run privacy policy"},
     recovery: full ? await saved(root, `motion/ai/${id}/recovery.json`) : "REDACTED",
     codeRepair: full ? await saved(root, `motion/ai/${id}/code-repair.json`) : "REDACTED",
     compilationPreflight: preflight,
@@ -422,6 +423,11 @@ export async function inspectorRun(root: string, id: string, raw = false) {
           : "NOT_AVAILABLE: RESPONSE_SIZE_LIMIT";
   }
   if (omitted.length) view.omittedSections = omitted;
+  if(view.globalRecovery&&typeof view.globalRecovery==="object"){
+    const global=view.globalRecovery as Data;
+    if(view.recovery==="NOT_AVAILABLE")view.recovery={status:global.status,reason:global.finalReason,attempts:global.attempts};
+    if(view.codeRepair==="NOT_AVAILABLE")view.codeRepair={status:"NOT_APPLICABLE",reason:global.finalReason,decisions:global.decisions};
+  }
   return view;
 }
 export function qaCategories(report: unknown): Record<string, unknown> {
@@ -526,6 +532,9 @@ export function debugReport(data: Data) {
     "## Provider",
     pretty(run.calls),
     "",
+    "## Global Recovery Supervisor",
+    pretty(data.globalRecovery),
+    "",
     "## Project Recovery",
     pretty(data.recovery),
     "",
@@ -592,6 +601,7 @@ export async function debugBundle(root: string, id: string) {
     operations: (data.stateChanges as Data[]).map((h) => h.operations),
     "qa-report": data.qa,
     recovery: data.recovery,
+    "global-recovery": data.globalRecovery,
     "code-repair": data.codeRepair,
     "state-diff": data.stateChanges,
     trace: data.trace,

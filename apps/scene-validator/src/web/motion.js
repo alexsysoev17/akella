@@ -347,6 +347,7 @@ export async function mountMotion(
             checking: "Проверяем движение…",
             repairing: "Уточняем движение…",
             "recovering-project": "Восстанавливаем проект…",
+            "investigating-recovery": "Проверяем причину сбоя и готовим исправление…",
             "code-repair-proposed": "Готовим предложение ремонта кода…",
             applying: "Сохраняем изменения…",
           }[job.stage] ?? "Понимаем запрос…";

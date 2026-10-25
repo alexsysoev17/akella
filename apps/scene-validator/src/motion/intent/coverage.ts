@@ -43,7 +43,7 @@ function explicitTechniques(text: string): IntentTechnique[] {
   if (/(?:сверху|slide\s*down)/i.test(text)) techniques.push("slideDown");
   if (/(?:trim\s*paths?|прорисов|прорисуй|рисуется|рисуются)/i.test(text))
     techniques.push("trimPath");
-  if (/fade\s*out|фейд.*исчез|исчез.*фейд/i.test(text))
+  if (/fade\s*out|(?:ф[еэ]йд|\bfade\b).*(?:исчез|пропад|уход|уйд|уходит|уходят)|(?:исчез|пропад|уход|уйд|уходит|уходят).*(?:ф[еэ]йд|\bfade\b)/i.test(text))
     techniques.push("fadeOut");
   else if (/\bfade(?:\s*in)?\b|fadeIn|ф[еэ]йд/i.test(text))
     techniques.push("fadeIn");
@@ -206,7 +206,7 @@ export function inspectSemanticCoverage(
       text = request.slice(start, end);
     if (!text.trim() || /^[.,!?;\s]+$/.test(text)) continue;
     const header = text.match(/(?:сцен[аыуе]?\s*(\d+)|(\d+)\s*сцен[аыуе]?)/i);
-    if (header) {
+    if (header && !/(?:как|состояни|положени|state|position).*(?:сцен|scene)/iu.test(text.slice(0,header.index!+header[0].length))) {
       sceneId =
         scenes.find((s) => s.index === Number(header[1] ?? header[2]) - 1)
           ?.sceneId ?? null;
@@ -355,8 +355,16 @@ export function inspectSemanticCoverage(
             techniques: techs,
           });
       }
-    if (sequential.test(text) && previous)
-      pendingAfter = previous.requirementId;
+    const absoluteSequence=sequential.test(text)&&/(?:на|at)\s*\d+(?:[.,]\d+)?\s*(?:сек|second|кадр|frame)/iu.test(text)&&rs.some(r=>r.timing.startSeconds!==null);
+    if(absoluteSequence){
+      const roots=rs.filter(r=>r.timing.startSeconds!==null&&!r.unresolvedReason);
+      if(roots.length===1){
+        const root=roots[0],children=rs.filter(r=>r!==root&&!r.unresolvedReason);
+        for(const child of children)if(child.timing.relation!=="afterRequirement"||child.timing.anchorRequirementId!==root.requirementId||child.timing.align==="start")issue("MISSING_SEQUENTIAL_DEPENDENCY",text,[child],{relation:"afterRequirement",anchorRequirementId:root.requirementId,align:"end"},child.timing);
+      }
+      pendingAfter=undefined;
+    }
+    else if (sequential.test(text) && previous)pendingAfter = previous.requirementId;
     if (
       techs.length &&
       !targetIds.length &&

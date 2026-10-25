@@ -1,3 +1,4 @@
+import {reviewCodeRepair} from "../harness/recovery/code-repair.js";
 import { recoveryProviderRuntime } from "../harness/recovery/provider-runtime.js";
 import { proposeCodeRepair } from "../harness/recovery/code-service.js";
 import { recoveryFailure } from "../harness/recovery/failure.js";
@@ -5,7 +6,7 @@ import { recoverPreflight, recoveryDecisionSchemaFor, type RecoveryReport } from
 import { rememberRecovery } from "../harness/recovery/memory.js";
 import { compileTasks } from "./intent/compiler.js";
 import { commitChanges } from "./tool-runtime.js";
-import { duringStage } from "../harness/failure.js";
+import { duringStage,failureDiagnostic } from "../harness/failure.js";
 import { renderingMode } from "../native/client.js";
 import { qaAdmission } from "./qa/policy.js";
 import { selectorContext } from "../harness/selector-context.js";
@@ -22,7 +23,7 @@ import { digest, agentContext } from "../harness/context.js";
 import { recentSuccessfulActions } from "./contextual-resolution.js";
 import { RunQA } from "../harness/qa.js";
 import type { HarnessConfig } from "../harness/config.js";
-import { semanticPlan, SemanticCodexProvider } from "./intent/planner.js";
+import { semanticPlan,validateIntentPlan, SemanticCodexProvider } from "./intent/planner.js";
 import { preflightIntentPlan, runIntentTasks } from "./intent/execution.js";
 import { motionQA, stateDigest } from "./qa/render.js";
 import {
@@ -168,6 +169,33 @@ export async function prepareMotionRequest(
     throw error;
   }
 }
+export async function superviseRunFailure(harness:HarnessRun,error:unknown,project:LoadedProject,settings:Parameters<typeof proposeCodeRepair>[3]|undefined,onStage:(stage:string)=>void,revision="unknown"){
+  harness.supervisor.setRevision(revision);
+  const diagnostic=failureDiagnostic(error,harness.phase,harness.providerInitializationStatus,true);
+  const legacy=(error as {recoveryReport?:RecoveryReport}).recoveryReport;
+  const failure=recoveryFailure(error,diagnostic.failureStage,revision);
+  failure.evidence.push({source:"stack",detail:diagnostic.safeStackTrace.join("\n")});
+  if(legacy)failure.evidence.push({source:"existing-recovery",detail:JSON.stringify({original:legacy.originalFailure,terminal:legacy.terminalFailure,attempts:legacy.attempts.map(a=>({action:a.action,outcome:a.outcome}))}).slice(0,8000)});
+  const readEvidence=async(name:string)=>{try{const file=path.join(harness.directory,name);await noSymlinkPath(harness.directory,file);const data=await readFile(file,"utf8");if(Buffer.byteLength(data)>1048576)return undefined;return JSON.parse(data);}catch{return undefined;}};
+  const contract=await readEvidence("intent-contract.json"),preflight=await readEvidence("compilation-preflight.json");
+  const affected=(contract?.requirements??[]) as {requirementId:string;target:{sourceNodeId?:string}}[];
+  const attemptedOperations=(preflight?.reports??[]).flatMap((r:{operations?:unknown[]})=>r.operations??[]).slice(0,100);
+  const report=await harness.supervisor.settle(error,diagnostic.failureStage,{
+    codeEnabled:harness.config.recovery.codeRepair.enabled,
+    ...(settings?{code:{strategy:"code" as const,procedure:"isolated-source-investigation/1",reason:"Stage repair did not produce a verified result; investigate relevant source contracts in isolation without changing active code",
+      run:async(signal:AbortSignal)=>{onStage("investigating-recovery");return proposeCodeRepair(process.cwd(),{...failure,evidence:[...failure.evidence,...harness.supervisor.report.events.slice(-3).map(e=>({source:e.stage,detail:e.rootCause}))]},harness.config.recovery,settings,AbortSignal.any([harness.recoverySignal,signal]),async call=>{harness.calls.push({...call,purpose:"code-repair"});await harness.diagnostic("code-provider-completed",call);});},
+      verify:async(value:unknown)=>{
+        const proposal=value as Awaited<ReturnType<typeof proposeCodeRepair>>;
+        if(proposal.status==="AWAITING_APPROVAL"&&"workspace" in proposal){const review=await reviewCodeRepair(proposal.workspace as string);if(review.status!=="AWAITING_APPROVAL"||!review.tests?.every((t:{status:string})=>t.status==="PASSED")||!review.baseline?.some((t:{status:string})=>t.status==="FAILED"))throw Error("CODE_REPAIR_VERIFICATION_MISSING");return {status:"PATCH_VERIFIED",identity:review.patchIdentity,productionChanged:false};}
+        return {status:"NO_VERIFIED_PATCH",reason:"reason" in proposal?proposal.reason:proposal.status};
+      }}}:{}),
+  },{requirements:affected.map(r=>r.requirementId),objects:affected.flatMap(r=>r.target.sourceNodeId?[r.target.sourceNodeId]:[]),operations:attemptedOperations,evidence:[{stack:diagnostic.safeStackTrace,contractAvailable:!!contract,preflightAvailable:!!preflight},(error as {contextAdmission?:unknown}).contextAdmission,...failure.evidence]});
+  if(harness.config.privacy==="full"){
+    await atomicJson(path.join(harness.directory,"code-repair.json"),report.codeRepair??{status:report.status==="RECOVERY_NOT_NEEDED"?"NOT_NEEDED":"NOT_APPLICABLE",reason:report.finalReason,decisions:report.decisions});
+    if(legacy)await atomicJson(path.join(harness.directory,"recovery.json"),{...legacy,supervisor:report.status,reason:report.finalReason});
+  }
+  return report;
+}
 export async function proposeMotion(
   project: LoadedProject,
   input: unknown,
@@ -199,13 +227,13 @@ export async function proposeMotion(
       );
       return { request, doc, savedSettings };
     } catch (error) {
-      if (execute && !(error instanceof ProviderSettingsError)) {
+      if (execute) {
         const text =
           input &&
           typeof input === "object" &&
           "request" in input &&
           typeof input.request === "string"
-            ? input.request.slice(0, 20000)
+            ? input.request
             : "";
         const run = await HarnessRun.start(
           project,
@@ -217,6 +245,7 @@ export async function proposeMotion(
           options.config,
         );
         run.phase = stage;
+        await superviseRunFailure(run,error,project,undefined,onStage);
         await run.captureFailure(error);
         await run.finish("FAILED");
       }
@@ -235,7 +264,7 @@ export async function proposeMotion(
           options.config,
         )
       : undefined;
-  if (harness) harness.providerInitializationStatus = "SETTINGS_VALIDATED";
+  if (harness) {harness.providerInitializationStatus = "SETTINGS_VALIDATED";harness.supervisor.setRevision(doc.revision);}
   let runQA: RunQA | undefined;
   const directory =
     harness?.directory ??
@@ -411,13 +440,36 @@ export async function proposeMotion(
     if (execute) {
       try {
         onStage("understanding");
+        let semanticRecoveryActive=false;
+        let semanticRecoverySignal:AbortSignal|undefined;
+        let semanticRecoveryStart:number|undefined;
+        const recoverSemantic=async(error:unknown,stage:string,replay:()=>Promise<ReturnType<typeof validateIntentPlan>>)=>{
+          if(!harness)throw error;
+          semanticRecoveryStart??=harness.calls.length;
+          const event=await harness.supervisor.observe(error,stage,{evidence:[{code:(error as {code?:string}).code}]});
+          const outcome=await harness.supervisor.attempt(event,{strategy:"project",procedure:stage==="semantic-repair"?"compact-semantic-field-patch/1":"grouped-semantic-output/1",reason:stage==="semantic-repair"?"Repair only affected fields while retaining the valid plan":"No complete initial plan is available; retry compact grouped output in the reserved recovery lane",run:async(signal)=>{
+            semanticRecoverySignal=signal;
+            if(!harness.config.recovery.enabled||harness.config.recovery.semanticRecoveryCalls===0)throw Error("SEMANTIC_RECOVERY_DISABLED");
+            semanticRecoveryActive=true;onStage("recovering-project");try{return await replay();}finally{semanticRecoveryActive=false;}
+          },verify:async candidate=>{
+            const checked=validateIntentPlan(project,request.request,candidate,doc.state.settings.fps,{state:doc.state,mentions:request.mentions,activeSceneId:request.activeSceneId,selectedObjectId:request.selectedObjectId,recentActions:recentSuccessfulActions(doc,true),projectRevision:doc.revision});
+            return {status:"PASSED",requirementCount:checked.requirements.length,completeSemanticValidation:true,projectChanged:false};
+          }});
+          if(outcome.ok)return outcome.value;
+          throw outcome.error;
+        };
         const semanticProvider = new SemanticCodexProvider(
           async (phase) =>
             new CodexProvider(
-              request.settings,
+              semanticRecoveryActive&&harness ? {...request.settings,model:harness.config.recovery.model}:request.settings,
               await providerDirectory(`semantic-${phase}`),
-              harness?.providerRuntime(),
+              semanticRecoveryActive&&harness ? {...recoveryProviderRuntime(harness,semanticRecoveryStart??harness.calls.length),signal:semanticRecoverySignal??harness.recoverySignal,
+                invoke:async(adapter,input)=>{
+                  if(harness.calls.filter(c=>c.purpose==="semantic-recovery").length>=harness.config.recovery.semanticRecoveryCalls)throw Error("SEMANTIC_RECOVERY_CALL_BUDGET");
+                  return recoveryProviderRuntime(harness,semanticRecoveryStart??harness.calls.length).invoke(adapter,{...input,purpose:"semantic-recovery"});
+                }}:harness?.providerRuntime(),
             ),
+          {recover:recoverSemantic},
         );
         const contract = await semanticPlan(
           project,
@@ -425,6 +477,7 @@ export async function proposeMotion(
           enrichedContext,
           semanticProvider,
           async (stage, value) => {
+            if(harness&&stage.startsWith("coverage-suspicious"))await harness.supervisor.observe(Object.assign(Error("SEMANTIC_COVERAGE"),{code:"SEMANTIC_COVERAGE"}),"semantic-coverage",{evidence:[value]});
             if (
               harness &&
               (stage.startsWith("coverage") ||
@@ -449,6 +502,7 @@ export async function proposeMotion(
           },
           {
             auditAlways: false,
+            recover:recoverSemantic,
             mentions: request.mentions,
             recentActions: recentSuccessfulActions(doc, true),
             projectRevision: doc.revision,
@@ -465,6 +519,7 @@ export async function proposeMotion(
           });
           runQA = new RunQA(harness);
         }
+        if(harness)harness.phase="compilation-preflight";
         const recoveryCallStart = harness?.calls.length ?? 0;
         let recoveryReport: RecoveryReport | undefined;
         let preparedPlans: ReturnType<typeof preflightIntentPlan>["preparedPlans"] | undefined;
@@ -484,6 +539,7 @@ export async function proposeMotion(
             );
             await harness?.diagnostic("compilation-preflight", report);
           } catch (error) {
+            const preflightEvent=harness?await harness.supervisor.observe(error,"preflight",{requirements:contract.requirements.map(r=>r.requirementId),objects:contract.requirements.flatMap(r=>r.target.sourceNodeId?[r.target.sourceNodeId]:[]),evidence:[(error as {report?:unknown}).report]}):undefined;
             await atomicJson(
               path.join(directory, "compilation-preflight.json"),
               (error as { report?: unknown }).report ?? {
@@ -495,11 +551,11 @@ export async function proposeMotion(
               "compilation-preflight",
               (error as { report?: unknown }).report ?? { status: "FAILED" },
             );
-            if (!harness?.config.recovery.enabled || !harness.config.maxRepairAttempts) throw error;
+            if (!harness?.config.recovery.enabled || !harness.config.recovery.maxAttempts) throw error;
             onStage("recovering-project");
             const recoveryStart = recoveryCallStart;
             const policy = harness.config.recovery;
-            const recovered = await recoverPreflight(project, doc.state, contract, error, {
+            const performRecovery=()=>recoverPreflight(project, doc.state, contract, error, {
               policy, revision: doc.revision, request: request.request,
               checkpoint: () => harness.checkpoint(),
               record: async report => {
@@ -525,6 +581,9 @@ export async function proposeMotion(
                   recoveryDecisionSchemaFor((context as {failure?:{code?:string}}).failure?.code), "project-recovery");
               },
             });
+            const outcome=await harness.supervisor.attempt(preflightEvent!,{strategy:"project",procedure:"existing-preflight-recovery/1",reason:"Use existing typed-tool and deterministic recovery against original intent",run:performRecovery,verify:async recovered=>{const overrides=new Map([...recovered.prepared.preparedPlans].map(([id,value])=>[id,value.compiled]));preflightIntentPlan(project,doc.state,recovered.plan,overrides);return {status:"PASSED",replayedPreflight:true,validatedRecoveredOperations:true};}});
+            if(!outcome.ok)throw outcome.error;
+            const recovered=outcome.value;
             Object.assign(contract, recovered.plan);
             preparedPlans = recovered.prepared.preparedPlans;
             const { preparedPlans: runtimeOnly, ...recoveredReport } = recovered.prepared;
@@ -534,9 +593,12 @@ export async function proposeMotion(
           }
         }
         let committed = doc;
+        if(harness)harness.phase="operation-execution";
         const generated = await runIntentTasks(project, doc.state, contract, {
           preparedPlans,
           repair: async (ctx, text, task, attempt) => {
+            const event=harness?await harness.supervisor.observe(Error("TASK_REPAIR_REQUIRED"),"operation-repair",{requirements:task.requirementIds,objects:[task.targetReference.targetId]}):undefined;
+            const perform=async()=>{
             onStage("repairing");
             if (harness) harness.repairAttempts++;
             const provider = new CodexProvider(
@@ -553,6 +615,10 @@ export async function proposeMotion(
                 "task-repair",
               ),
             );
+            };
+            if(!harness)return perform();
+            const recovered=await harness.supervisor.attempt(event!,{strategy:"project",procedure:"existing-motion-operation-repair/1",reason:"Existing scoped Motion Operations repair; candidate still requires execution and QA",run:perform,verify:async plan=>({status:"CANDIDATE",operationCount:plan.operations.length,executionQA:"PENDING"})});
+            if(!recovered.ok)throw recovered.error;return recovered.value;
           },
           verify: async (task, next, before, attempt) => {
             onStage("checking");
@@ -568,6 +634,7 @@ export async function proposeMotion(
                     ? undefined
                     : task.targetReference,
                 );
+            if(qa.status==="FAILED"&&harness)await harness.supervisor.observe(Object.assign(Error("MOTION_QA_FAILED"),{code:"MOTION_QA_FAILED"}),"motion-qa",{requirements:task.requirementIds,evidence:[qa]});
             return qa;
           },
           commit: async (task, plan, next) => {
@@ -587,6 +654,7 @@ export async function proposeMotion(
                   entry as { feedback?: { failureReason?: string } }
                 ).feedback?.failureReason;
                 if (error) {
+                  await harness.supervisor.observe(Error(error),"task-repair",{evidence:[entry]});
                   harness.failures.push(error.split(":")[0]);
                   await harness.diagnostic("recovery-failure", recoveryFailure(new Error(error), "motion-qa", doc.revision));
                 }
@@ -603,6 +671,7 @@ export async function proposeMotion(
             });
           },
         });
+        if(harness)harness.phase="final-reconciliation";
         if (
           generated.requirements.some(
             (r) =>
@@ -618,6 +687,10 @@ export async function proposeMotion(
           recoveryReport.status = "Failed Safely";
           await atomicJson(path.join(directory,"recovery.json"),recoveryReport);
           throw new Error("RECOVERY_FINAL_INTENT_FAILED: entire candidate rolled back");
+        }
+        if(generated.reconciliation.status!=="SUCCESS"&&harness){
+          const failure=Object.assign(Error("UNVERIFIED_MOTION_RESULT"),{code:"UNVERIFIED_MOTION_RESULT",report:{failure:JSON.stringify(generated.requirements.filter(r=>r.status!=="PASSED").map(r=>({requirementId:r.requirementId,error:r.error,qaResult:r.qaResult})))}});
+          await superviseRunFailure(harness,failure,project,request.settings,onStage,doc.revision);
         }
         await atomicJson(path.join(directory, "candidate-commit.json"), {
           runId: id,
@@ -825,41 +898,7 @@ export async function proposeMotion(
     }
   } catch (error) {
     if (harness) {
-      let report = (error as { recoveryReport?: RecoveryReport }).recoveryReport;
-      const outerFailure = recoveryFailure(error, "agent-execution", "unknown");
-      if (!report && outerFailure.codeRepairEligible) report = {version:"project-recovery/1",status:"Failed Safely",originalFailure:outerFailure,terminalFailure:outerFailure,attempts:[],procedure:null,codeRepairProposed:false};
-      const codeFailure =
-        report?.originalFailure?.codeRepairEligible &&
-        !["LLM_CALL_BUDGET", "RECOVERY_TIME_BUDGET", "RECOVERY_ATTEMPT_LIMIT"].includes(
-          report.originalFailure.code,
-        )
-          ? report.originalFailure
-          : report?.terminalFailure?.codeRepairEligible
-            ? report.terminalFailure
-            : report?.originalFailure;
-      if (
-        codeFailure &&
-        report?.terminalFailure &&
-        codeFailure !== report.terminalFailure
-      ) {
-        codeFailure.evidence = [
-          ...codeFailure.evidence,
-          { source: "terminal", detail: report.terminalFailure.code },
-        ];
-      }
-      if (report?.status === "Failed Safely" && codeFailure?.codeRepairEligible && harness.config.recovery.codeRepair.enabled) {
-        try {
-          onStage("code-repair-proposed");
-          const proposal = await proposeCodeRepair(process.cwd(), codeFailure, harness.config.recovery, request.settings, harness.signal);
-          report.codeRepairProposed = "patchIdentity" in proposal;
-          await atomicJson(path.join(harness.directory,"recovery.json"),report);
-          await atomicJson(path.join(harness.directory,"code-repair.json"),proposal);
-          await harness.diagnostic("code-repair-proposed",proposal);
-        } catch (repairError) {
-          await harness.diagnostic("code-repair-blocked", {reason:String(repairError),productionChanged:false});
-          await atomicJson(path.join(harness.directory,"code-repair.json"),{status:"BLOCKED",reason:String(repairError),productionChanged:false});
-        }
-      }
+      await superviseRunFailure(harness,error,project,request.settings,onStage,doc.revision);
       await harness.captureFailure(error);
       await harness.finish(
         /CANCELLED/.test(String(error))
