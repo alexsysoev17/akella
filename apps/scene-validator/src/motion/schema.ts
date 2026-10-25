@@ -92,8 +92,8 @@ export const animationSchema = z.discriminatedUnion("effect", [
       effect: z.literal("scaleIn"),
       parameters: z
         .object({
-          from: z.number().min(0.00001).max(100000).default(0.5),
-          to: z.number().min(0.00001).max(100000).default(1),
+          from: z.number().min(0).max(100000).default(0.5),
+          to: z.number().min(0).max(100000).default(1),
         })
         .strict(),
     })
@@ -104,8 +104,8 @@ export const animationSchema = z.discriminatedUnion("effect", [
       effect: z.literal("scaleOut"),
       parameters: z
         .object({
-          from: z.number().min(0.00001).max(100000).default(1),
-          to: z.number().min(0.00001).max(100000).default(0.001),
+          from: z.number().min(0).max(100000).default(1),
+          to: z.number().min(0).max(100000).default(0.001),
         })
         .strict(),
     })

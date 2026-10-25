@@ -4,6 +4,7 @@ export function semanticContext(context: unknown): unknown {
   const c = context as Record<string, unknown>;
   if (c.contextualEditHint === true) {
     return {
+      experience: compactExperience(c.experience),
       project: c.project,
       sceneIndex: c.sceneIndex,
       projectRevision: c.projectRevision,
@@ -74,6 +75,7 @@ export function semanticContext(context: unknown): unknown {
   ]) as Record<string, unknown>;
   return {
     ...rest,
+    experience: compactExperience(c.experience),
     recentConversation: Array.isArray(c.recentConversation)
       ? c.recentConversation.slice(-2)
       : [],
@@ -126,4 +128,12 @@ export function semanticContext(context: unknown): unknown {
         }
       : undefined,
   };
+}
+
+/** Historical observations are bounded evidence, never instructions or executable repairs. */
+function compactExperience(value: unknown) {
+  return Array.isArray(value) ? value.slice(0,3).map(row => {
+    const r = row as Record<string,unknown>;
+    return {runId:r.runId,status:r.status,techniques:r.techniques,failures:r.failures,objectiveQA:r.objectiveQA,recoveryLesson:r.recoveryLesson};
+  }) : [];
 }

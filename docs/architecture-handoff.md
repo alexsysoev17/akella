@@ -4,13 +4,13 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-22 (Europe/Moscow) — signed mathematical time, dependency-preserving retiming, global object presentation and bounded source retrieval; targeted update, not a full audit |
+| Last Updated | 2026-10-25 (Europe/Moscow) - recovery integration and exact reported case; targeted update, not a full audit |
 | Last Full Audit | 2026-10-13; unchanged, this update is not a full renderer/provider audit |
-| Git Commit | Verified source/tests `e1261e3`; baseline `2955e6d`, pre-task checkpoint `838b726`. This status-only documentation follow-up is outside the source commit. |
+| Git Commit | Pre-change checkpoint `0d5aac2`; current changes uncommitted at documentation snapshot. Source baseline `e1261e3`. |
 | Git Branch | `temporal-recovery-loop`, local only |
-| Working Tree Status | Source/contracts/native/recovery/tests committed in `e1261e3`; status-only documentation follow-up pending at snapshot. Original test37 and Figma source data unchanged; historical replays ran in isolated copies. |
-| Documentation Version | 1.1.0 |
-| Scope of Last Update | Runs 9da58a18 and 680b606c; signed frames and spatial representation limits; committed-snapshot retiming/dependency closure; scene anchors vs presentation blocks; native output window and lifetimes; deterministic recovery; bounded Level2 source spans; actual test evidence below. |
+| Working Tree Status | Task-owned source/tests/docs changes pending; original client source and motion unchanged. Replays use isolated copies. |
+| Documentation Version | 1.1.1 |
+| Scope of Last Update | Run 572d44eb; clause isolation, capabilities, zero scale, authoritative mentions, experience projection, failure taxonomy, human-gated code promotion, actual provider/native/MP4 verification. |
 | Code snapshot SHA-256 | NOT RECALCULATED; refer to component digests and final source commit. |
 
 Git 2.54.0 (Apple Git-157): локальная история, текущая ветка указана в Document Status, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
@@ -1948,3 +1948,42 @@ Known limits: live natural-language planning was not rerun; historical real-prov
 Architecture Change History: signed-safe mathematical time, separate optional organizational anchors, dependency-preserving operations and immutable admission snapshots, global native subtree lifetime/viewport rules, selective QA window diagnostics, deterministic temporal recovery, bounded source excerpts and actual isolated live patch preparation. No second planner/engine/renderer, arbitrary LLM code execution, blanket validation bypass or production auto-promotion.
 
 Completion verification (2026-10-22): final full `npm run check` PASSED291/291 base/compat +2/2 browser +47/47 native (340 tests), TypeScript and production build, after the final source-context/version, lifetime-index and transitive-group changes. Task ordering follows transitive ancestors, including unselected intermediate nodes; selected [C,A] in A→B→C shifts once. Explicit dependent offsets are derived after their anchor is resolved. Native export-window regression also decodes the actual MP4 to count frames, separately from exact shared-renderer input digests. Durable full log: `data/harness/reports/signed-global-time-2026-10-22/full-check.log`. No existing numerical/visual tolerances were increased.
+
+## Recovery integration and reported case — 2026-10-25 (v1.1.1)
+
+This targeted update supersedes historical statements that no in-app human apply endpoint exists. It does not enable automatic source promotion or retrain model weights.
+
+**Confirmed causes / fixes**
+
+- In run `572d44eb-25f4-4575-8ba4-599f7de421f2`, coverage accumulated already-bound lateral/scale targets as a bare list, then demanded Trim Paths on them in the next ribbon clause. `motion/intent/coverage.ts` now accumulates only genuinely unbound lists. Missing required objects/techniques still fail. A narrowly proven cross-clause scope contradiction emits VALIDATOR_SCOPE_CONTRADICTION with technical evidence; ordinary semantic errors do not authorize code repair.
+- `harness/context.ts` filtered working basic animations out of the capability contract. Saved responses explicitly marked rotation/lateral entrances unsupported. Registered animation capabilities now survive filtering. Artistic discretion can choose supported secondary effects with an explicit assumption; it cannot replace an explicitly requested technique.
+- Zero scale was rejected by semantic/animation schemas and clamped by evaluation. The same contracts/evaluator now accept exact nonnegative scale, preserving existing nonzero values and upper limits.
+- Retrieved experience existed locally but was dropped by `semanticContext`. Both provider projections now include up to three compact observations. Successful committed Level1 recovery records its procedure/failure reference. Repeated-failure candidate collection runs deterministically after experience persistence, without another model/eval call. Candidate evaluation remains offline and requires comparable complete live evaluations for ACCEPTED_FOR_REVIEW; candidates never activate themselves.
+- OUTPUT_TRUNCATED is separate from transport and source defects; an identical full semantic retry is blocked. Code-repair context now carries bounded redacted invariant/evidence rather than repeating the error code.
+- The live test exposed a further identity defect: name-only actions selected active-scene duplicates despite explicit structured mentions. `service.ts` passes validated mentions to `semanticPlan`; new objectAnimation actions bind authoritative source spans before generic resolution, retain instance scope, and record STRUCTURED_MENTION_BOUND. Conflicting mention instances fail. Existing logical-effect editing is unchanged.
+
+**Controlled source lifecycle**
+
+`harness/recovery/promotion.ts`, `replay.ts`, `motion/api.ts`, `web/inspector.js` and `scripts/recovery.ts` extend the existing isolated repair flow:
+
+1. A new regression must fail on baseline and pass with the patch/typecheck under the existing macOS confinement. Parent process attests report/manifest hashes outside the writable test sandbox: `data/harness/code-repairs/verified/<identity>.json`.
+2. Inspector reviews the actual `motion/ai/<runId>/code-repair.json`, checks attestation and patch identity, shows exact diff and issues a single-use five-minute token. The model-facing `promoteCodeRepair()` remains disabled.
+3. Human approval requires idle jobs, clean Git, exact base commit and a source lock. Original-request replay runs in a FRESH source copy from the clean repository plus reviewed contents, not in the generated test's mutable sandbox. Source copy contains no client assets; the local replay separately copies the original project. No external call occurs during replay.
+4. Replay uses the saved provider answer and verified historical state, including initial projects without motion.json, then production execution, native QA and reconciliation. Unavailable history or an invalid saved answer blocks application. Only success permits writing/committing reviewed source/test files. Rollback preserves concurrent edits. Receipts live under `data/harness/code-repairs/applied/`; replay logs under `replays/`.
+5. Restart is explicit; this is not hot reload. The original client project is not automatically changed. CLI: `npm run recovery -- apply --workspace PATH --approve-patch SHA256 --project PATH --run UUID`. No automatic production-code or knowledge activation.
+
+**Actual evidence**
+
+- One authorized real Codex call: 26,396 input / 1,496 output tokens, 20.532 s, zero tool calls, cost unavailable. Payload was locally captured and inspected before sending: compact names/IDs/metadata, instructions and schema; no media, SVG, asset paths, credentials or private filesystem paths. The rejected initial command made no provider call. The approved call used the exact audited payload in an empty temporary directory.
+- The returned answer was executed locally through the production pipeline. The first execution exposed incorrect instance selection; a second local execution of the SAME answer verified the deterministic mention fix without another provider call.
+- Final real-project copy: 8 semantic actions, 11 requirements, 18 committed operations, SUCCESS; execution 61.473 s, 150 QA frames. Correct source-scene IDs; true ribbons start120/141, duration21, after dependency offset0. Prior failed run consumed49,247/3,756 tokens over2 calls and84.601 s overall. These are single-case observations, not statistical latency claims.
+- Actual MP4 exported; sampled Preview RGBA digests equal encoder-input digests, and a genuine partial path frame was inspected. This is not byte equality with lossy decoded H.264. Synthetic exact-text production regression separately verifies native QA, commit, 11 objects, compound effects, sequential Trim Paths and FFmpeg.
+- Render status is WARNING: weight590 maps to600, one image color filter is unsupported, some enlarged rasters lack source resolution. Artistic quality NOT_TESTED. No tolerances were weakened.
+- Source-approval tests use an artificial defect with real local Git and sandboxing: missing/reused approval, failed replay leaving source intact, successful isolated replay/commit, tampered diff rejection. No new live coding-model patch test was performed.
+- Full `npm run check`: 297 base/compat +2 browser +48 native tests passed, TypeScript and build. Additional final focused checks are recorded in the completion note below. Evidence is under ignored `data/harness/reports/recovery-integration-2026-10-25/`; real-client video/frame remain under ignored `artifacts/recovery-live/`. No user project/source was changed.
+
+**Limits:** The source repairer remains a bounded one-call proposal generator, not unrestricted autonomous debugging. Generated-test confinement currently supports macOS only. Applying code requires human review, a clean exact baseline and restart. A saved-answer replay cannot prove that changing a planner prompt produces a better new answer. Improvement candidates remain conservative templates and offline evaluations, without automatic production knowledge activation. Memory remains project-local; semantic correctness for arbitrary language is not proven. This request still costs26k input tokens; context/schema optimization remains material work.
+
+Architecture Change History: connected experience to provider context; fixed clause accumulation, capability disclosure and zero scale; preserved authoritative mentions; separated provider limits from validator defects; added human-gated tested source application with original-scenario replay and durable receipts. Reused existing planner, compiler, motion engine, renderer, storage and QA.
+
+Completion verification: final full check passed 347/347 (297 base/compat, 2 browser, 48 native), typecheck and build. Final focused recovery-integration checks passed6/6; Inspector JavaScript syntax and final TypeScript passed. No new external calls after the one authorized live request.

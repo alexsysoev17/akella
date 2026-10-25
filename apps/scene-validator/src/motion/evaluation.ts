@@ -48,7 +48,7 @@ export function evaluateAnimation(a: Animation, frame: number): Values {
     case "scaleOut":
       return {
         scale: Math.max(
-          0.001,
+          0,
           a.parameters.from + (a.parameters.to - a.parameters.from) * t,
         ),
       };

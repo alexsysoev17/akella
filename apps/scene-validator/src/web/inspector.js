@@ -61,6 +61,36 @@ export function attachInspector(container, url) {
       copy(pretty(values.get(b.dataset.copyValue)));
     }
   });
+  body.addEventListener("click", async (e) => {
+    const button = e.target.closest("[data-review-repair]");
+    if (!button) return;
+    button.disabled = true;
+    const payload = { runId: selectedId, patchIdentity: data.codeRepair.patchIdentity };
+    const post = async (action, value) => {
+      const response = await fetch(url + "/" + action, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(value)});
+      const result = await response.json(); if(!response.ok)throw Error(result.error); return result;
+    };
+    try {
+      const review = await post("code-repair-review", payload);
+      const dialog = document.createElement("dialog");
+      dialog.innerHTML = `<h3>Изменение исходного кода</h3><p>Проверяются точный патч, чистота Git и повтор исходного сценария в изолированной копии. После успешного применения потребуется перезапуск сервера. Пользовательский проект не изменится.</p><pre style="max-height:50vh;overflow:auto">${esc(review.patchText)}</pre><button data-approve>Подтвердить этот патч</button> <button data-dismiss>Отмена</button>`;
+      panel.append(dialog); dialog.showModal();
+      dialog.querySelector("[data-dismiss]").onclick=()=>dialog.close();
+      dialog.addEventListener("close",()=>dialog.remove(),{once:true});
+      dialog.querySelector("[data-approve]").onclick=async()=>{
+        dialog.close();status.textContent="Проверка исходного сценария…";
+        try {
+          const job=await post("code-repair-approve",{...payload,approvalToken:review.approvalToken});
+          while(!disposed){
+            await new Promise(resolve=>setTimeout(resolve,1000));
+            const response=await fetch(url+"/jobs/"+job.jobId);const result=await response.json();
+            if(!response.ok||result.status==="failed")throw Error(result.error);
+            if(result.status==="completed"){status.textContent="Патч применён. Перезапустите сервер; исходный проект сохранён.";break;}
+          }
+        }catch(error){status.textContent=error.message;}
+      };
+    } catch(error){status.textContent=error.message;} finally{button.disabled=false;}
+  });
   function cards(items) {
     return items
       .map(
@@ -112,7 +142,7 @@ export function attachInspector(container, url) {
         `<h3>Уровень 1 — восстановление проекта</h3><p>${esc(data.recovery?.status ?? "Не запускалось")}</p>` +
         block("Исходная и текущая ошибка, операции и попытки", data.recovery) +
         `<h3>Уровень 2 — ремонт кода в изоляции</h3><p>${esc(data.codeRepair?.status ?? "Не запускалось")}</p>` +
-        (data.codeRepair?.status === "AWAITING_APPROVAL" ? "<p>Патч подготовлен и проверен. Приложение не изменено. Автоматическое применение отключено; требуется внешний просмотр и ручное применение точного патча.</p>" : "") +
+        (data.codeRepair?.status === "AWAITING_APPROVAL" ? "<p>Патч подготовлен и проверен. Приложение не изменено. Автоматическое применение отключено; можно просмотреть точный diff и подтвердить применение. Перед изменением кода исходный сценарий проверяется в копии проекта.</p><button data-review-repair>Просмотреть и применить исправление</button>" : "") +
         block("Code Repair — причина, файлы, тесты и риски", data.codeRepair) +
         (data.codeRepair?.patchPreview ? `<details><summary>Предложенный diff${data.codeRepair.patchPreviewTruncated ? " (сокращён; полный файл в экспорте)" : ""}</summary><pre>${esc(data.codeRepair.patchPreview)}</pre></details>` : "") +
         cards(tasks) +

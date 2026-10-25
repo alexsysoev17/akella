@@ -65,7 +65,7 @@ export async function motionKnowledge(request: string, textSelected: boolean) {
       })),
     ),
     composition:
-      "Source base geometry + selected base property track + sum of expressions sorted by expressionId. Expressions sample only base tracks. No recursive expressions or JavaScript. Opacity clamps 0..1; scale stays positive.",
+      "Source base geometry + selected base property track + sum of expressions sorted by expressionId. Expressions sample only base tracks. No recursive expressions or JavaScript. Opacity clamps 0..1; scale is nonnegative; an exact zero endpoint is an invisible collapsed pose.",
     customCurvePolicy:
       "Create and edit structured cubicBezier or piecewise curves when appropriate. Presets are one-time expansion, not an ongoing constraint. Legacy easing strings remain valid.",
   };

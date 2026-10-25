@@ -14,6 +14,8 @@ const components = [
   "harness/recovery/memory",
   "harness/recovery/code-repair",
   "harness/recovery/code-service",
+  "harness/recovery/promotion",
+  "harness/recovery/replay",
   "motion-library/guidance",
   "motion/store",
   "motion/tools",

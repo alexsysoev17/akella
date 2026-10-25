@@ -1,4 +1,5 @@
 import test from "node:test";
+import {attestCodeRepair,reviewForApproval,approveCodeRepair} from "../src/harness/recovery/promotion.js";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, writeFile, readFile, rm, symlink } from "node:fs/promises";
@@ -93,7 +94,7 @@ test("recovery memory is compact, versioned and cannot promote arbitrary procedu
         await f.cleanup();
     }
 });
-test("Level 2 quarantines an injected defect, enforces path/hash/OS boundaries and NEVER promotes its patch", async () => {
+test("Level 2 confines tests; source promotion requires human token, clean baseline and successful isolated replay", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "akella-repair-fixture-"));
     let quarantine: string | undefined;
     try {
@@ -102,7 +103,7 @@ test("Level 2 quarantines an injected defect, enforces path/hash/OS boundaries a
         const file = "apps/scene-validator/src/motion/tools.ts", original = "export const duration = (n: number) => n + 1;\n";
         await writeFile(path.join(root, file), original);
         await writeFile(path.join(root, "package.json"), '{"type":"module"}');
-        await writeFile(path.join(root, ".gitignore"), 'node_modules\n');
+        await writeFile(path.join(root, ".gitignore"), 'node_modules\ndata/\n');
         await writeFile(path.join(root, "tsconfig.check.json"), JSON.stringify({ compilerOptions: { target: "ES2022", module: "NodeNext", moduleResolution: "NodeNext", strict: true, skipLibCheck: true, types: ["node"], allowImportingTsExtensions: true }, include: ["apps/**/*.ts"] }));
         await symlink(path.resolve("node_modules"), path.join(root, "node_modules"));
         await exec("git", ["init", "-q"], { cwd: root });
@@ -124,10 +125,26 @@ test("Level 2 quarantines an injected defect, enforces path/hash/OS boundaries a
             assert.equal(report.status, "BLOCKED");
         const reviewed = await reviewCodeRepair(ws.root);
         assert.equal(reviewed.automaticPromotionAvailable, false);
+        if(process.platform === "darwin") {
+          assert.ok("patchIdentity" in report);
+          await attestCodeRepair(root,ws.root);
+          await assert.rejects(()=>approveCodeRepair(root,ws.root,report.patchIdentity,"missing",async()=>({})),/HUMAN_APPROVAL_REQUIRED/);
+          const review=await reviewForApproval(root,ws.root,report.patchIdentity);
+          await assert.rejects(()=>approveCodeRepair(root,ws.root,report.patchIdentity,review.approvalToken,async isolated=>{assert.notEqual(isolated,root);assert.equal(await readFile(path.join(root,file),"utf8"),original);throw Error("REPLAY_FAILED");}),/REPLAY_FAILED/);
+          assert.equal(await readFile(path.join(root,file),"utf8"),original);
+          await assert.rejects(()=>approveCodeRepair(root,ws.root,report.patchIdentity,review.approvalToken,async()=>({})),/HUMAN_APPROVAL_REQUIRED/);
+          const approved=await reviewForApproval(root,ws.root,report.patchIdentity);
+          const applied=await approveCodeRepair(root,ws.root,report.patchIdentity,approved.approvalToken,async isolated=>{
+            assert.equal(await readFile(path.join(root,file),"utf8"),original);
+            const checked=await exec(process.execPath,["--import","tsx","--input-type=module","-e","import {duration} from './apps/scene-validator/src/motion/tools.ts';if(duration(3)!==3)throw Error('bad replay');"],{cwd:isolated});
+            return {status:"PASSED",mode:"synthetic-source-replay"};
+          });
+          assert.equal(applied.status,"APPLIED");assert.equal((await exec("git",["status","--porcelain"],{cwd:root})).stdout,"");
+          assert.equal(await readFile(path.join(root,file),"utf8"),"export const duration = (n: number) => n;\n");
+        }
         await writeFile(path.join(ws.root, "proposal.patch"), "tampered");
         await assert.rejects(() => reviewCodeRepair(ws.root), /CODE_REPAIR_DIFF_CHANGED/);
         assert.throws(() => promoteCodeRepair(), /CODE_PROMOTION_DISABLED/);
-        assert.equal(await readFile(path.join(root, file), "utf8"), original);
     }
     finally {
         await rm(root, { recursive: true, force: true });

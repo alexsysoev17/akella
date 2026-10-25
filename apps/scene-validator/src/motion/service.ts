@@ -449,6 +449,7 @@ export async function proposeMotion(
           },
           {
             auditAlways: false,
+            mentions: request.mentions,
             recentActions: recentSuccessfulActions(doc, true),
             projectRevision: doc.revision,
             selectedObjectIds: request.selectedObjectIds,

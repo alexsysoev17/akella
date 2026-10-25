@@ -63,7 +63,7 @@ export const capabilityRegistry = [
     evaluator: expressionValue,
     supportedProperties: propertySchema.options,
     constraints: [
-      expressionLifecycles[s.shape.type.value] === "continuous" ? "bounded continuous interval; final project frame allowed" : "settling interval ends before final project frame",
+      expressionLifecycles[s.shape.type.value] === "continuous" ? "bounded continuous interval; final project frame allowed" : "finite settling interval; global time may extend beyond the visible output",
       "base source for inertia/loop",
       "no recursive expressions",
     ],

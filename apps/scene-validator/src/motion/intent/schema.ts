@@ -149,8 +149,8 @@ export const intentRequirementSchema = z
         moveToCenter: z.boolean().nullable().default(null),
         x: coordinateSchema.nullable().default(null),
         y: coordinateSchema.nullable().default(null),
-        scaleFrom: z.number().positive().max(100000).nullable().default(null),
-        scaleTo: z.number().positive().max(100000).nullable().default(null),
+        scaleFrom: z.number().nonnegative().max(100000).nullable().default(null),
+        scaleTo: z.number().nonnegative().max(100000).nullable().default(null),
         durationSeconds: z.number().positive().max(3600).nullable(),
         distance: z.number().finite().min(0).max(MAX_FLOAT32).nullable(),
         direction: z

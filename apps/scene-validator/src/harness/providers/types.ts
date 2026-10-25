@@ -55,6 +55,7 @@ export class ProviderError extends Error {
       | "TIMEOUT"
       | "CANCELLED"
       | "INVALID_OUTPUT"
+      | "OUTPUT_TRUNCATED"
       | "TRANSPORT"
       | "AUTH_REQUIRED"
       | "RATE_LIMITED"
@@ -100,6 +101,7 @@ export function providerIds() {
 /** HTTP-compatible adapters retain actionable transport categories without retrying blindly. */
 export function transportErrorCode(error: unknown): ProviderError["code"] {
   const message = String(error);
+  if (/max_output_tokens|incomplete.*(?:output|response)|finish_reason.{0,15}length/i.test(message)) return "OUTPUT_TRUNCATED";
   if (/invalid_json_schema|invalid.*(?:output|response).*schema|schema must be.*object/i.test(message)) return "PROVIDER_SCHEMA_INVALID";
   if (/401|403|unauthori[sz]ed|authentication|not logged in/i.test(message)) return "PROVIDER_AUTH_FAILED";
   if (/ENOENT|ECONNREFUSED|ENOTFOUND/.test(message)) return "PROVIDER_UNAVAILABLE";

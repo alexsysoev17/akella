@@ -39,9 +39,10 @@ if (args.includes("--recorded-state")) {
   const context = JSON.parse(
     await readFile(path.join(saved, "context.json"), "utf8"),
   );
-  const doc = JSON.parse(
-    await readFile(path.join(root, "motion/motion.json"), "utf8"),
-  );
+  const doc = await readFile(path.join(root,"motion/motion.json"),"utf8").then(JSON.parse).catch(async error=>{
+    if(error.code!=="ENOENT"||request.revision!=="initial")throw error;
+    return readMotion(await loadProject(root));
+  });
   const scenes = new Set(
     context.scenes?.map((s: { sceneId: string }) => s.sceneId),
   );

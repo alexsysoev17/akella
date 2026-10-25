@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { IntentRequirement } from "../../motion/intent/schema.js";
 import { redactSecrets } from "../security.js";
-export type RecoveryCategory = "STALE_REFERENCE" | "AMBIGUITY" | "MISSING_ANIMATION" | "UNSUPPORTED_OPERATION" | "TIMELINE_CONFLICT" | "DEPENDENCY_CONFLICT" | "INVALID_CANDIDATE" | "RENDERER_FAILURE" | "MISSING_CAPABILITY" | "PROBABLE_DEFECT";
+export type RecoveryCategory = "STALE_REFERENCE" | "AMBIGUITY" | "MISSING_ANIMATION" | "UNSUPPORTED_OPERATION" | "TIMELINE_CONFLICT" | "DEPENDENCY_CONFLICT" | "INVALID_CANDIDATE" | "RENDERER_FAILURE" | "MISSING_CAPABILITY" | "PROBABLE_DEFECT" | "PROVIDER_OUTPUT_LIMIT" | "PROVIDER_FAILURE";
 export interface RecoveryFailure {
     version: "recovery-failure/1";
     stage: string;
@@ -39,7 +39,7 @@ export function recoveryFailure(error: unknown, stage: string, revision: string,
     const message = error instanceof Error ? error.message : String(error);
     const rawCode = report?.code ?? report?.toolIssue?.code ?? e?.code ?? message.replace(/^Error: /, "").match(/[A-Z][A-Z_0-9]{3,}/)?.[0] ?? "UNCLASSIFIED_FAILURE";
     const code = /^[A-Z][A-Z_0-9]+$/.test(rawCode) ? rawCode : requirement?.kind === "unsupported" ? "UNSUPPORTED_OPERATION" : "TECHNICAL_VALIDATION_FAILED";
-    const category: RecoveryCategory = /STALE|REVISION/.test(code)
+    const category: RecoveryCategory = code === "OUTPUT_TRUNCATED" ? "PROVIDER_OUTPUT_LIMIT" : /PROVIDER_TRANSPORT|PROVIDER_AUTH|RATE_LIMIT|UNAVAILABLE/.test(code) ? "PROVIDER_FAILURE" : /STALE|REVISION/.test(code)
         ? "STALE_REFERENCE"
         : /AMBIGUOUS|UNRESOLVED/.test(code)
           ? "AMBIGUITY"
@@ -57,7 +57,7 @@ export function recoveryFailure(error: unknown, stage: string, revision: string,
                     ? "RENDERER_FAILURE"
                     : /MISSING_PATH|CAPABILITY/.test(code)
                       ? "MISSING_CAPABILITY"
-                      : /COMPILER_COVERAGE|REQUIREMENT_OPERATIONS_INCOMPLETE|INVALID_EFFECT_PARAMETER|PROVIDER_SCHEMA_INVALID/.test(
+                      : /VALIDATOR_SCOPE_CONTRADICTION|COMPILER_COVERAGE|REQUIREMENT_OPERATIONS_INCOMPLETE|INVALID_EFFECT_PARAMETER|PROVIDER_SCHEMA_INVALID/.test(
                             code,
                         )
                         ? "PROBABLE_DEFECT"
@@ -65,7 +65,7 @@ export function recoveryFailure(error: unknown, stage: string, revision: string,
                           ? "UNSUPPORTED_OPERATION"
                           : "INVALID_CANDIDATE";
     // A model's assertion is never evidence of a code defect. These signals are produced by admission/rendering.
-    const codeRepairEligible = !/BUDGET|TIMEOUT|CANCEL|RATE_LIMIT|AUTH/.test(code) && (
+    const codeRepairEligible = !/BUDGET|TIMEOUT|CANCEL|RATE_LIMIT|AUTH|OUTPUT_TRUNCATED/.test(code) && (
         category === "PROBABLE_DEFECT" ||
         (code === "TASK_SCOPE_VIOLATION" && stage === "preflight" && requirement?.effectOperation?.action === "updateTiming") ||
         code === "ENGINE_CAPABILITY_MISSING" ||
@@ -78,6 +78,6 @@ export function recoveryFailure(error: unknown, stage: string, revision: string,
         readSet: requirement?.timing.reference?.resolvedAnimationId ? [requirement.timing.reference.resolvedAnimationId] : [],
         writeSet: [...(requirement?.animationIds ?? []), ...(requirement?.expressionIds ?? [])],
         remediation: report?.availableResolutions ?? report?.toolIssue?.allowedActions ?? ["inspectObject", "inspectAnimations", "inspectDependencies"],
-        recoverable: category !== "MISSING_CAPABILITY" && !/CANCEL|BUDGET|TIMEOUT|DEPENDENCY_CYCLE|FIXED|PROVIDER_SCHEMA_INVALID/.test(code),
-        codeRepairEligible, evidence: [{ source: stage, detail: code }] };
+        recoverable: !["MISSING_CAPABILITY","PROVIDER_OUTPUT_LIMIT","PROVIDER_FAILURE"].includes(category) && !/CANCEL|BUDGET|TIMEOUT|DEPENDENCY_CYCLE|FIXED|PROVIDER_SCHEMA_INVALID/.test(code),
+        codeRepairEligible, evidence: [{ source: stage, detail: redactSecrets(report?.failure ?? message).replace(/\/Users\/[^/\s]+/g,"<home>").slice(0,2000) }] };
 }

@@ -1,3 +1,5 @@
+import {validateMentions,type ObjectMention} from "../mentions.js";
+import { assertCoverageScope } from "./coverage.js";
 import { resolveTextSettings } from "../../motion-library/techniques/text.js";
 import { buildRegistry } from "../registry.js";
 import {
@@ -59,6 +61,8 @@ Use moveTo with moveToCenter=true for moving to canvas center; offsets x/y are n
 export { semanticContext } from "../../harness/semantic-context.js";
 import { semanticContext } from "../../harness/semantic-context.js";
 export function semanticFailureCategory(error: unknown) {
+  if((error as {code?:string})?.code === "OUTPUT_TRUNCATED")return "PROVIDER_OUTPUT_LIMIT";
+  if((error as {code?:string})?.code === "VALIDATOR_SCOPE_CONTRADICTION")return "VALIDATOR_DEFECT";
   if (/BUDGET|timeout|aborted/i.test(String(error))) return "TIMEOUT";
   if (error instanceof SemanticCoverageError)
     return "COVERAGE_VALIDATION_FAILURE";
@@ -246,6 +250,7 @@ export function validateIntentPlan(
     state: MotionState;
     activeSceneId?: string;
     selectedObjectId?: string;
+    mentions?: ObjectMention[];
     onResolution?: (value: unknown) => void;
     recentActions?: ReferenceContext["recentActions"];
     projectRevision?: string;
@@ -313,6 +318,22 @@ export function validateIntentPlan(
     r.target = {logicalObjectId: object.logicalObjectId, sourceNodeId: source.sourceNodeId, name: object.name};
     r.sceneId = source.sceneId; r.targetScope = "logicalObject"; r.kind = "editAnimation";
     r.techniques = []; r.selector = undefined; r.effectOperation = undefined; r.unresolvedReason = null;
+  }
+  // Explicit mention spans are authoritative for NEW instance animations, even
+  // when the model emits only a name and the active scene contains duplicates.
+  const mentions=validateMentions(project,request,resolutionContext?.mentions??[]);
+  for(const r of plan.requirements){
+    if(r.kind!=="objectAnimation"||r.selector)continue;
+    const clause=r.sourceClauseId?sourceClauses.get(r.sourceClauseId):undefined;
+    const start=clause?.start??request.indexOf(r.sourceText),end=clause?.end??start+r.sourceText.length;
+    if(start<0||(!clause&&request.indexOf(r.sourceText,start+1)>=0))continue;
+    const matches=mentions.filter(m=>m.start>=start&&m.end<=end&&(
+      (r.target.name&&equivalentObjectName(m.displayName,r.target.name))||r.target.sourceNodeId===m.sourceNodeId));
+    const unique=[...new Map(matches.map(m=>[m.sceneId+"/"+m.sourceNodeId,m])).values()];
+    if(unique.length>1)throw Error("AMBIGUOUS_STRUCTURED_MENTION");
+    if(unique.length===1){const m=unique[0];r.sceneId=m.sceneId;r.target={name:m.displayName,logicalObjectId:m.logicalObjectId,sourceNodeId:m.sourceNodeId};r.targetScope="instance";
+      resolutionContext?.onResolution?.({event:"STRUCTURED_MENTION_BOUND",requirementId:r.requirementId,sceneId:m.sceneId,sourceNodeId:m.sourceNodeId,sourceSpan:{start:m.start,end:m.end}});
+    }
   }
   resolveIntentSelectors(
     project,
@@ -812,7 +833,10 @@ export function validateIntentPlan(
     }
   }
   const coverage = inspectSemanticCoverage(project, request, plan, fps);
-  if (coverage.status !== "PASSED") throw new SemanticCoverageError(coverage);
+  if (coverage.status !== "PASSED") {
+    assertCoverageScope(project,request,plan,coverage);
+    throw new SemanticCoverageError(coverage);
+  }
   for (const r of plan.requirements)
     if (
       r.kind !== "sceneTiming" &&
@@ -840,6 +864,7 @@ export async function semanticPlan(
     selectedObjectIds?: string[];
     activeSceneId?: string;
     selectedObjectId?: string;
+    mentions?: ObjectMention[];
   } = {
     auditAlways: true,
   },
@@ -852,6 +877,7 @@ export async function semanticPlan(
       options.motionState ??
       (context as { motion?: MotionState })?.motion ??
       defaultMotion(project),
+    mentions: options.mentions,
     activeSceneId: options.activeSceneId,
     selectedObjectId: options.selectedObjectId,
     selectedObjectIds: options.selectedObjectIds,
@@ -1050,7 +1076,8 @@ export async function semanticPlan(
       await trace("failure-" + attempt, feedback);
       if (
         correctionUsed ||
-        /PROVIDER_SCHEMA_INVALID/.test(failure) ||
+        /PROVIDER_SCHEMA_INVALID|VALIDATOR_SCOPE_CONTRADICTION/.test(failure) ||
+        (error as {code?:string})?.code === "OUTPUT_TRUNCATED" ||
         repeated ||
         calls >= maxCalls ||
         /MISSING_TEMPORAL|AMBIGUOUS_TEMPORAL|TEMPORAL_ANCHOR_KIND_UNSUPPORTED|TEMPORAL_RECENT|BUDGET|CANCELLED|UNSUPPORTED_TOOL_CALL|UNSUPPORTED_CAPABILITY|timeout|aborted|authentication|401|403|login|TRANSPORT|UNAVAILABLE/i.test(

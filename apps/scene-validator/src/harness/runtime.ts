@@ -1,3 +1,4 @@
+import { collectImprovements } from "./improvements.js";
 import { recoveryFailure } from "./recovery/failure.js";
 import { failureDiagnostic, type FailureDiagnostic } from "./failure.js";
 import { providerBudget } from "./providers/budget.js";
@@ -435,6 +436,14 @@ export class HarnessRun {
     );
     await atomicJson(path.join(dir, "trace.json"), redact(this.events));
   }
+  private async recoveryLesson(status:string) {
+    if(status!=="SUCCESS")return undefined;
+    const file=path.join(this.project.root,"motion/ai",this.runId,"recovery.json");
+    try { const r=JSON.parse(await readFile(file,"utf8"));
+      if(r.status==="Project Recovered"&&typeof r.procedure==="string")return {procedure:r.procedure,failureCode:String(r.originalFailure?.code??"UNKNOWN"),verifiedCommit:true};
+    } catch(e) { if((e as NodeJS.ErrnoException).code!=="ENOENT")console.warn("Recovery lesson unavailable"); }
+    return undefined;
+  }
   async finish(
     status: string,
     result?: {
@@ -514,8 +523,11 @@ export class HarnessRun {
             : "NOT_TESTED",
           artisticQuality: "NOT_TESTED",
           versions: this.references,
+          recoveryLesson: await this.recoveryLesson(status),
         });
       if (!this.scratch && this.config.privacy !== "off") {
+        // Local deterministic collection only: no evaluation/model call on the prompt path.
+        await collectImprovements(this.project.root).catch(error => console.warn("Improvement collection:",String(error)));
         // Retention failures do not roll back a completed motion edit.
         await retainRuns(
           this.project.root,

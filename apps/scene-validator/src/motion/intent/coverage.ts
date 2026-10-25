@@ -316,7 +316,10 @@ export function inspectSemanticCoverage(
           (!sceneId || r.sceneId === sceneId) &&
           r.sourceText.includes(text.trim()),
       );
-    if (ids.length && !techs.length && !inherit && !sequential.test(text) && !staticLifetime) {
+    // A semantically bound action consumes its targets even when the conservative
+    // keyword probe does not recognize its technique (e.g. lateral motion/scale).
+    // Only a genuinely bare target list carries forward to the next instruction.
+    if (ids.length && !rs.length && !techs.length && !inherit && !sequential.test(text) && !staticLifetime) {
       pendingIds = [...new Set([...pendingIds, ...ids])];
       activeIds = ids;
       continue;
@@ -477,4 +480,23 @@ export function inspectSemanticCoverage(
   }
   report.status = report.issues.length ? "SUSPICIOUS" : "PASSED";
   return report;
+}
+
+/** Escalate only a provable validator write-scope contradiction, never a model assertion. */
+export function assertCoverageScope(project: LoadedProject, request: string, plan: IntentPlan, report: CoverageReport) {
+  const objects=project.inspection.document.scenes.flatMap(objectsIn);
+  for(const issue of report.issues){
+    if(issue.code!=="MISSING_OBJECT_REQUIREMENT")continue;
+    const id=(issue.expected as {target?:string})?.target;
+    const object=objects.find(o=>o.sceneId+"/"+o.targetId===id);
+    if(!object || objectMentionRanges(object.name,issue.sourceText).length)continue;
+    // Implicit/group references are not proof of a validator defect.
+    if(/(?:аналогич|все|всех|одновременно|так же|\b(?:all|same|they|them)\b|(?:^|\s)(?:они|их|эти|этих|он|она)(?:\s|$))/iu.test(issue.sourceText))continue;
+    if(!objects.some(o=>o!==object&&objectMentionRanges(o.name,issue.sourceText).length))continue;
+    const own=plan.requirements.find(r=>r.sceneId+"/"+r.target.sourceNodeId===id && !r.unresolvedReason && r.sourceClauseId);
+    const clause=plan.sourceClauses?.find(c=>c.clauseId===own?.sourceClauseId);
+    if(!own||!clause||request.slice(clause.start,clause.end)!==clause.text||!objectMentionRanges(object.name,clause.text).length||clause.text.includes(issue.sourceText.trim()))continue;
+    const proof={issue:issue.code,objectExplicitlyNamedInAffectedClause:false,objectHasSeparateAuthoritativeClause:true,existingTechniques:own.techniques,incorrectlyRequiredTechniques:(issue.expected as {techniques?:string[]}).techniques};
+    throw Object.assign(new Error("VALIDATOR_SCOPE_CONTRADICTION: "+JSON.stringify(proof)),{code:"VALIDATOR_SCOPE_CONTRADICTION",report:{code:"VALIDATOR_SCOPE_CONTRADICTION",failure:JSON.stringify(proof)}});
+  }
 }

@@ -191,7 +191,7 @@ export async function agentContext(
     "trimPath",
   ];
   knowledge.capabilities = capabilityCatalog().filter((c) =>
-    ids.includes(c.id),
+    c.kind === "animation" || ids.includes(c.id),
   );
   knowledge.expressions = knowledge.expressions.filter((e) =>
     ids.includes(e.id),
