@@ -6,9 +6,9 @@
 |---|---|
 | Last Updated | 2026-10-25 (Europe/Moscow) — full-request context admission repair; targeted update, not a full audit |
 | Last Full Audit | 2026-10-13; unchanged, this update is not a full renderer/provider audit |
-| Git Commit | Pre-change checkpoint `d946928` (baseline `a638e21`); implementation is uncommitted at this documentation snapshot. |
+| Git Commit | Verified source/tests `8c986a0`; pre-change checkpoint `d946928`. This status-only follow-up is outside that source commit. |
 | Git Branch | `temporal-recovery-loop`, local only |
-| Working Tree Status | Task-owned context/budget/planner/Inspector/tests/docs changes pending. Original test40 project/source/motion unchanged. |
+| Working Tree Status | Source/tests committed in `8c986a0`; only this status follow-up pending at snapshot. Original test40 project/source/motion unchanged. |
 | Documentation Version | 1.1.2 |
 | Scope of Last Update | Run d9fb875d; lossless context packing, complete envelope budget, no-call rejection/retry policy, state transform preservation, Inspector admission diagnostics and actual offline reproduction. |
 | Code snapshot SHA-256 | NOT RECALCULATED; refer to component digests and final source commit. |
