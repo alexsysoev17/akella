@@ -1,3 +1,5 @@
+import {deferRecovery,drainRecoveries} from "../harness/recovery/jobs.js";
+import type {IntentPlan} from "./intent/schema.js";
 import {reviewCodeRepair} from "../harness/recovery/code-repair.js";
 import { recoveryProviderRuntime } from "../harness/recovery/provider-runtime.js";
 import { proposeCodeRepair } from "../harness/recovery/code-service.js";
@@ -173,7 +175,12 @@ export async function superviseRunFailure(harness:HarnessRun,error:unknown,proje
   harness.supervisor.setRevision(revision);
   const diagnostic=failureDiagnostic(error,harness.phase,harness.providerInitializationStatus,true);
   const legacy=(error as {recoveryReport?:RecoveryReport}).recoveryReport;
-  const failure=recoveryFailure(error,diagnostic.failureStage,revision);
+  const secondary=recoveryFailure(error,diagnostic.failureStage,revision);
+  const parentEvent=[...harness.supervisor.report.events].reverse().find(e=>e.stage!=="context-admission");
+  const rootEvent=parentEvent?harness.supervisor.report.events.find(e=>e.id===parentEvent.rootEventId):undefined;
+  const failure=structuredClone(legacy?.originalFailure??rootEvent?.failure??secondary);
+  failure.causalChain=[{stage:failure.stage,code:failure.code,invariant:failure.invariant},...harness.supervisor.report.events.filter(e=>e.rootEventId===rootEvent?.id).map(e=>({stage:e.stage,code:e.errorCode,invariant:e.rootCause})),{stage:secondary.stage,code:secondary.code,invariant:secondary.invariant}].slice(-12);
+  failure.evidence.push({source:"causal-chain",detail:JSON.stringify({original:failure,secondary,events:harness.supervisor.report.events.map(e=>({id:e.id,parentEventId:e.parentEventId,rootEventId:e.rootEventId,stage:e.stage,code:e.errorCode,cause:e.rootCause}))})});
   failure.evidence.push({source:"stack",detail:diagnostic.safeStackTrace.join("\n")});
   if(legacy)failure.evidence.push({source:"existing-recovery",detail:JSON.stringify({original:legacy.originalFailure,terminal:legacy.terminalFailure,attempts:legacy.attempts.map(a=>({action:a.action,outcome:a.outcome}))}).slice(0,8000)});
   const readEvidence=async(name:string)=>{try{const file=path.join(harness.directory,name);await noSymlinkPath(harness.directory,file);const data=await readFile(file,"utf8");if(Buffer.byteLength(data)>1048576)return undefined;return JSON.parse(data);}catch{return undefined;}};
@@ -189,7 +196,7 @@ export async function superviseRunFailure(harness:HarnessRun,error:unknown,proje
         if(proposal.status==="AWAITING_APPROVAL"&&"workspace" in proposal){const review=await reviewCodeRepair(proposal.workspace as string);if(review.status!=="AWAITING_APPROVAL"||!review.tests?.every((t:{status:string})=>t.status==="PASSED")||!review.baseline?.some((t:{status:string})=>t.status==="FAILED"))throw Error("CODE_REPAIR_VERIFICATION_MISSING");return {status:"PATCH_VERIFIED",identity:review.patchIdentity,productionChanged:false};}
         return {status:"NO_VERIFIED_PATCH",reason:"reason" in proposal?proposal.reason:proposal.status};
       }}}:{}),
-  },{requirements:affected.map(r=>r.requirementId),objects:affected.flatMap(r=>r.target.sourceNodeId?[r.target.sourceNodeId]:[]),operations:attemptedOperations,evidence:[{stack:diagnostic.safeStackTrace,contractAvailable:!!contract,preflightAvailable:!!preflight},(error as {contextAdmission?:unknown}).contextAdmission,...failure.evidence]});
+  },{parentEventId:parentEvent?.id,requirements:affected.map(r=>r.requirementId),objects:affected.flatMap(r=>r.target.sourceNodeId?[r.target.sourceNodeId]:[]),operations:attemptedOperations,evidence:[{stack:diagnostic.safeStackTrace,contractAvailable:!!contract,preflightAvailable:!!preflight},(error as {contextAdmission?:unknown}).contextAdmission,...failure.evidence]});
   if(harness.config.privacy==="full"){
     await atomicJson(path.join(harness.directory,"code-repair.json"),report.codeRepair??{status:report.status==="RECOVERY_NOT_NEEDED"?"NOT_NEEDED":"NOT_APPLICABLE",reason:report.finalReason,decisions:report.decisions});
     if(legacy)await atomicJson(path.join(harness.directory,"recovery.json"),{...legacy,supervisor:report.status,reason:report.finalReason});
@@ -205,10 +212,11 @@ export async function proposeMotion(
     signal?: AbortSignal;
     config?: Partial<HarnessConfig>;
     evalContext?: { evalId: string; datasetVersion: string };
+    resumeContract?:IntentPlan;runId?:string;deferredRecovery?:boolean;
   } = {},
 ) {
   let settingsSource = "api";
-  const id = randomUUID();
+  const id = options.runId??randomUUID();
   const { request, doc, savedSettings } = await (async () => {
     let stage = "request-preparation";
     try {
@@ -471,7 +479,7 @@ export async function proposeMotion(
             ),
           {recover:recoverSemantic},
         );
-        const contract = await semanticPlan(
+        const contract = options.resumeContract?validateIntentPlan(project,request.request,options.resumeContract,doc.state.settings.fps,{state:doc.state,projectRevision:doc.revision,mentions:request.mentions}):await semanticPlan(
           project,
           request.request,
           enrichedContext,
@@ -557,7 +565,7 @@ export async function proposeMotion(
             const policy = harness.config.recovery;
             const performRecovery=()=>recoverPreflight(project, doc.state, contract, error, {
               policy, revision: doc.revision, request: request.request,
-              checkpoint: () => harness.checkpoint(),
+              checkpoint: () => harness.recoveryCheckpoint(),
               record: async report => {
                 recoveryReport = report;
                 const calls = harness.calls.slice(recoveryStart);
@@ -898,8 +906,19 @@ export async function proposeMotion(
     }
   } catch (error) {
     if (harness) {
+      let deferredId:string|undefined;
+      const deadline=/EXECUTION_TIMEOUT|REPAIR_TIME_BUDGET|RECOVERY_TIME_BUDGET/.test(String(error));
+      if(deadline&&!options.deferredRecovery&&!options.signal?.aborted&&harness.config.privacy==="full"){
+        try{
+          const saved=JSON.parse(await readFile(path.join(directory,"intent-contract.json"),"utf8"));
+          const job=await deferRecovery(project,id,doc.revision,request,saved,String(error));deferredId=job.id;
+          await harness.diagnostic("recovery-deferred",{jobId:job.id,status:job.status,reason:job.reason});
+
+        }catch(deferError){await harness.diagnostic("recovery-defer-unavailable",{reason:String(deferError)});}
+      }
       await superviseRunFailure(harness,error,project,request.settings,onStage,doc.revision);
       await harness.captureFailure(error);
+      if(deferredId){await harness.supervisor.defer(deferredId);if(error instanceof Error)Object.assign(error,{deferredJobId:deferredId});}
       await harness.finish(
         /CANCELLED/.test(String(error))
           ? "CANCELLED"
@@ -1053,6 +1072,7 @@ export async function executeMotion(
     signal?: AbortSignal;
     config?: Partial<HarnessConfig>;
     evalContext?: { evalId: string; datasetVersion: string };
+    resumeContract?:IntentPlan;runId?:string;deferredRecovery?:boolean;
   } = {},
 ) {
   onStage("generating");
@@ -1127,4 +1147,13 @@ export async function completeExecution(
     appliedAt: new Date().toISOString(),
   });
   return completed;
+}
+
+/** Bounded durable continuation; fresh run uses the saved validated contract, not another semantic plan. */
+export async function resumeProjectRecoveries(project:LoadedProject){
+ return drainRecoveries(project,async(job,signal)=>{
+  const result=await executeMotion(project,job.request,()=>{}, {signal,resumeContract:job.contract,runId:job.replayRunId,deferredRecovery:true});
+  if(!("reconciliation" in result)||result.reconciliation?.status!=="SUCCESS")throw Error("DEFERRED_RECOVERY_NOT_VERIFIED");
+  return {runId:result.id,status:"SUCCESS"};
+ });
 }

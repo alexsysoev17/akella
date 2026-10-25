@@ -568,7 +568,7 @@ test("Test I: Automatic Project Recovery (resolves self-referential cycle determ
           maxTokens: 24000,
           maxDurationMs: 60000,
           maxEstimatedCost: null,
-          codeRepair: { enabled: true, model: "gpt-6-sol", effort: "medium", maxDurationMs: 120000, maxContextBytes: 140000, maxOutputTokens: 12000, maxTokens: 60000, maxEstimatedCost: null },
+          codeRepair: {maxInvestigationCalls:3,maxSourceQueries:12, enabled: true, model: "gpt-6-sol", effort: "medium", maxDurationMs: 120000, maxContextBytes: 140000, maxOutputTokens: 12000, maxTokens: 60000, maxEstimatedCost: null },
         },
         revision: "rev-1",
         request: "сдвинь цель на 5 кадров позже",

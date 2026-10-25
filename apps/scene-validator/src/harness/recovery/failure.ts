@@ -4,6 +4,7 @@ import { redactSecrets } from "../security.js";
 export type RecoveryCategory = "STALE_REFERENCE" | "AMBIGUITY" | "MISSING_ANIMATION" | "UNSUPPORTED_OPERATION" | "TIMELINE_CONFLICT" | "DEPENDENCY_CONFLICT" | "INVALID_CANDIDATE" | "RENDERER_FAILURE" | "MISSING_CAPABILITY" | "PROBABLE_DEFECT" | "PROVIDER_OUTPUT_LIMIT" | "PROVIDER_FAILURE" | "CONTEXT_ADMISSION";
 export interface RecoveryFailure {
     version: "recovery-failure/1";
+    causalChain?:{stage:string;code:string;invariant:string}[];
     stage: string;
     code: string;
     category: RecoveryCategory;

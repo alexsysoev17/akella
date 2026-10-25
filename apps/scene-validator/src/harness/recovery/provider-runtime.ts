@@ -10,9 +10,9 @@ export function recoveryProviderRuntime(run: HarnessRun, firstCall: number, rema
         if (measured > policy.maxTokens || policy.maxEstimatedCost !== null && knownCost > policy.maxEstimatedCost)
             throw new Error("RECOVERY_PROVIDER_BUDGET");
     };
-    return { ...runtime,
+    return { ...runtime, signal:run.recoverySignal,
         providerTimeoutMs: Math.min(runtime.providerTimeoutMs, remainingMs ?? policy.maxDurationMs),
         maxOutputTokens: policy.maxOutputTokens, reasoningEffort: policy.effort, includeCapabilityGuidance: false,
-        invoke: async (...args: Parameters<typeof runtime.invoke>) => { check(); const result = await runtime.invoke(...args); check(); return result; },
+        invoke: async (...args: Parameters<typeof runtime.invoke>) => { check(); const result = await runtime.invoke(args[0],{...args[1],purpose:args[1].purpose==="semantic-recovery"?"semantic-recovery":"project-recovery"}); check(); return result; },
     };
 }

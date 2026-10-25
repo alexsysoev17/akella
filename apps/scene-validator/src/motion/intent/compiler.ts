@@ -516,9 +516,11 @@ export function compileRequirement(
       if (r.timing.relation === "beforeRequirement") start = anchor!.startFrame - duration + Math.round(r.timing.delaySeconds * fps);
     }
     if (stateTransition) {
-      const existing = transitionForTarget(project, state, r.sceneId!, r.target.sourceNodeId!);
+      let boundTransitionId:string|undefined;
+      const existing = r.kind==="editAnimation"?transitionForTarget(project, state, r.sceneId!, r.target.sourceNodeId!):undefined;
       if (r.kind === "editAnimation") {
         if (!existing) throw new Error("ANIMATION_NOT_FOUND: no existing logical state transition");
+        boundTransitionId=existing.transitionId;
         if (r.effectOperation?.action === "remove") operations.push(...lowerMotionTool(project, state, { tool: "removeAnimation", animationId: existing.transitionId, dependentPolicy: r.dependentPolicy ?? "reject" }));
         else operations.push(...lowerMotionTool(project, state, { tool: "updateAnimation", animationId: existing.transitionId, patch: {
           ...(r.parameters.easing != null ? { easing: r.parameters.easing } : {}),
@@ -531,15 +533,16 @@ export function compileRequirement(
         const sourceIndex = project.inspection.document.scenes.findIndex(s => s.sceneId === r.sceneId);
         const toSceneId = r.parameters.toSceneId ?? project.inspection.document.scenes[sourceIndex + 1]?.sceneId;
         if (!toSceneId) throw new Error("TARGET_STATE_MISSING");
+        boundTransitionId="intent_transition_" + stable([object.logicalObjectId, r.parameters.fromSceneId??r.sceneId, toSceneId]);
         operations.push(...lowerMotionTool(project, state, { tool: "createStateTransition", transition: {
-          transitionId: "intent_transition_" + stable([object.logicalObjectId, r.sceneId, toSceneId]),
+          transitionId: boundTransitionId,
           timelinePolicy: "referenceStates", logicalObjectId: object.logicalObjectId,
           fromSceneId: r.parameters.fromSceneId ?? r.sceneId!, toSceneId,
-          startFrame: start, durationFrames: duration, easing: r.parameters.easing ?? "easeInOutCubic",
+          startFrame: start, durationFrames: duration, easing: r.parameters.easing ?? (hasInertia?"linear":"easeInOutCubic"),
           proceduralEffects: [], layerPolicy: { type: "switch", switchProgress: 1 },
         }}));
       }
-      if (hasInertia) operations.push(...compileInertiaAttachments(project, applyOperations(state, operations, project), r, true));
+      if (hasInertia) operations.push(...compileInertiaAttachments(project, applyOperations(state, operations, project), r, true,boundTransitionId));
     } else if (
       r.effectOperation?.storage === "animation" &&
       r.effectOperation.action === "remove"
@@ -1048,21 +1051,24 @@ function compileInertiaAttachments(
   state: MotionState,
   r: IntentRequirement,
   missingOnly = false,
+  boundTransitionId?:string,
 ): Plan["operations"] {
-  const transition = transitionForTarget(project, state, r.sceneId!, r.target.sourceNodeId!);
+  const transition = boundTransitionId?state.objectTransitions?.find(t=>t.transitionId===boundTransitionId):transitionForTarget(project, state, r.sceneId!, r.target.sourceNodeId!);
   if (transition && r.targetScope !== "instance") {
     const end = transition.startFrame + transition.durationFrames;
     const settle = Math.max(4, Math.round(1.2 * state.settings.fps));
     if (settle < 4) throw new TimelineConstraintError(end + Math.round(1.2 * state.settings.fps) + 1, state.settings.durationFrames, [transition.transitionId]);
     const defaults = inertiaIntensityDefaults[r.parameters.intensity ?? "normal"];
     const geometry = statePresentation(project, state)[transition.logicalObjectId];
+    const object=buildRegistry(project.inspection.document,project.inspection.fingerprint).objects.find(o=>o.logicalObjectId===transition.logicalObjectId)!;
+    const source=resolveState(project.inspection.document,object,transition.fromSceneId);
     return (["x", "y"] as const).filter(property => (!r.parameters.property || r.parameters.property === property) && Math.abs(geometry[transition.toSceneId].normalized[property === "x" ? 0 : 1][2] - geometry[transition.fromSceneId].normalized[property === "x" ? 0 : 1][2]) > 1e-8).flatMap(property => {
       const existing = state.expressions?.find(e => e.type === "inertialOvershoot" && e.transitionId === transition.transitionId && e.property === property);
       if (missingOnly && existing) return [];
       return [{ type: "setExpression" as const, expression: {
         expressionId: existing?.expressionId ?? "intent_inertia_" + stable([transition.transitionId, property]),
         transitionId: transition.transitionId, ownership: { scope: "transition" as const, logicalObjectId: transition.logicalObjectId },
-        sceneId: r.sceneId!, targetId: r.target.sourceNodeId!, property, type: "inertialOvershoot" as const,
+        sceneId: transition.fromSceneId, targetId: source.sourceNodeId, property, type: "inertialOvershoot" as const,
         sourceAnimationId: transition.transitionId, startFrame: end, durationFrames: settle, enabled: true,
         parameters: { mode: "ae" as const, settlingEnvelope: "smoothTail" as const, amplitude: r.parameters.amplitude ?? defaults.amplitude, frequency: r.parameters.frequency ?? defaults.frequency, decay: r.parameters.decay ?? defaults.decay, velocityLookbackFrames: 6 },
       } }];

@@ -1,3 +1,4 @@
+import {readRepairSources} from "./source-reader.js";
 import type {ProviderUsage} from "../providers/types.js";
 import {codeSources,repairSourceAllowed} from "./source-routing.js";
 import {reviewCodeRepair} from "./code-repair.js";
@@ -41,7 +42,9 @@ export async function proposeCodeRepair(repository: string, failure: RecoveryFai
         if(current.every(Boolean))return {...review,workspace:saved.workspace,reusedVerifiedProposal:true,metrics:{providerCalls:0}};
       }
     }catch(error){if((error as NodeJS.ErrnoException).code!=="ENOENT")console.warn("Cached source proposal unavailable; fresh investigation required");}
-    const filesToIsolate=codeSources(failure);
+    const filesToIsolate:string[]=[];
+    for(const file of codeSources(failure)){try{await noSymlinkPath(repository,path.join(repository,file));await readFile(path.join(repository,file));filesToIsolate.push(file);}catch(error){if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error;}}
+    if(!filesToIsolate.length)throw Error("CODE_REPAIR_SOURCE_UNAVAILABLE");
     const workspace = await isolateCodeRepair(
       repository,
       {...failure,codeRepairEligible:true,evidence:[...failure.evidence,{source:"global-supervisor",detail:"Isolated investigation only; a source defect must be demonstrated by a failing regression."}]},
@@ -50,7 +53,7 @@ export async function proposeCodeRepair(repository: string, failure: RecoveryFai
     );
     const directory = path.join(workspace.root, "coding-provider");
     await mkdir(directory);
-    let usage: unknown = null;
+    let usage: unknown = null;let totalTokens=0,totalCost=0;
     const controller = AbortSignal.any([signal ?? new AbortController().signal, AbortSignal.timeout(policy.codeRepair.maxDurationMs)]);
     const provider = new CodexProvider({ ...settings, model: policy.codeRepair.model }, directory, {
         signal: controller, providerTimeoutMs: policy.codeRepair.maxDurationMs, maxOutputTokens: policy.codeRepair.maxOutputTokens, privacy: "full", reasoningEffort: policy.codeRepair.effort, includeCapabilityGuidance: false,
@@ -70,20 +73,39 @@ export async function proposeCodeRepair(repository: string, failure: RecoveryFai
                 throw new Error("CODE_REPAIR_FORBIDDEN_TOOL");
             if (result.usage && result.usage.outputTokens > req.maxOutputTokens)
                 throw new Error("CODE_REPAIR_OUTPUT_BUDGET");
-            if (result.usage && result.usage.inputTokens + result.usage.outputTokens > policy.codeRepair.maxTokens)
+            totalTokens+=result.usage?result.usage.inputTokens+result.usage.outputTokens:0;totalCost+=result.estimatedCost??0;
+            if (totalTokens > policy.codeRepair.maxTokens)
                 throw new Error("CODE_REPAIR_TOKEN_BUDGET");
-            if (policy.codeRepair.maxEstimatedCost !== null && result.estimatedCost !== null && result.estimatedCost > policy.codeRepair.maxEstimatedCost)
+            if (policy.codeRepair.maxEstimatedCost !== null && result.estimatedCost !== null && totalCost > policy.codeRepair.maxEstimatedCost)
                 throw new Error("CODE_REPAIR_COST_BUDGET");
             return result;
         },
     });
-    const scoped = scopedCodeProposalSchema(workspace);
+    let scoped = scopedCodeProposalSchema(workspace);
     const sourceContext = codeSourceContext(workspace.files, Math.floor(policy.codeRepair.maxContextBytes / 3));
     await atomicJson(path.join(workspace.root,"source-context.json"),sourceContext);
-    const decision = await provider.structured({ failure: { code: failure.code, category: failure.category, stage: failure.stage, invariant: failure.invariant, evidence: failure.evidence.map(e => ({ source: e.source, detail: redactSecrets(e.detail).slice(0,2000) })) }, files: sourceContext.files.map(f=>({...f,sourceWriteAllowed:repairSourceAllowed(f.path)})), sourceContext:sourceContext.metrics, baseCommit: workspace.baseCommit, regressionPath:scoped.regressionPath, emptyFileHash:"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" }, "Produce a narrow, reviewable source repair and a NEW synthetic regression test.", "You are the isolated Code Repair role, not the project agent. Read only supplied code. complete=false means exact numbered source spans, not a complete file. For existing files use unique find/replace edits on supplied exact text; never replace a partial file with full content. No shell/filesystem/network tools. Return action=propose with proposal only when evidence establishes a source defect; otherwise action=stop, proposal=null and reason. Prefer small exact find/replace edits on existing files with exact beforeHash; full content is required only for NEW regression tests. Each find must occur exactly once; new test beforeHash is SHA256 of empty text. Never change permissions, configuration, source Figma data, unrelated modules, tests already present, QA tolerances or validation to conceal a failure. Explain actual root cause; do not claim tests ran. The backend will sandbox tests. This proposal never activates itself. If the source does not establish a defect, do not invent a repair.", z.object({ action: z.enum(["propose", "stop"]), proposal: scoped.schema.nullable(), reason: z.string().max(2000) }).strict(), "code-repair");
-    if (decision.action === "stop" || !decision.proposal)
-        return { status: "INSUFFICIENT_EVIDENCE", reason: decision.reason, workspace: workspace.root, promotion: "DISABLED", metrics: usage };
-    return finalizeCodeRepair(repository, workspace, decision.proposal, failure, {provider:usage,sourceContext:sourceContext.metrics}, controller);
+    const observations:unknown[]=[];let queryCount=0;
+    // Always localize the actual invariant in the frozen repository before accepting insufficient evidence.
+    const invariantText=failure.invariant.replace(/^Error: /,"").split(";")[0].slice(0,180);
+    observations.push(await readRepairSources(workspace,[{kind:"search",query:invariantText}],Math.floor(policy.codeRepair.maxContextBytes/6)));queryCount++;
+    for(let round=0;round<policy.codeRepair.maxInvestigationCalls;round++){
+    scoped=scopedCodeProposalSchema(workspace);
+    const decision = await provider.structured({ failure: { causalChain:failure.causalChain??[], code: failure.code, category: failure.category, stage: failure.stage, invariant: failure.invariant, evidence: failure.evidence.map(e => ({ source: e.source, detail: redactSecrets(e.detail).slice(0,2000) })) }, files: sourceContext.files.map(f=>({...f,sourceWriteAllowed:repairSourceAllowed(f.path)})), sourceContext:sourceContext.metrics, investigation:observations, sourceTools:{kinds:["read","search","callers","tests"],scope:"isolated app TypeScript source/tests",remainingQueries:policy.codeRepair.maxSourceQueries-queryCount,remainingCalls:policy.codeRepair.maxInvestigationCalls-round-1}, baseCommit: workspace.baseCommit, regressionPath:scoped.regressionPath, emptyFileHash:"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" }, "Produce a narrow, reviewable source repair and a NEW synthetic regression test.", "You are the isolated Code Repair role, not the project agent. Read only supplied code. complete=false means exact numbered source spans, not a complete file. For existing files use unique find/replace edits on supplied exact text; never replace a partial file with full content. No shell/filesystem/network tools. Return action=inspect with queries to read additional files/functions/callers/tests when evidence is incomplete. A trusted read-only tool executes queries against the frozen repository. Native filesystem/shell tools remain unavailable. Return action=propose only with evidence, otherwise stop with exact inaccessible evidence. Prefer small exact find/replace edits on existing files with exact beforeHash; full content is required only for NEW regression tests. Each find must occur exactly once; new test beforeHash is SHA256 of empty text. Never change permissions, configuration, source Figma data, unrelated modules, tests already present, QA tolerances or validation to conceal a failure. Explain actual root cause; do not claim tests ran. The backend will sandbox tests. This proposal never activates itself. If the source does not establish a defect, do not invent a repair.", z.object({ action: z.enum(["inspect", "propose", "stop"]), queries:z.array(z.object({kind:z.enum(["read","search","callers","tests"]),path:z.string().nullable(),query:z.string().max(300).nullable(),startLine:z.number().int().positive().nullable(),endLine:z.number().int().positive().nullable()}).strict()).max(12).optional(), proposal: scoped.schema.nullable(), reason: z.string().max(2000) }).strict(), "code-repair");
+
+    if(decision.action==="inspect"){
+      const queries=decision.queries??[];
+      if(!queries.length||queryCount+queries.length>policy.codeRepair.maxSourceQueries)throw Error("CODE_SOURCE_QUERY_LIMIT");
+      const signature=JSON.stringify(queries);if(observations.some(o=>(o as {signature?:string}).signature===signature))throw Error("CODE_SOURCE_NO_PROGRESS");
+      const observed=await readRepairSources(workspace,queries,Math.floor(policy.codeRepair.maxContextBytes/4));queryCount+=queries.length;
+      observations.push({signature,...observed});
+      await atomicJson(path.join(workspace.root,"source-investigation.json"),{observations,queryCount,calls:round+1});continue;
+    }
+    await atomicJson(path.join(workspace.root,"source-investigation.json"),{observations,queryCount,calls:round+1,conclusion:decision.reason});
+    if(decision.action==="stop"||!decision.proposal)return {status:"INSUFFICIENT_EVIDENCE",reason:decision.reason,investigation:{queryCount,calls:round+1,observations},workspace:workspace.root,promotion:"DISABLED",metrics:usage};
+    return finalizeCodeRepair(repository,workspace,decision.proposal,failure,{provider:usage,sourceContext:sourceContext.metrics,queryCount,calls:round+1},controller);
+    }
+    return {status:"INVESTIGATION_BUDGET_EXHAUSTED",reason:"Bounded source investigation exhausted before a verified proposal",workspace:workspace.root,investigation:{queryCount,observations},promotion:"DISABLED",metrics:usage};
+
 }
 /** Also supports verification of a previously returned proposal without another
  * provider call. It never applies a patch outside the quarantine workspace. */

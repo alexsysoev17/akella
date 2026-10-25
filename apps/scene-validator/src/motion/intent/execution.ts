@@ -116,12 +116,13 @@ export function assertIntentScope(
     ].map((a) => a.animationId),
   );
   const transitionIds = new Set((before.objectTransitions ?? []).filter(t => r.techniques.includes("objectStateTransition") && t.logicalObjectId === r.target.logicalObjectId).map(t => t.transitionId));
+  const createdTransitionIds=new Set((next.objectTransitions??[]).filter(t=>r.kind==="objectAnimation"&&r.techniques.includes("objectStateTransition")&&t.logicalObjectId===r.target.logicalObjectId&&!(before.objectTransitions??[]).some(old=>old.transitionId===t.transitionId)&&(!r.parameters.fromSceneId||r.parameters.fromSceneId===t.fromSceneId)&&(!r.parameters.toSceneId||r.parameters.toSceneId===t.toSceneId)).map(t=>t.transitionId));
   const exprAllowed = (e: NonNullable<MotionState["expressions"]>[number]) =>
     (own(e) &&
     (!r.expressionIds || r.expressionIds.includes(e.expressionId)) &&
     (r.techniques.includes(e.type as (typeof r.techniques)[number]) ||
       ("sourceAnimationId" in e && allowedIds.has(e.sourceAnimationId)))) || Boolean(e.transitionId && transitionIds.has(e.transitionId) &&
-      (r.effectOperation?.action !== "remove" || r.dependentPolicy === "removeDependents"));
+      (r.effectOperation?.action !== "remove" || r.dependentPolicy === "removeDependents")) || Boolean(e.transitionId&&createdTransitionIds.has(e.transitionId)&&r.techniques.includes(e.type as IntentRequirement["techniques"][number]));
   if (originDelta > 0) {
     for (const e of baseline.expressions ?? [])
       if (!exprAllowed(e)) e.startFrame += originDelta;
@@ -160,7 +161,7 @@ export function assertIntentScope(
       t: NonNullable<MotionState["objectTransitions"]>[number],
     ) =>
       t.logicalObjectId === r.target.logicalObjectId &&
-      [t.fromSceneId, t.toSceneId].includes(r.sceneId!) &&
+      (r.parameters.fromSceneId?t.fromSceneId===r.parameters.fromSceneId:[t.fromSceneId, t.toSceneId].includes(r.sceneId!)) &&
       (!r.parameters.toSceneId || t.toSceneId === r.parameters.toSceneId);
     baseline.objectTransitions = [
       ...(before.objectTransitions ?? []).filter((t) => !allowedTransition(t)),
@@ -195,7 +196,7 @@ export function requirementChecks(
   committed: MotionState | undefined = previous,
 ) {
   if (r.techniques.includes("objectStateTransition")) {
-    const matches = (state.objectTransitions ?? []).filter(t => t.logicalObjectId === r.target.logicalObjectId && [t.fromSceneId, t.toSceneId].includes(r.sceneId!) && (!r.parameters.toSceneId || t.toSceneId === r.parameters.toSceneId));
+    const matches = (state.objectTransitions ?? []).filter(t => t.logicalObjectId === r.target.logicalObjectId && (r.parameters.fromSceneId?t.fromSceneId===r.parameters.fromSceneId:[t.fromSceneId, t.toSceneId].includes(r.sceneId!)) && (!r.parameters.toSceneId || t.toSceneId === r.parameters.toSceneId));
     if (r.effectOperation?.action === "remove") return [{ name: "stateTransitionRemoved", requirementId: r.requirementId, status: matches.length === 0 ? "PASSED" : "FAILED" }];
     return [{ name: "stateTransitionContract", requirementId: r.requirementId, status: matches.length === 1 && (r.timing.startSeconds == null || matches[0].startFrame === Math.round(r.timing.startSeconds * state.settings.fps)) && (r.parameters.easing == null || JSON.stringify(matches[0].easing) === JSON.stringify(r.parameters.easing)) && (r.parameters.durationSeconds == null || matches[0].durationFrames === Math.round(r.parameters.durationSeconds * state.settings.fps)) ? "PASSED" : "FAILED" }];
   }

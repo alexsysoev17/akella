@@ -1,3 +1,4 @@
+import {resumeProjectRecoveries} from "./motion/service.js";
 import { recoverInterruptedRuns } from "./harness/runtime.js";
 import { motionApi } from "./motion/api.js";
 import { diagnosticRu } from "./localization.js";
@@ -377,6 +378,7 @@ export async function servePlatform(projectsRoot: string, port = 4173) {
       resolve();
     });
   });
+  for(const project of (await discoverProjects(projectsRoot)).projects)void resumeProjectRecoveries(project).catch(error=>console.warn("Recovery continuation:",String(error)));
   return server;
 }
 function countNodes(children: unknown[]): number {

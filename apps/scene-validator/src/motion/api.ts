@@ -1,3 +1,4 @@
+import {recoveryJobs,cancelRecovery} from "../harness/recovery/jobs.js";
 import {reviewForApproval,approveCodeRepair,sourcePromotionBusy} from "../harness/recovery/promotion.js";
 import {verifyOriginalRun,publishOriginalReplay} from "../harness/recovery/replay.js";
 import { harnessConfig } from "../harness/config.js";
@@ -38,6 +39,7 @@ import { readMotion, changeMotion } from "./store.js";
 import { objectsIn } from "./context.js";
 import {
   executeMotion,
+  resumeProjectRecoveries,
   prepareMotionRequest,
   completeExecution,
   projectMotion,
@@ -61,6 +63,11 @@ const jobs = new Map<
 >();
 const active = new Set<string>();
 const controllers = new Map<string, AbortController>();
+const deferredAliases=new Map<string,string>();
+async function deferredResult(project:LoadedProject,job:{result?:unknown}){
+ const id=(job.result as {runId?:string})?.runId;if(!id||!/^[a-f0-9-]{36}$/.test(id))return job.result;
+ const file=path.join(project.root,'motion/ai',id,'proposal.json');await noSymlinkPath(project.root,file);return JSON.parse(await readFile(file,'utf8'));
+}
 export async function motionApi(
   project: LoadedProject,
   request: IncomingMessage,
@@ -128,7 +135,8 @@ export async function motionApi(
         }
         return null;
       })();
-      json({ ...(await projectMotion(project)), activeJob });
+      const deferred=(await recoveryJobs(project)).find(j=>["PENDING","RUNNING"].includes(j.status));
+      json({ ...(await projectMotion(project)), activeJob:activeJob??(deferred?{id:deferred.id,stage:"recovering-project"}:null) });
       return true;
     }
     if (action === "inspector") {
@@ -307,8 +315,11 @@ export async function motionApi(
     }
     if (action === "jobs") {
       const job = jobs.get(segments[5]);
-      if (!job || job.projectId !== project.config.projectId)
-        throw new Error("Задание не найдено или сервер перезапущен");
+      if (!job || job.projectId !== project.config.projectId){
+        const deferred=(await recoveryJobs(project)).find(j=>j.id===segments[5]);
+        if(!deferred)throw new Error("Задание не найдено или сервер перезапущен");
+        json({status:["PENDING","RUNNING"].includes(deferred.status)?"running":deferred.status==="COMPLETED"?"completed":"failed",stage:"recovering-project",result:deferred.status==="COMPLETED"?await deferredResult(project,deferred):undefined,error:deferred.reason});return true;
+      }
       json(job);
       return true;
     }
@@ -518,8 +529,8 @@ export async function motionApi(
     if (action === "cancel") {
       const { jobId } = z.object({ jobId: z.uuid() }).strict().parse(input);
       const job = jobs.get(jobId);
-      if (!job || job.projectId !== project.config.projectId)
-        throw new Error("Unknown project job");
+      if (!job || job.projectId !== project.config.projectId){await cancelRecovery(project,jobId);json({status:"CANCELLATION_REQUESTED"});return true;}
+      if(deferredAliases.has(jobId))await cancelRecovery(project,deferredAliases.get(jobId)!);
       controllers.get(jobId)?.abort(new Error("CANCELLED"));
       json({ status: "CANCELLATION_REQUESTED" });
       return true;
@@ -629,16 +640,22 @@ export async function motionApi(
             result,
           }),
         )
-        .catch((e) =>
-          jobs.set(id, {
-            projectId: project.config.projectId,
-            status: "failed",
-            error: e instanceof ProviderSettingsError ? e.message : String(e),
-          }),
-        )
+        .catch(async(e) => {
+          const deferredId=(e as {deferredJobId?:string}).deferredJobId;
+          if(deferredId){
+            deferredAliases.set(id,deferredId);jobs.set(id,{projectId:project.config.projectId,status:"running",stage:"recovering-project"});
+            try{
+              await resumeProjectRecoveries(project);const saved=(await recoveryJobs(project)).find(j=>j.id===deferredId);
+              if(saved?.status==="COMPLETED"){jobs.set(id,{projectId:project.config.projectId,status:"completed",result:await deferredResult(project,saved)});return;}
+              jobs.set(id,{projectId:project.config.projectId,status:"failed",error:saved?.reason??"Deferred recovery unavailable"});return;
+            }finally{deferredAliases.delete(id);}
+          }
+          jobs.set(id,{projectId:project.config.projectId,status:"failed",error:e instanceof ProviderSettingsError?e.message:String(e)});
+        })
         .finally(() => {
           active.delete(key);
           controllers.delete(id);
+          if(action!=="render")void resumeProjectRecoveries(project).catch(e=>console.warn("Recovery continuation:",String(e)));
           if (jobs.size > 100)
             for (const [old, job] of jobs) {
               if (job.status !== "running") {

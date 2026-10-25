@@ -70,6 +70,8 @@ export class HarnessRun {
       this.config.privacy === "full",
     );
     if(!this.supervisor.report.events.length)await this.supervisor.settle(error,this.failure.failureStage,{}, {evidence:[{stack:this.failure.safeStackTrace}]});
+    const last=this.supervisor.report.events.at(-1),root=this.supervisor.report.events.find(e=>e.id===last?.rootEventId);
+    if(root&&this.config.privacy==="full"){this.failure.originalFailure={stage:root.stage,code:root.errorCode,invariant:root.rootCause};this.failure.causalChain=this.supervisor.report.events.filter(e=>e.rootEventId===root.id).map(e=>({eventId:e.id,parentEventId:e.parentEventId,rootEventId:e.rootEventId,code:e.errorCode,stage:e.stage}));}
     await this.diagnostic("structured-failure", recoveryFailure(error, this.phase, "unknown"));
     this.failures.push(this.failure.errorCode);
     await this.diagnostic("run-failed", this.failure);
@@ -160,6 +162,10 @@ export class HarnessRun {
       throw error;
     }
   }
+  recoveryCheckpoint(){
+    if(this.recoverySignal.aborted)throw Error("CANCELLED");
+    if(this.repairStarted!==undefined&&performance.now()-this.repairStarted>this.config.recovery.maxDurationMs)throw Error("RECOVERY_TIME_BUDGET");
+  }
   checkpoint() {
     if (this.signal.aborted)
       throw this.signal.reason instanceof BudgetError
@@ -184,7 +190,7 @@ export class HarnessRun {
   async invoke(adapter: ProviderAdapter, request: ProviderRequest) {
     this.phase = "provider-startup";
     this.providerInitializationStatus = "ADAPTER_READY";
-    const reservedRecovery=request.purpose==="semantic-recovery";
+    const reservedRecovery=request.purpose==="semantic-recovery"||request.purpose==="project-recovery";
     if(reservedRecovery){if(this.recoverySignal.aborted)throw Error("CANCELLED");}
     else this.checkpoint();
     if (
@@ -249,9 +255,10 @@ export class HarnessRun {
     const phaseRemaining = semantic
       ? this.config.semanticPlanningTimeoutMs - (now - this.started)
       : this.config.repairBudgetMs - (now - this.repairStarted!);
-    const totalRemaining = reservedRecovery ? this.config.recovery.maxDurationMs-(now-this.repairStarted!) : this.config.maxDurationMs - (now - this.started);
+    const primaryRecoveryReserve=semantic&&this.config.recovery.enabled?Math.min(this.config.repairBudgetMs,this.config.recovery.maxDurationMs,Math.max(0,this.config.maxDurationMs-this.config.minimumRetryBudgetMs-this.config.executionReserveMs)):0;
+    const totalRemaining = reservedRecovery ? this.config.recovery.maxDurationMs-(now-this.repairStarted!) : this.config.maxDurationMs - (now - this.started) - primaryRecoveryReserve - (primaryRecoveryReserve>0?this.config.executionReserveMs:0);
     const available = Math.min(phaseRemaining, totalRemaining);
-    const completed = this.calls.filter((c) => c.status === "SUCCESS");
+    const completed = this.calls.filter((c) => c.status === "SUCCESS" && (reservedRecovery ? c.purpose===request.purpose : c.purpose?.startsWith("semantic") && c.purpose!=="semantic-recovery"));
     const estimated = Math.max(
       this.config.minimumRetryBudgetMs,
       ...completed.map((c) => c.latencyMs * 1.05),

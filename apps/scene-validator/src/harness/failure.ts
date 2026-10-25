@@ -21,6 +21,8 @@ export async function duringStage<T>(
   }
 }
 export interface FailureDiagnostic {
+  originalFailure?:{stage:string;code:string;invariant:string};
+  causalChain?:{eventId:string;parentEventId:string|null;rootEventId:string;code:string;stage:string}[];
   failureStage: string;
   errorCode: string;
   errorMessage: string;

@@ -1,3 +1,4 @@
+import {evaluateAnimation} from "./evaluation.js";
 import { intervalConflict } from "./intervals.js";
 import type { LoadedProject } from "../types.js";
 import type { MotionState } from "./schema.js";
@@ -123,7 +124,8 @@ export function validateObjectTransitions(
         (state.expressions ?? []).some(
           (e) =>
             e.enabled && e.sceneId === s.sceneId && related.has(e.targetId) &&
-            !((e.transitionId === t.transitionId || e.ownership?.scope === "logicalObject" && e.ownership.logicalObjectId === t.logicalObjectId) && e.targetId === s.sourceNodeId && ["wiggle", "inertialOvershoot"].includes(e.type)),
+            !(s.sceneId===t.fromSceneId&&!e.transitionId&&e.type==="inertialOvershoot"&&e.startFrame+e.durationFrames<=t.startFrame) &&
+            !((e.transitionId === t.transitionId || Boolean(e.transitionId&&ts.some(owner=>owner.transitionId===e.transitionId&&owner.logicalObjectId===t.logicalObjectId)) || e.ownership?.scope === "logicalObject" && e.ownership.logicalObjectId === t.logicalObjectId) && e.targetId === s.sourceNodeId && ["wiggle", "inertialOvershoot"].includes(e.type)),
         )
       )
         throw new Error(
@@ -132,7 +134,8 @@ export function validateObjectTransitions(
       if (
         state.animations.some(
           (a) =>
-            a.enabled && a.sceneId === s.sceneId && related.has(a.targetId),
+            a.enabled && a.sceneId === s.sceneId && related.has(a.targetId) &&
+            !(s.sceneId===t.fromSceneId&&a.startFrame+a.durationFrames<=t.startFrame&&(!a.text||a.text.segmentation==="block")&&Object.entries(evaluateAnimation(a,a.startFrame+a.durationFrames)).every(([key,value])=>Number.isFinite(value)&&Math.abs(value-(["opacity","scale","scaleX","scaleY","trim"].includes(key)?1:0))<1e-9)),
         )
       )
         throw new Error(

@@ -1,3 +1,5 @@
+import {resumeProjectRecoveries} from "../apps/scene-validator/src/motion/service.ts";
+import {loadProject} from "../apps/scene-validator/src/project.ts";
 import {reviewForApproval,approveCodeRepair} from "../apps/scene-validator/src/harness/recovery/promotion.ts";
 import {verifyOriginalRun,publishOriginalReplay} from "../apps/scene-validator/src/harness/recovery/replay.ts";
 import { readFile, writeFile } from "node:fs/promises";
@@ -8,6 +10,7 @@ const args = process.argv.slice(2), command = args[0], value = (flag: string) =>
     throw Error(flag + " required"); return path.resolve(args[i + 1]); };
 if (command === "memory")
     console.log(JSON.stringify(await recoveryMemory(value("--project")), null, 2));
+else if(command === "resume") {await resumeProjectRecoveries(await loadProject(value("--project")));}
 else if(command === "apply") {
     const workspace=value("--workspace"), identity=args[args.indexOf("--approve-patch")+1];
     if(!args.includes("--approve-patch")||!args.includes("--run"))throw Error("Explicit --approve-patch HASH and original --run UUID required");
