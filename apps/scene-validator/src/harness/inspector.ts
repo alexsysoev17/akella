@@ -245,6 +245,8 @@ export async function inspectorRun(root: string, id: string, raw = false) {
   const contract = (
     tasks as { contract?: { requirements?: Data[]; sourceClauses?: unknown } }
   )?.contract;
+  const persistedContract=full ? await saved(root,`motion/ai/${id}/intent-contract.json`) as Data : undefined;
+  const plannedRequirements=contract?.requirements ?? persistedContract?.requirements;
   const semanticTaskGraph = contract?.requirements
     ? {
         sourceClauses: contract.sourceClauses ?? "LEGACY_VERBATIM_PROVENANCE",
@@ -288,9 +290,17 @@ export async function inspectorRun(root: string, id: string, raw = false) {
     run: raw ? run : { ...run, result: undefined },
     startupFailure: run.failure ?? "NOT_RECORDED_LEGACY_RUN",
     trace,
+    contextAdmission: Array.isArray(trace)
+      ? trace.filter(e=>e.stage==="context-admission").map(e=>({...e.data,
+          llmCalls:Array.isArray(run.calls)?run.calls.length:0,
+          requirementCount:Array.isArray(plannedRequirements)?plannedRequirements.length:null,
+          requirementCountStatus:Array.isArray(plannedRequirements)?"PLANNED":"NOT_PLANNED",
+        }))
+      : "NOT_AVAILABLE",
     semanticDiagnostics: Array.isArray(trace)
       ? trace.filter((e) =>
           [
+            "context-admission",
             "semantic-coverage",
             "semantic-diagnostic",
             "provider-call-skipped",

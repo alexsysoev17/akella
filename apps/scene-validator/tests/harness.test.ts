@@ -1,3 +1,4 @@
+import {prepareProviderRequest} from "../src/harness/providers/budget.js";
 import test from "node:test";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
@@ -214,16 +215,13 @@ test("Context progressive disclosure and versions; bounded bytes; capability sch
         )
       ).cacheHit,
     );
-    await assert.rejects(
-      agentContext(
-        f.project,
-        state,
-        { request: "куар " + "x".repeat(5000), activeSceneId: "s1" },
-        [],
-        { ...cfg, maxContextBytes: 4000 },
-      ),
-      /CONTEXT_BUDGET/,
-    );
+    const oversizedPrompt="куар " + "x".repeat(5000);
+    const deferred=await agentContext(f.project,state,{request:oversizedPrompt,activeSceneId:"s1"},[],{...cfg,maxContextBytes:4000});
+    // Construction retains data; the full wire admission owns packing and rejection.
+    assert.ok(deferred.value.objectIndex.length);
+    assert.throws(()=>prepareProviderRequest(new MockAdapter(async()=>({})),{
+      purpose:"semantic-planning",messages:[{role:"system",content:"Required"},{role:"user",content:JSON.stringify({context:deferred.value,userRequest:oversizedPrompt})}],responseSchema:{},timeoutMs:1000,maxOutputTokens:100,
+    },4000),/CONTEXT_EXHAUSTED/);
     const timingContext = await agentContext(
       f.project,
       state,

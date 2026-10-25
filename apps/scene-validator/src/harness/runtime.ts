@@ -1,7 +1,7 @@
 import { collectImprovements } from "./improvements.js";
 import { recoveryFailure } from "./recovery/failure.js";
 import { failureDiagnostic, type FailureDiagnostic } from "./failure.js";
-import { providerBudget } from "./providers/budget.js";
+import { prepareProviderRequest } from "./providers/budget.js";
 import { PROVIDER_ID_PATTERN } from "../provider-contract.js";
 import { providerIds } from "./providers/index.js";
 import { retainRuns } from "./retention.js";
@@ -32,6 +32,7 @@ export class HarnessRun {
   readonly createdAt = new Date().toISOString();
   calls: {
     purpose?: ProviderRequest["purpose"];
+    inputBudget?: ReturnType<typeof prepareProviderRequest>["budget"];
     requestBytes?: {
       messages: number;
       schema: number;
@@ -201,12 +202,17 @@ export class HarnessRun {
       this.config.maxLLMCalls + (this.config.recovery?.maxAttempts ?? 3) + 2
     )
       throw new BudgetError("LLM_CALL_BUDGET");
-    const budget = providerBudget(
-      adapter,
-      request,
-      this.config.maxContextBytes,
-      this.config.modelProfiles,
-    );
+    let admission: ReturnType<typeof prepareProviderRequest>;
+    try {
+      admission=prepareProviderRequest(adapter,request,this.config.maxContextBytes,this.config.modelProfiles);
+    }catch(error){
+      const report=(error as {contextAdmission?:unknown}).contextAdmission;
+      if(report)await this.diagnostic("context-admission",{purpose,...report as object,llmCalls:this.calls.length});
+      throw error;
+    }
+    const {budget}=admission;
+    request=admission.request;
+    await this.diagnostic("context-admission",{purpose,...admission.report,llmCalls:this.calls.length});
     request = { ...request, maxOutputTokens: budget.outputTokens };
     const known = this.calls.reduce((n, c) => n + (c.cost ?? 0), 0);
     if (

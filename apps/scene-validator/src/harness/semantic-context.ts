@@ -97,6 +97,7 @@ export function semanticContext(context: unknown): unknown {
               "sourceNodeId",
               "width",
               "height",
+              "transform",
               "opacity",
               "visible",
             ]),

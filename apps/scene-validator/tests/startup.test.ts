@@ -136,7 +136,7 @@ test("startup: production context → mock provider → actual native QA → com
       executeMotion(f.project, await input(), () => {}, {
         config: { maxContextBytes: 4000 },
       }),
-      /CONTEXT_BUDGET/,
+      /CONTEXT_EXHAUSTED/,
     );
     assert.equal(calls, 1);
     assert.deepEqual(
@@ -158,12 +158,12 @@ test("startup: production context → mock provider → actual native QA → com
         providerInitializationStatus: string;
       };
     };
-    assert.equal(view.startupFailure.failureStage, "context-construction");
-    assert.equal(view.startupFailure.errorCode, "CONTEXT_BUDGET");
+    assert.equal(view.startupFailure.failureStage, "provider-startup");
+    assert.equal(view.startupFailure.errorCode, "CONTEXT_EXHAUSTED");
     assert.match(view.startupFailure.errorMessage, /4000/);
     assert.equal(
       view.startupFailure.providerInitializationStatus,
-      "SETTINGS_VALIDATED",
+      "ADAPTER_READY",
     );
   } finally {
     unregister();

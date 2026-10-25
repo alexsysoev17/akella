@@ -237,8 +237,6 @@ export class AIClient implements AIProvider {
   ): Promise<T> {
     if (this.runtime?.includeCapabilityGuidance !== false) instructions += "\n" + capabilityGuidance();
     const compact = JSON.stringify({ mode, context, userRequest: request });
-    if (compact.length > 300000)
-      throw new Error("Контекст превышает 300 КБ; данные не обрезаны");
     const prompt = instructions + "\nCONTEXT JSON:\n" + compact;
     const runtimeSchema = z.toJSONSchema(schema, {
       io: "output",

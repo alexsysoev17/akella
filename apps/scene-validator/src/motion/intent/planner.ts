@@ -61,6 +61,7 @@ Use moveTo with moveToCenter=true for moving to canvas center; offsets x/y are n
 export { semanticContext } from "../../harness/semantic-context.js";
 import { semanticContext } from "../../harness/semantic-context.js";
 export function semanticFailureCategory(error: unknown) {
+  if((error as {code?:string})?.code === "CONTEXT_EXHAUSTED")return "CONTEXT_ADMISSION_FAILURE";
   if((error as {code?:string})?.code === "OUTPUT_TRUNCATED")return "PROVIDER_OUTPUT_LIMIT";
   if((error as {code?:string})?.code === "VALIDATOR_SCOPE_CONTRADICTION")return "VALIDATOR_DEFECT";
   if (/BUDGET|timeout|aborted/i.test(String(error))) return "TIMEOUT";
@@ -1076,7 +1077,7 @@ export async function semanticPlan(
       await trace("failure-" + attempt, feedback);
       if (
         correctionUsed ||
-        /PROVIDER_SCHEMA_INVALID|VALIDATOR_SCOPE_CONTRADICTION/.test(failure) ||
+        /PROVIDER_SCHEMA_INVALID|VALIDATOR_SCOPE_CONTRADICTION|CONTEXT_EXHAUSTED/.test(failure) ||
         (error as {code?:string})?.code === "OUTPUT_TRUNCATED" ||
         repeated ||
         calls >= maxCalls ||

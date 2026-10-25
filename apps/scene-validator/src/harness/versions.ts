@@ -100,6 +100,7 @@ const components = [
   "motion-library/registry/path-capability",
   "harness/context",
   "harness/semantic-context",
+  "harness/context-packing",
   "harness/failure",
   "harness/selector-context",
   "harness/runtime",

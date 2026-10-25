@@ -4,13 +4,13 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-25 (Europe/Moscow) - recovery integration and exact reported case; targeted update, not a full audit |
+| Last Updated | 2026-10-25 (Europe/Moscow) — full-request context admission repair; targeted update, not a full audit |
 | Last Full Audit | 2026-10-13; unchanged, this update is not a full renderer/provider audit |
-| Git Commit | Verified source/tests `583f3d8`; pre-change checkpoint `0d5aac2`. This status-only documentation follow-up is outside the source commit. |
+| Git Commit | Pre-change checkpoint `d946928` (baseline `a638e21`); implementation is uncommitted at this documentation snapshot. |
 | Git Branch | `temporal-recovery-loop`, local only |
-| Working Tree Status | Source/tests committed in `583f3d8`; only this documentation status follow-up pending at snapshot. Original client source and motion unchanged. |
-| Documentation Version | 1.1.1 |
-| Scope of Last Update | Run 572d44eb; clause isolation, capabilities, zero scale, authoritative mentions, experience projection, failure taxonomy, human-gated code promotion, actual provider/native/MP4 verification. |
+| Working Tree Status | Task-owned context/budget/planner/Inspector/tests/docs changes pending. Original test40 project/source/motion unchanged. |
+| Documentation Version | 1.1.2 |
+| Scope of Last Update | Run d9fb875d; lossless context packing, complete envelope budget, no-call rejection/retry policy, state transform preservation, Inspector admission diagnostics and actual offline reproduction. |
 | Code snapshot SHA-256 | NOT RECALCULATED; refer to component digests and final source commit. |
 
 Git 2.54.0 (Apple Git-157): локальная история, текущая ветка указана в Document Status, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
@@ -1987,3 +1987,32 @@ This targeted update supersedes historical statements that no in-app human apply
 Architecture Change History: connected experience to provider context; fixed clause accumulation, capability disclosure and zero scale; preserved authoritative mentions; separated provider limits from validator defects; added human-gated tested source application with original-scenario replay and durable receipts. Reused existing planner, compiler, motion engine, renderer, storage and QA.
 
 Completion verification: final full check passed 347/347 (297 base/compat, 2 browser, 48 native), typecheck and build. Final focused recovery-integration checks passed6/6; Inspector JavaScript syntax and final TypeScript passed. No new external calls after the one authorized live request.
+
+## Full-request context admission — 2026-10-25 (v1.1.2)
+
+**Confirmed Run d9fb875d-6532-48e7-aeee-7521d46dcc15:** full-envelope admission rejected 68,231 bytes against60,000 before any adapter.generate call. The context-builder measured only its38,760-byte projection, excluding instructions/schema/outer request. Already-present full-budget enforcement correctly refused transmission, but had no compact fallback. Semantic planning treated the local refusal as a reparable plan failure, appended feedback and retried68,559bytes, again with zero model calls. The human prompt itself is only2,792UTF-8bytes. Duplicated object/mention/logical-state metadata and capability contracts dominate. This was not model misunderstanding or a rendered motion failure.
+
+**Implemented boundaries:**
+
+- `harness/providers/budget.ts`: `serializedRequestBytes` measures the complete serializable ProviderRequest envelope (messages, schema, tools, purpose/model/effort/time/output metadata). AbortSignal is a runtime process control object, excluded from wire content. Model profile output reserve, transport reserve and adapter token estimator remain enforced.
+- `prepareProviderRequest` first admits the ordinary request unchanged. Only a semantic request rejected for CONTEXT_EXHAUSTED gets a deterministic lossless encoding of its context. It then remeasures the complete request including the added encoding explanation and checks the same byte/model limits. A candidate that does not reduce total bytes is discarded. Budget constants are unchanged.
+- `harness/context-packing.ts`: JSON column tables remove repeated field names; a shared string table represents exact repeated values. Source strings/canonical IDs remain in the dictionary; its integer references are explicitly NOT object IDs. All numbers, IDs, names, state values, dependencies and source text round-trip exactly. Reserved marker keys are escaped. Admission verifies full decoded-context equality. No cropping, rounding, field pruning, relevance guessing or semantic summaries occur. User request, original mandatory system instructions and output schema stay intact; only a decoding explanation is appended. The normal small-request path is unchanged.
+- `HarnessRun.invoke` owns final admission BEFORE adding a provider call to counters. Context construction no longer rejects a projection before that packing opportunity. `AIClient.structured` no longer has an unrelated300k-character precheck that would preempt full admission. Provider output/schema checks, technical/semantic validation, renderer and compiler behavior are unchanged.
+- `semanticPlan` treats CONTEXT_EXHAUSTED as terminal CONTEXT_ADMISSION_FAILURE, without another interpretation/audit or larger feedback. Recovery taxonomy marks it CONTEXT_ADMISSION, not a source defect. A rejected irreducible request records zero model calls and cannot mutate project state.
+- `semantic-context.ts` additionally retains authoritative state transform matrices alongside source IDs/dimensions. Existing deterministic object resolution and graph normalization still use original authoritative state/context, never the encoded transport representation. This is a wire representation, not a new project schema or Motion State.
+
+**Diagnostics:** `context-admission` traces report full before/after byte counts, unchanged budget, compacted categories, preservation invariants, status/rejection reason and actual call count. Inspector exposes this compact summary plus the actual requirement count from the persisted contract when available. Before a semantic answer, count is null/NOT_PLANNED; it is not fabricated from line breaks or object count. Irreducible bytes, model-window exhaustion and successful packing remain distinguishable. No full context, prompts or credentials are copied into this diagnostic. Existing privacy modes apply.
+
+**Actual reproduction / tests:**
+
+- Archived first request reconstructed with the same messages/schema:68,304bytes with the newly counted metadata (old counter68,231). Lossless admission gives49,284bytes under the unchanged60,000limit. Exact decoded context and full user request equality verified.
+- Current projection, including previously omitted source transforms:71,003 →51,759bytes. No client project modification and no external provider call. Evidence: ignored `artifacts/context-admission/measurement.json` and `data/harness/reports/context-admission-2026-10-25/`.
+- `tests/context-packing.test.ts`: archived long Russian prompt text in an artificial ~72KB fixture; deterministic round-trip checks including source IDs, multi-scene states/transforms, logical transition/custom easing and timing dependencies;50 additional generated structure checks; mandatory input overflow with one semantic attempt/zero adapter calls; model-window protection; unchanged short requests; production SemanticProvider/AIClient/Harness admission using one mock response, real target resolution, five complete compound requirements/custom easing/post-line text and sequential ribbon dependency, and compiler task generation.
+- Existing `tests/harness.test.ts` and `tests/startup.test.ts` now assert budget refusal at the complete admission boundary (provider-startup/CONTEXT_EXHAUSTED/ADAPTER_READY), still requiring no extra adapter call and unchanged persisted Motion State. The obsolete projection-only refusal expectation was replaced, not relaxed.
+- These are deterministic/offline and mock-provider tests. No new live-provider test or claim that the entire test40 request now produces a correct final animation. Remaining downstream semantic/compiler/QA failures must be diagnosed independently. Full-suite/typecheck/build results are recorded at completion below.
+
+**Limits:** no semantic partitioning was introduced because this real request fits with lossless packing. A request whose mandatory data/schema still cannot fit is rejected precisely; it is never partially executed. Automatic cross-chunk semantic scheduling is NOT IMPLEMENTED. Provider framing outside ProviderRequest relies on the existing configurable model transport reserve; token counts without a tokenizer remain conservative estimates. New-model comprehension of the compact wire format requires live qualification; no inference tokens, cost or provider latency were measured here. Existing application-level limits and supported motion techniques remain unchanged.
+
+Architecture Change History: complete provider-envelope admission with lossless oversized-context encoding; deferred premature projection checks; terminal no-call exhaustion; retained authoritative transforms; added compact Inspector diagnostics and permanent context-preservation/production planner regressions. Reused the current planner, adapter interface, compiler, engine, renderer and persistence; no new agent or partial-plan execution.
+
+Completion verification (2026-10-25): full `npm run check` PASSED352/352 (302 base/compat,2 browser,48 native), TypeScript and build. Final context-packing focused suite passed5/5 after the exact Russian prompt/custom-curve/transition-state fixture refinements and Inspector count changes. No external provider call. No changes to test40 project files; code changes only affect context/admission/diagnostics.

@@ -304,10 +304,8 @@ export async function agentContext(
   };
   const internalBytes = Buffer.byteLength(JSON.stringify(value));
   const bytes = Buffer.byteLength(JSON.stringify(semanticContext(value)));
-  if (bytes > config.maxContextBytes)
-    throw new Error(
-      `CONTEXT_BUDGET: ${bytes} > ${config.maxContextBytes}; no requested target silently truncated`,
-    );
+  // Full request admission includes system/schema overhead and lossless packing
+  // at HarnessRun.invoke; rejecting this internal projection here prevents packing.
   return {
     value,
     bytes,
