@@ -6,9 +6,9 @@
 |---|---|
 | Last Updated | 2026-10-25 (Europe/Moscow) - recovery integration and exact reported case; targeted update, not a full audit |
 | Last Full Audit | 2026-10-13; unchanged, this update is not a full renderer/provider audit |
-| Git Commit | Pre-change checkpoint `0d5aac2`; current changes uncommitted at documentation snapshot. Source baseline `e1261e3`. |
+| Git Commit | Verified source/tests `583f3d8`; pre-change checkpoint `0d5aac2`. This status-only documentation follow-up is outside the source commit. |
 | Git Branch | `temporal-recovery-loop`, local only |
-| Working Tree Status | Task-owned source/tests/docs changes pending; original client source and motion unchanged. Replays use isolated copies. |
+| Working Tree Status | Source/tests committed in `583f3d8`; only this documentation status follow-up pending at snapshot. Original client source and motion unchanged. |
 | Documentation Version | 1.1.1 |
 | Scope of Last Update | Run 572d44eb; clause isolation, capabilities, zero scale, authoritative mentions, experience projection, failure taxonomy, human-gated code promotion, actual provider/native/MP4 verification. |
 | Code snapshot SHA-256 | NOT RECALCULATED; refer to component digests and final source commit. |
