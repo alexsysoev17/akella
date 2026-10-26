@@ -30,10 +30,29 @@ export async function nativeMotionQA(
     browser?: Browser;
   } = {},
 ) {
+  const presentation = statePresentation(project, state);
+  const relatedTransitions = (state.objectTransitions ?? []).filter(t => !targetScope ||
+    Object.values(presentation[t.logicalObjectId] ?? {}).some(ref => ref.sourceNodeId === targetScope.targetId &&
+      presentation[t.logicalObjectId]?.[targetScope.sceneId] === ref));
+  const relatedTargets = new Set(relatedTransitions.flatMap(t => Object.entries(presentation[t.logicalObjectId] ?? {})
+    .map(([sceneId, ref]) => JSON.stringify([sceneId, ref.sourceNodeId]))));
   const directory = await safeDirectory(project.root, relativeDirectory),
     scope = (sceneId: string, targetId: string) =>
-      !targetScope ||
-      (sceneId === targetScope.sceneId && targetId === targetScope.targetId);
+      !targetScope || (sceneId === targetScope.sceneId && targetId === targetScope.targetId) ||
+      relatedTargets.has(JSON.stringify([sceneId, targetId]));
+  const changed = (entry: unknown, old: unknown[] | undefined) => !previous || !old?.some(value => nativeDigest(value) === nativeDigest(entry));
+  const sampled = [
+    ...state.animations.filter(a => a.enabled && scope(a.sceneId,a.targetId) && changed(a,previous?.animations)),
+    ...(state.expressions ?? []).filter(e => e.enabled && scope(e.sceneId,e.targetId) && changed(e,previous?.expressions)),
+    ...relatedTransitions.filter(t => changed(t,previous?.objectTransitions)),
+    // Deletion/disable still needs evidence inside the removed effect interval.
+    ...(previous?.animations ?? []).filter(a => a.enabled && scope(a.sceneId,a.targetId) && !state.animations.some(next => next.animationId === a.animationId && next.enabled)),
+    ...(previous?.expressions ?? []).filter(e => e.enabled && scope(e.sceneId,e.targetId) && !state.expressions?.some(next => next.expressionId === e.expressionId && next.enabled)),
+  ];
+  // Numerical QA retains dense endpoint/subframe sampling. Raster QA samples
+  // the changed intervals; unrelated historical tracks must not be re-rendered.
+  const rasterFrames = [...new Set(sampled.flatMap(e => [e.startFrame, e.startFrame+e.durationFrames/2, e.startFrame+e.durationFrames])
+    .map(f => Math.max(0,Math.min(state.settings.durationFrames-1,Math.round(f)))))];
   const numeric = numericQA(
       targetScope
         ? {
@@ -44,7 +63,7 @@ export async function nativeMotionQA(
             expressions: state.expressions?.filter((e) =>
               scope(e.sceneId, e.targetId),
             ),
-            objectTransitions: state.objectTransitions?.filter(t => state.expressions?.some(e => e.transitionId === t.transitionId && scope(e.sceneId, e.targetId))),
+            objectTransitions: relatedTransitions,
           }
         : state,
       request,
@@ -54,7 +73,7 @@ export async function nativeMotionQA(
     samples: { frame: number; file: string }[] = [],
     warnings = new Set<string>(),
     before = nativeDigest(project.inspection.document),
-    frames = [...new Set([...numeric.frames, ...(state.staticObjects?.some(o => scope(o.sceneId,o.targetId)) ? [0, Math.floor(state.settings.durationFrames / 2), state.settings.durationFrames - 1] : [])])]
+    frames = [...new Set([...(rasterFrames.length ? rasterFrames : [0, state.settings.durationFrames - 1]), ...(state.staticObjects?.some(o => scope(o.sceneId,o.targetId)) ? [0, Math.floor(state.settings.durationFrames / 2), state.settings.durationFrames - 1] : [])])]
       .slice(0, 24);
   const report = {
     scope: "native Skia objective checks; artistic quality NOT_TESTED",
@@ -149,7 +168,7 @@ export async function nativeMotionQA(
         a.enabled &&
         a.text &&
         a.text.segmentation !== "block" &&
-        scope(a.sceneId, a.targetId),
+        scope(a.sceneId, a.targetId) && changed(a, previous?.animations),
     );
     for (const track of text.filter(
       (a, i, all) =>

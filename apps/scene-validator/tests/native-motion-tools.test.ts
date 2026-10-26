@@ -345,3 +345,42 @@ test("compound entrance retiming and inertia edit preserve IDs, start and unrela
     assert.equal(video.frameDigests.find(d => d.frame === finalFrame)?.sha256, hash(preview.png));
   } finally { stop(); await closeNativeRenderer(); await f.cleanup(); }
 });
+
+test("completed transition hands off to neutral destination exit and scale phases, preserving native pixels", async () => {
+  const f = await circleFixture();
+  try {
+    const doc = await readMotion(f.project);
+    const base = applyOperations(doc.state, [{type:"animateObjectStateTransition",transitionId:"handoff",logicalObjectId:logicalId("Circle"),fromSceneId:"s0",toSceneId:"s1",timelinePolicy:"referenceStates",startFrame:0,durationFrames:12,easing:"linear",proceduralEffects:[],layerPolicy:{type:"switch",switchProgress:1}}], f.project);
+    const exit = {animationId:"exit",sceneId:"s1",targetId:"c1",effect:"slideDown" as const,parameters:{distance:100,mode:"out" as const},startFrame:24,durationFrames:12,easing:"linear" as const,enabled:true};
+    const candidate = applyOperations(base,[{type:"addAnimation",animation:exit}],f.project);
+    const {nativeMotionQA}=await import("../src/native/qa.js");
+    let renders=0;
+    const qa=await nativeMotionQA(f.project,candidate,"motion/qa/handoff-incremental","Circle exits",base,{sceneId:"s1",targetId:"c1"},{beforeRender:()=>{renders++;}});
+    assert.notEqual(qa.status,"FAILED",JSON.stringify(qa.checks));
+    assert.deepEqual(qa.samples.map(s=>s.frame),[24,30,36],"raster samples cover changed interval, not old transition or project endpoints");
+    assert.equal(renders,5,"three interval frames plus two fresh determinism renders; dense numerical QA is retained");
+    const removalQA=await nativeMotionQA(f.project,base,"motion/qa/handoff-removal","Remove exit",candidate,{sceneId:"s1",targetId:"c1"});
+    assert.notEqual(removalQA.status,"FAILED");
+    assert.deepEqual(removalQA.samples.map(s=>s.frame),[24,30,36],"removed effect interval is still rendered, not only output endpoints");
+    const start = await renderNativeFrame(f.project,candidate,24,{encoding:"rgba"});
+    const reference = await renderNativeFrame(f.project,base,24,{encoding:"rgba"});
+    assert.deepEqual(start.png,reference.png,"handoff preserves exact arrival pose");
+    const middle = await renderNativeFrame(f.project,candidate,30,{encoding:"rgba"});
+    assert.notDeepEqual(middle.png,start.png,"post-transition movement is actually rendered");
+    assert.deepEqual((await renderNativeFrame(f.project,candidate,24,{encoding:"rgba"})).png,start.png,"seek is deterministic");
+    assert.throws(()=>applyOperations(base,[{type:"addAnimation",animation:{...exit,startFrame:6}}],f.project),/конфликтует/);
+    assert.throws(()=>applyOperations(base,[{type:"addAnimation",animation:{...exit,parameters:{distance:100,mode:"in"}}}],f.project),/конфликтует/);
+    const grow={...exit,animationId:"grow",effect:"scaleIn" as const,parameters:{from:1,to:1.3}};
+    const back={...grow,animationId:"back",startFrame:36,parameters:{from:1.3,to:1}};
+    const scaled=applyOperations(base,[{type:"addAnimation",animation:grow},{type:"addAnimation",animation:back}],f.project);
+    assert.notDeepEqual((await renderNativeFrame(f.project,scaled,36,{encoding:"rgba"})).png,reference.png);
+    assert.deepEqual((await renderNativeFrame(f.project,scaled,48,{encoding:"rgba"})).png,(await renderNativeFrame(f.project,base,48,{encoding:"rgba"})).png);
+    const saved=await changeMotion(f.project.root,{expectedRevision:doc.revision,request:"transition then exit",operations:[{type:"animateObjectStateTransition",...base.objectTransitions![0]},{type:"addAnimation",animation:exit}]});
+    assert.ok(saved.document.state.animations.some(a=>a.animationId==="exit"));
+    const preview=await renderProjectFrame(f.project,30,{encoding:"rgba"});
+    assert.deepEqual(preview.png,middle.png);
+    const video=await exportVideo(f.project.root,()=>{},{renderer:"native"});
+    assert.ok("frameDigests" in video);
+    assert.equal(video.frameDigests.find(d=>d.frame===24)?.sha256,hash((await renderProjectFrame(f.project,24,{encoding:"rgba"})).png));
+  } finally { await closeNativeRenderer(); await f.cleanup(); }
+});

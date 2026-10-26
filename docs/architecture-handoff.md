@@ -4,13 +4,13 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-26 (Europe/Moscow) — loaded server freshness, repeated-run audit and HTTP regression; targeted update, not a full audit |
+| Last Updated | 2026-10-26 (Europe/Moscow) — post-transition composition, timed exit phases and selective native QA; targeted update, not a full audit |
 | Last Full Audit | 2026-10-13; unchanged, this update is not a full renderer/provider audit |
-| Git Commit | Baseline `6b3f1cd` includes v1.1.5; v1.1.6 changes uncommitted at snapshot. |
+| Git Commit | Baseline `9f56d0e`; v1.1.7 changes uncommitted at snapshot. |
 | Git Branch | `temporal-recovery-loop`, local only |
-| Working Tree Status | v1.1.6 source/tests/docs pending at snapshot; no unrelated changes at start. Client data unchanged; two saved runs replayed only in temporary copies. |
-| Documentation Version | 1.1.6 |
-| Scope of Last Update | Runs bd6ab908/ebb4775a: old loaded process, runtime freshness gate, replay diagnostics, two sequential HTTP/Skia/FFmpeg checks. Partial audit only. |
+| Working Tree Status | v1.1.7 source/tests/docs pending at snapshot; no unrelated changes at start. Client data unchanged; two saved runs replayed only in temporary copies. |
+| Documentation Version | 1.1.7 |
+| Scope of Last Update | Runs bd6ab908/ebb4775a: transition-to-exit handoff, compound exit compilation, scoped QA and complete saved-response execution. Partial audit only. |
 | Code snapshot SHA-256 | NOT RECALCULATED; refer to component digests and final source commit. |
 
 Git 2.54.0 (Apple Git-157): локальная история, текущая ветка указана в Document Status, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
@@ -2207,3 +2207,33 @@ v1.1.6 follow-through: the subsequent ambiguous transitions were traced to an im
 Live guard verification: after the planner changed, `/api/runtime` reported RESTART_REQUIRED with `motion/intent/planner.ts`. An empty POST to the existing test41 motion execute endpoint returned **HTTP409 SERVER_RESTART_REQUIRED** before request/provider preparation, without creating a job or changing project state. The server was then restarted again on the final code. This proves the guard on the actual local HTTP path, beyond the synthetic snapshot test.
 
 Final verification v1.1.6: `npm run check` exit0, **399/399** (349 base/integration,2 browser,48 native), TypeScript and build PASSED. Full log and exact diff: ignored `data/harness/reports/runtime-freshness-2026-10-26/`. Final loaded server PID65379 reports CURRENT (`2026-10-26T04:48:53.002Z`); final source digest `adf05256f962b92d03d17df0d1b762544c7e50e01d4d2f3137c9fed4f1b1ad7d`. The complete original movie remains blocked by the later exit/transition composition validation; passing regression tests are not a claim that this whole real request rendered.
+
+
+## Post-transition instance handoff — 2026-10-26 (v1.1.7)
+
+Targeted follow-through on the v1.1.6 real-project blocker, not a full audit. `motion/transitions.ts` now admits destination-root block animations starting after transition completion only when their aggregate track values at handoff are neutral. Overlapping, non-neutral arrivals and competing ancestor/descendant tracks remain rejected. `native/renderer.ts` composes destination instance motion with the retained transition pose after completion; `motion/transition-runtime.ts` does the same in the compatibility adapter. Logical ownership and duplicate suppression remain active; simply removing validation would not have fixed rendering.
+
+`motion/intent/compiler.ts` compiles compound slide + fadeOut as an outward movement. `intent/entrance.ts` calculates viewport clearance for the exit side. `intent/execution.ts` verifies the matching direction contract. Explicitly timed creation preserves disjoint earlier phases and uses requirement-scoped IDs; anchor lookup uses the same identity convention. Existing edit operations retain their separate behavior. No source-text keyword override was introduced to turn arbitrary slides into exits.
+
+Instance inertia no longer fails just because a Figma reference block ended. Its default tail is 1.2 seconds, bounded by the next known/planned absolute transition of the same logical object from the same source scene. A handoff with fewer than four available tail frames is still rejected. Relative future transition scheduling beyond the existing resolver is NOT newly implemented here. Original projects are not modified by replay.
+
+Initial-stage verification (superseded by final results below): compiler exit regression passed; existing semantic patch production tests passed after correcting requirement identity lookup. Full saved-request execution, full suite and native handoff/video regression results will be recorded upon completion. No live external provider call in this update.
+
+Architecture Change History: v1.1.7 — destination-root handoff composition, outward compound exits, disjoint absolute phases, global-time inertia tail bounded by known transition handoff. Final verification is recorded below.
+
+
+QA follow-through: a complete saved run passed preflight but exhausted the existing 300-render budget after 11 tasks. Confirmed cause: `harness/qa.ts` removed target scope for every state transition, causing repeated global rendering/text probes. Native transitions now retain target scope; `native/qa.ts` expands it to the logical object's reference instances and transitions. Numerical checks retain their dense samples; raster samples use changed intervals' start/middle/end, with two fresh determinism renders. Unchanged historical text animations are not reprobed for an unrelated later instance exit. Specialized changed-text nine-frame continuity and seven-render transport probes remain. The complete scene still renders for every sampled frame, preserving compositing evidence. Browser compatibility retains its old global transition check. The configured render limit is unchanged.
+
+
+Verified v1.1.7 results: full `npm run check` exit0, **401/401** (350 base/integration,2 browser,49 native), typecheck/build PASSED. New native regression checks neutral handoff, real rendered exit, deterministic seeking, forbidden overlap/non-neutral arrival, scale grow/return and Preview/FFmpeg input-frame digest equality. Compiler regression preserves earlier entrance when adding an explicit timed outward slide + fadeOut.
+
+Both complete saved requests succeeded in isolated copies: ebb4775a **33/33 requirements,77 operations,181 QA renders,157.46s**, bd6ab908 **33/33,77 operations,214 QA renders,189.04s**. Each used one saved semantic response, zero real provider calls, zero repair attempts. Actual new token use is unavailable (no live provider); do not treat these as live language understanding tests. Per run,30 task QA reports PASSED and3 WARNING for the short logo AE inertia cutoff; frequency/decay/endpoint verification is limited on that short interval. Artistic quality remains NOT_TESTED.
+
+Important preserved constraint: both historical projects specify a strict240-frame output window at30FPS (8s). The late QR phases are correctly persisted at270→291→312, outside that window. Verification explicitly extended only the temporary replay copy to330 frames. Native hit geometry at270/291/312 is526.109245/683.942019/526.109245px wide: exact1.3 scale and return. Original project output settings/data remain unchanged. Execution SUCCESS does not mean the historical8-second video automatically includes the9-second instruction. Source output-range policy was not changed in this update.
+
+Evidence (ignored, not Git): `data/harness/reports/transition-handoff-2026-10-26/`, including full check log, both replay summaries and run metrics, rendered QR frames and numerical hit proof. Final full-video export result is recorded separately when complete.
+
+
+Final rendering evidence: expanded verification copy exported **330 frames,30FPS,1920×1080 MP4**, no native renderer warnings. Preview RGBA hashes exactly match video input hashes at frames0/165/329. Decoded H.264 frame291 mean absolute channel error against native PNG:1.7298968/255 (lossy encoding, not pixel identity). The11s MP4 is `data/harness/reports/transition-handoff-2026-10-26/verified-11s.mp4`. Current scope does not claim artistic evaluation or pixel-perfect Figma fidelity.
+
+Selective QA also samples intervals of deleted/disabled effects, so removal is not reduced to project-endpoint checks. A native regression asserts the removed interval frames24/30/36 remain sampled. No render-budget increase, validation bypass, new Supervisor, external provider invocation or modification to original client data.

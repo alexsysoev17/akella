@@ -24,7 +24,7 @@ export class RunQA {
     const dir = `motion/qa/${this.run.runId}/${task.taskId}-attempt-${attempt}`,
       scope =
         task.kind === "sceneTiming" ||
-        task.techniques.some((t) => String(t) === "objectStateTransition")
+        (renderingMode() === "browser-compat" && task.techniques.some((t) => String(t) === "objectStateTransition"))
           ? undefined
           : task.targetReference;
     this.run.phase = "native-dependency-initialization";

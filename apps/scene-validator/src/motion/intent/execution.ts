@@ -437,7 +437,7 @@ export function requirementChecks(
         requirementId: r.requirementId,
         status:
           "mode" in a.parameters &&
-          a.parameters.mode === "in" &&
+          a.parameters.mode === (r.techniques.includes("fadeOut") ? "out" : "in") &&
           a.parameters.distance > 0
             ? "PASSED"
             : "FAILED",

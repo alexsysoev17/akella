@@ -510,7 +510,7 @@ export class NativeRenderer {
       usedFonts = new Set<string>();
     canvas.clear(options.transparent ? k.TRANSPARENT : k.BLACK);
     canvas.scale(scale, scale);
-    const overrides = new Map<string, { wrapper: Matrix; opacity: number }>(),
+    const overrides = new Map<string, { wrapper: Matrix; opacity: number; composeInstance: boolean }>(),
       blocks = { ...evaluation.blocks };
     let transitions = presentedTransitions(state, frame);
     const detachedTransitions=new Set<string>();
@@ -554,6 +554,7 @@ export class NativeRenderer {
         overrides.set(JSON.stringify([host, current.sourceNodeId]), {
           wrapper,
           opacity: v.opacity,
+          composeInstance: frame >= t.startFrame + t.durationFrames,
         });
       }
     }
@@ -621,7 +622,7 @@ export class NativeRenderer {
         v = evaluation.nodes[key] ?? {},
         override = overrides.get(key),
         wrapper =
-          override?.wrapper ?? motionMatrix(v, local[0][2], local[1][2]),
+          override ? (override.composeInstance ? multiply(motionMatrix(v, local[0][2], local[1][2]), override.wrapper) : override.wrapper) : motionMatrix(v, local[0][2], local[1][2]),
         combined = multiply(wrapper, local),
         world = multiply(worldParent, combined),
         opacity = (override?.opacity ?? num(p.opacity, 1)) * (v.opacity ?? 1);

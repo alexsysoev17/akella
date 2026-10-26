@@ -183,7 +183,7 @@ export function requirementAnimations(
   if (effects.length) {
     const matching=own.filter((a) => effects.includes(a.effect as IntentTechnique));
     if(r.kind==='objectAnimation'){
-      const scoped=matching.filter(a=>a.animationId==='intent_'+stable([r.sceneId,r.target.sourceNodeId,a.effect,...(r.timing.relation==='afterRequirement'&&r.timing.anchorRequirementId?[r.requirementId]:[])]));
+      const scoped=matching.filter(a=>a.animationId==='intent_'+stable([r.sceneId,r.target.sourceNodeId,a.effect,...(r.kind==='objectAnimation'&&(r.timing.startSeconds!=null||r.timing.relation==='afterRequirement'&&r.timing.anchorRequirementId)?[r.requirementId]:[])]));
       if(scoped.length)return scoped;
     }
     return matching;
@@ -548,7 +548,7 @@ export function compileRequirement(
           proceduralEffects: [], layerPolicy: { type: "switch", switchProgress: 1 },
         }}));
       }
-      if (hasInertia) operations.push(...compileInertiaAttachments(project, applyOperations(state, operations, project), r, true,boundTransitionId));
+      if (hasInertia) operations.push(...compileInertiaAttachments(project, applyOperations(state, operations, project), r, true,boundTransitionId, input));
     } else if (
       r.effectOperation?.storage === "animation" &&
       r.effectOperation.action === "remove"
@@ -731,7 +731,7 @@ export function compileRequirement(
         (targets.length > 0 || !expressions.length)
       ) {
         const candidate = applyOperations(state, operations, project);
-        operations.push(...compileInertiaAttachments(project, candidate, r, true));
+        operations.push(...compileInertiaAttachments(project, candidate, r, true, undefined, input));
       }
     } else {
       const requested: (IntentTechnique | "property")[] = r.techniques.filter(
@@ -767,7 +767,7 @@ export function compileRequirement(
         } else requested.push("property");
       }
       for (const effect of requested) {
-        const sequentialCreate = r.kind === "objectAnimation" && r.timing.relation === "afterRequirement" && !!anchor && start >= anchor.startFrame + anchor.durationFrames;
+        const sequentialCreate = r.kind === "objectAnimation" && (r.timing.startSeconds != null || r.timing.relation === "afterRequirement" && !!anchor && start >= anchor.startFrame + anchor.durationFrames);
         const old = state.animations.find((a) => own(a) && a.effect === effect && (!sequentialCreate || a.startFrame < start + duration && a.startFrame + a.durationFrames > start));
         if (
           effect === "fadeIn" &&
@@ -837,9 +837,10 @@ export function compileRequirement(
                       r.sceneId!,
                       r.target.sourceNodeId!,
                       effect,
+                      r.techniques.includes("fadeOut") ? "out" : "in",
                     )
                   : (textLocalDistance(project, r) ?? 80)),
-              mode: "in",
+              mode: r.techniques.includes("fadeOut") ? "out" : "in",
             },
           };
         else if (effect === "fadeIn" || effect === "fadeOut")
@@ -998,7 +999,7 @@ export function compileRequirement(
       }
       if (hasInertia) {
         const candidate = applyOperations(state, operations, project);
-        operations.push(...compileInertiaAttachments(project, candidate, r));
+        operations.push(...compileInertiaAttachments(project, candidate, r, false, undefined, input));
       }
     }
   }
@@ -1060,6 +1061,7 @@ function compileInertiaAttachments(
   r: IntentRequirement,
   missingOnly = false,
   boundTransitionId?:string,
+  intent?: IntentPlan,
 ): Plan["operations"] {
   const transition = boundTransitionId?state.objectTransitions?.find(t=>t.transitionId===boundTransitionId):transitionForTarget(project, state, r.sceneId!, r.target.sourceNodeId!);
   if (transition && r.targetScope !== "instance") {
@@ -1084,18 +1086,20 @@ function compileInertiaAttachments(
   }
   const base = resolveBaseMotion(state, r.sceneId!, r.target.sourceNodeId!);
   if (base.status !== "RESOLVED") throw new Error(`${base.status}: inertialOvershoot on ${r.sceneId}/${r.target.sourceNodeId} requires an enabled finite Position track; inspected ${base.checkedTracks.map(t => t.animationId).join(", ") || "none"}`);
-  const block = state.blocks.find((b) => b.sceneId === r.sceneId)!;
   const operations: Plan["operations"] = [];
   for (const track of base.tracks) {
-    const settle = Math.min(
-      Math.round(1.2 * state.settings.fps),
-      block.startFrame + block.durationFrames - track.endFrame - 1,
-      Math.round(1.2 * state.settings.fps),
-    );
-    if (settle < 4)
-      throw new Error(
-        "UNSUPPORTED_COMPOUND_EDIT: Insufficient settling interval after Position",
-      );
+    // Figma reference blocks do not bound global-time effects. Match the
+    // transition inertia lifetime; output range is handled by timeline policy.
+    const nextTransition = (state.objectTransitions ?? []).filter(t =>
+      t.logicalObjectId === r.target?.logicalObjectId && t.fromSceneId === r.sceneId && t.startFrame >= track.endFrame)
+      .sort((a,b) => a.startFrame-b.startFrame)[0];
+    const plannedStarts = (intent?.requirements ?? []).filter(next =>
+      next.techniques.includes("objectStateTransition") && next.target?.logicalObjectId === r.target?.logicalObjectId &&
+      next.parameters.fromSceneId === r.sceneId && next.timing.startSeconds != null)
+      .map(next => Math.round(next.timing.startSeconds! * state.settings.fps)).filter(start => start >= track.endFrame);
+    const handoff = Math.min(nextTransition?.startFrame ?? Infinity, ...plannedStarts);
+    const settle = Math.min(Math.max(4, Math.round(1.2 * state.settings.fps)), handoff-track.endFrame);
+    if (settle < 4) throw new Error("UNSUPPORTED_COMPOUND_EDIT: Insufficient settling interval before next transition");
     for (const property of track.properties) {
       if (r.parameters.property && property !== r.parameters.property) continue;
       const a = track.animation;

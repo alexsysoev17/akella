@@ -444,3 +444,21 @@ test("inertia Preview and decoded MP4 agree at a post-arrival frame", async () =
     await f.cleanup();
   }
 });
+
+test("explicit timed exit keeps entrance tracks and compiles outward displacement with fade", async () => {
+  const f = await fixture();
+  try {
+    const r=objectRequirement("exit","s0","n0","image",["slideDown","fadeOut"],"image уходит вниз за кадр через фейд");
+    r.timing.startSeconds=3;r.parameters.entrance="offscreen";
+    const p:IntentPlan={schemaVersion:"1.0.0",requirements:[r],coverage:[{sourceText:r.sourceText,requirementIds:[r.requirementId],classification:"executable",explanation:"explicit exit"}],assumptions:[]};
+    let state=f.state;
+    for(const task of compileTasks(f.project,p))state=applyOperations(state,compileRequirement(f.project,state,p,task).operations,f.project);
+    assert.deepEqual(state.animations.find(a=>a.animationId==="a0"),f.state.animations[0]);
+    const exit=state.animations.find(a=>a.effect==="slideDown"&&a.targetId==="n0")!;
+    assert.equal((exit.parameters as {mode:string}).mode,"out");
+    const {evaluateAnimation}=await import("../src/motion/evaluation.js");
+    assert.equal(evaluateAnimation(exit,exit.startFrame).y,0);
+    assert.ok(evaluateAnimation(exit,exit.startFrame+exit.durationFrames).y!>0);
+    assert.ok(state.animations.some(a=>a.targetId==="n0"&&a.effect==="fadeOut"));
+  } finally { await f.cleanup(); }
+});

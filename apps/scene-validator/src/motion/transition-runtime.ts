@@ -165,7 +165,7 @@ export function applyObjectTransitions(
         ]),
         inverse(current.local),
       );
-      node.setAttribute("transform", svgMatrix(wrapper));
+      node.setAttribute("transform", `${frame >= t.startFrame + t.durationFrames ? (node.getAttribute("transform") ?? "") : ""} ${svgMatrix(wrapper)}`.trim());
       node.setAttribute("data-logical-object", t.logicalObjectId);
       const content = node.firstElementChild;
       if (content) {

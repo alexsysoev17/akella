@@ -1,4 +1,4 @@
-import {evaluateAnimation} from "./evaluation.js";
+import {evaluateAnimation, evaluateMotion} from "./evaluation.js";
 import { intervalConflict } from "./intervals.js";
 import type { LoadedProject } from "../types.js";
 import type { MotionState } from "./schema.js";
@@ -131,10 +131,21 @@ export function validateObjectTransitions(
         throw new Error(
           "Expression on a state-transition subtree is not yet supported; use transition proceduralEffects or a non-overlapping instance workflow",
         );
+      // Destination tracks may take over after arrival, but must begin at the
+      // unmodified reference state. Evaluate the track (not every later phase)
+      // so a grow/return sequence can retain its non-neutral second phase.
+      const destinationTracks = state.animations.filter(a => a.enabled &&
+        a.sceneId === t.toSceneId && a.targetId === to.sourceNodeId);
+      const destinationValues = evaluateMotion({ ...state, animations: destinationTracks,
+        expressions: [], objectTransitions: [] }, end).nodes[JSON.stringify([t.toSceneId, to.sourceNodeId])] ?? {};
+      const destinationHandoff = destinationTracks.every(a => a.startFrame >= end && (!a.text || a.text.segmentation === "block")) &&
+        Object.entries(destinationValues).every(([key, value]) => Number.isFinite(value) &&
+          Math.abs(value - (["opacity", "scale", "scaleX", "scaleY", "trim"].includes(key) ? 1 : 0)) < 1e-9);
       if (
         state.animations.some(
           (a) =>
             a.enabled && a.sceneId === s.sceneId && related.has(a.targetId) &&
+            !(s.sceneId === t.toSceneId && a.targetId === to.sourceNodeId && destinationHandoff) &&
             !(s.sceneId===t.fromSceneId&&a.startFrame+a.durationFrames<=t.startFrame&&(!a.text||a.text.segmentation==="block")&&Object.entries(evaluateAnimation(a,a.startFrame+a.durationFrames)).every(([key,value])=>Number.isFinite(value)&&Math.abs(value-(["opacity","scale","scaleX","scaleY","trim"].includes(key)?1:0))<1e-9)),
         )
       )

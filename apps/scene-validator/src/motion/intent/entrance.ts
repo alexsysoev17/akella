@@ -5,6 +5,7 @@ export function offscreenDistance(
   sceneId: string,
   targetId: string,
   effect: string,
+  mode: "in" | "out" = "in",
 ): number {
   const scene = project.inspection.document.scenes.find(
     (s) => s.sceneId === sceneId,
@@ -56,7 +57,7 @@ export function offscreenDistance(
   const axis = effect === "slideUp" || effect === "slideDown" ? 1 : 0;
   const points = corners.map((c) => c[axis]),
     size = axis ? scene.height : scene.width;
-  const positive = effect === "slideUp" || effect === "slideLeft";
+  const positive = (effect === "slideUp" || effect === "slideLeft") === (mode === "in");
   const effects = Array.isArray(p.effects) ? p.effects : [];
   const visualPadding = effects.reduce<number>((padding, raw) => {
     if (!raw || typeof raw !== "object") return padding;
