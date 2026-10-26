@@ -1,3 +1,4 @@
+import {runtimeCode} from "../runtime-code.js";
 import {deferRecovery,drainRecoveries} from "../harness/recovery/jobs.js";
 import type {IntentPlan} from "./intent/schema.js";
 import {reviewCodeRepair} from "../harness/recovery/code-repair.js";
@@ -1075,6 +1076,7 @@ export async function executeMotion(
     resumeContract?:IntentPlan;runId?:string;deferredRecovery?:boolean;
   } = {},
 ) {
+  runtimeCode.assertCurrent();
   onStage("generating");
   const result = await proposeMotion(project, input, onStage, true, options);
   if ("manual" in result || "taskExecution" in result) return result;

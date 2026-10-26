@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { digest } from "./context.js";
 const components = [
   "files",
+  "runtime-code",
   "source",
   "harness/providers/budget",
   "harness/providers/codex",

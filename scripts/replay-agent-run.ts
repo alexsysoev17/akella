@@ -113,7 +113,8 @@ const stop = live?()=>{}:registerProvider("saved-run-reference", () => ({
     usage: false,
     nativeOutputTokenLimit: false,
   }),
-  generate: async () => {
+  generate: async (providerRequest) => {
+    if(providerRequest.purpose!=="semantic-planning"&&!resolution)throw Error("REPLAY_RECOVERY_RESPONSE_UNAVAILABLE: saved semantic answer cannot impersonate a recovery response");
     calls++;
     return {
       output: calls === 1 || !resolution ? response : resolution,
@@ -157,6 +158,10 @@ try {
   );
   if(args.includes("--report-file"))await writeFile(path.resolve(arg("report-file")),JSON.stringify({copy:root,resultFile:path.join(root,"replay-result.json"),sourceRun:run,reconciliation:result.reconciliation,providerMode:live?"live-original-provider":"saved-output-replay"}),{flag:"wx"});
   if (result.reconciliation?.status !== "SUCCESS") process.exitCode = 1;
+} catch(error) {
+  const report={copy:root,sourceRun:run,providerMode:live?'live-original-provider':'saved-output-replay',llmFixtureCalls:calls,error:String(error),recoveryReport:(error as {recoveryReport?:unknown}).recoveryReport??null,completed:false};
+  if(args.includes('--report-file'))await writeFile(path.resolve(arg('report-file')),JSON.stringify(report,null,2),{flag:'wx'});
+  console.error(JSON.stringify(report,null,2));process.exitCode=1;
 } finally {
   stop();
 }

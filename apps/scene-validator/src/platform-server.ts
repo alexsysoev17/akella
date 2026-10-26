@@ -1,3 +1,4 @@
+import {runtimeCode} from "./runtime-code.js";
 import {resumeProjectRecoveries} from "./motion/service.js";
 import { recoverInterruptedRuns } from "./harness/runtime.js";
 import { motionApi } from "./motion/api.js";
@@ -77,6 +78,7 @@ export async function servePlatform(projectsRoot: string, port = 4173) {
         throw new Error("Foreign origin forbidden");
       const url = new URL(request.url ?? "/", `http://${host}`);
       const segments = url.pathname.split("/").filter(Boolean);
+      if(request.method==="GET" && url.pathname==="/api/runtime")return json(runtimeCode.status());
       const sendFile = async (file: string, mime: string) => {
         const bytes = await readFile(file);
         response.writeHead(200, {

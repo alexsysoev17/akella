@@ -424,6 +424,12 @@ export function validateIntentPlan(
       resolutionContext?.onResolution?.({event:"RELATIVE_TIMING_DEFAULT", requirementId:r.requirementId, offsetFrames:r.timing.offsetFrames, fps:currentState.settings.fps, policy:"slightlyLater"});
     }
     if (r.kind === "unsupported" && r.unresolvedReason === "RESOLVED") r.unresolvedReason = "UNSUPPORTED_EFFECT_OPERATION: resolved identity requires an executable action";
+    // A transition's explicit FROM state is identity evidence, not editor context.
+    // Never guess a source instance from its destination or override an explicit scene.
+    if (!r.sceneId && r.techniques.includes("objectStateTransition") && r.parameters.fromSceneId) {
+      r.sceneId = r.parameters.fromSceneId;
+      resolutionContext?.onResolution?.({event:"TRANSITION_SOURCE_SCENE_RESOLVED",requirementId:r.requirementId,sceneId:r.sceneId,source:"parameters.fromSceneId"});
+    }
     if (r.sceneId && !sceneIds.has(r.sceneId)) {
       r.unresolvedReason = "UNKNOWN_SCENE";
       continue;

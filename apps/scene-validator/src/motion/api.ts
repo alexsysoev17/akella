@@ -1,3 +1,4 @@
+import {runtimeCode} from "../runtime-code.js";
 import {recoveryJobs,cancelRecovery} from "../harness/recovery/jobs.js";
 import {reviewForApproval,approveCodeRepair,sourcePromotionBusy} from "../harness/recovery/promotion.js";
 import {verifyOriginalRun,publishOriginalReplay} from "../harness/recovery/replay.js";
@@ -588,6 +589,7 @@ export async function motionApi(
       return true;
     }
     if (action === "execute" || action === "plan" || action === "render") {
+      try {runtimeCode.assertCurrent();} catch(error){json({error:String(error),errorCode:"SERVER_RESTART_REQUIRED"},409);return true;}
       if (action !== "render")
         try {
           await prepareMotionRequest(project, input);
