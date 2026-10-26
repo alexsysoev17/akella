@@ -8,6 +8,7 @@ const components = [
   "harness/providers/codex",
   "harness/qualification",
   "harness/recovery/config",
+  "motion/intent/semantic-patch",
   "harness/recovery/jobs",
   "harness/recovery/source-reader",
   "harness/recovery/supervisor",

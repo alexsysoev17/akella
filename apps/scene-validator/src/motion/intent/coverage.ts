@@ -360,7 +360,7 @@ export function inspectSemanticCoverage(
       const roots=rs.filter(r=>r.timing.startSeconds!==null&&!r.unresolvedReason);
       if(roots.length===1){
         const root=roots[0],children=rs.filter(r=>r!==root&&!r.unresolvedReason);
-        for(const child of children)if(child.timing.relation!=="afterRequirement"||child.timing.anchorRequirementId!==root.requirementId||child.timing.align==="start")issue("MISSING_SEQUENTIAL_DEPENDENCY",text,[child],{relation:"afterRequirement",anchorRequirementId:root.requirementId,align:"end"},child.timing);
+        for(const child of children)if(child.timing.relation!=="afterRequirement"||child.timing.anchorRequirementId!==root.requirementId||child.timing.align==="end")issue("MISSING_SEQUENTIAL_DEPENDENCY",text,[child],{relation:"afterRequirement",anchorRequirementId:root.requirementId,align:"start"},child.timing);
       }
       pendingAfter=undefined;
     }

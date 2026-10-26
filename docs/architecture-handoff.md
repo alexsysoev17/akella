@@ -4,13 +4,13 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-25 (Europe/Moscow) — causal recovery, reserved execution, durable continuation and iterative source investigation; targeted update, not a full audit |
+| Last Updated | 2026-10-26 (Europe/Moscow) — sequential coverage/semantic patch, scoped repair and code budget continuation; targeted update, not a full audit |
 | Last Full Audit | 2026-10-13; unchanged, this update is not a full renderer/provider audit |
 | Git Commit | Verified implementation/tests/docs: `2f1e102`; pre-change checkpoint `4a24f04`, baseline `782e72a`. This status-only follow-up is outside the implementation commit. |
 | Git Branch | `temporal-recovery-loop`, local only |
-| Working Tree Status | Implementation committed in `2f1e102`; only this status follow-up pending at snapshot. Client project/source/motion data not edited; historical execution only replayed in temporary copies. |
-| Documentation Version | 1.1.4 |
-| Scope of Last Update | Run5e184d6e causal chain; Project Recovery budget isolation/reservation; persisted continuation; non-overlapping entrance/transition composition; exact transition inertia identity; read-only source tools and bounded investigation. Partial audit only. |
+| Working Tree Status | v1.1.5 implementation pending at snapshot; checkpoint `5acd031`, prior implementation `2f1e102`. Client data untouched; saved request replayed only in temporary copies. |
+| Documentation Version | 1.1.5 |
+| Scope of Last Update | Run bd6ab908: temporal endpoint meaning, safe semantic patches, sequential animation IDs, scoped repair schema, root deduplication and cumulative Code Repair budget/continuation. Partial audit only. |
 | Code snapshot SHA-256 | NOT RECALCULATED; refer to component digests and final source commit. |
 
 Git 2.54.0 (Apple Git-157): локальная история, текущая ветка указана в Document Status, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
@@ -2145,3 +2145,41 @@ Defaults: maxInvestigationCalls3 (max6), maxSourceQueries12 (max24), existing120
 Architecture Change History: preserve causal roots and typed child chains; reserve independent recovery execution and avoid cross-lane latency estimates; durable saved-contract continuation on server lifecycle; safe disjoint entrance/state-transition composition and exact transition inertia ownership; finite iterative read-only source investigation using existing isolated patch/test/approval flow. No new engine/renderer/planner, no validation bypass, no client-data mutation.
 
 Completion verification (2026-10-25): final full `npm run check` PASSED388/388 (338 base/compat,2 browser,48 native), TypeScript and production build. Includes9 new causal recovery integration tests. No new live-provider calls. Actual source-request/patch test uses a mock adapter with real Git/confinement baseline/patched verification; three-state logo test uses real native QA and FFmpeg input digest. Offline original-response replay stops at separate ambiguous500б after the former logo blockers; full historical request NOT VERIFIED as successful. Evidence: ignored `data/harness/reports/causal-recovery-2026-10-25/verification.json` and logs.
+
+## Sequential coverage and bounded semantic/code repair — 2026-10-26 (v1.1.5)
+
+Targeted audit of historical `bd6ab908-5328-490f-b917-989e479cbe01`, not a full architecture audit. Checkpoint `5acd031`; changes below are working-tree changes until committed.
+
+**Confirmed root cause differs from Inspector's diagnosis.** `IntentRequirement.timing.align` selects the endpoint of the affected animation, not the anchor. Existing compiler subtracts duration for `align=end` and emits `endWith`. Therefore `afterRequirement + align=start` already means “start after the anchor finishes.” Coverage's absolute grow/return rule incorrectly required `end` and rejected the valid saved plan. The invariant and its old unit test have been corrected, not the engine semantics. Explicit end-aligned/with/before operations outside an unambiguous sequential clause remain unchanged.
+
+`motion/intent/semantic-patch.ts` adds a bounded deterministic correction at existing `validateIntentPlan`, before provider audit. It accepts a fresh coverage diagnosis for exactly two same-target actions within one authoritative clause, one absolute first action and one relative second action. It can restore relation/anchor/affected-endpoint when not contradictory; preserves delays/durations/parameters/other requirements; rejects absolute child timing, negative offsets, explicit timing constraints, different targets, unknown/rebound anchors, ambiguous source spans and cycles. Full Coverage runs again; normal preflight/scope/numeric/native QA/transaction checks remain. Trace records `DETERMINISTIC_SEMANTIC_PATCH`, before/after fields and zero additional LLM calls. It is intentionally NOT a general natural-language rule engine. The original saved valid start alignment needs no patch at all.
+
+Production tests exposed two further compiler defects: same-object dependent actions were considered self-anchors, and creation of a later same-channel action removed the preceding animation. `motion/intent/compiler.ts` now separates explicit requirement edges from existing-track self references, preserves non-overlapping predecessor tracks, assigns stable per-requirement IDs for sequential new phases, and resolves those generated phase IDs before broad effect matching. Both scaleIn→scaleOut and scaleIn→scaleIn return paths are exercised through service, QA, persistence, actual Skia frames and FFmpeg. Existing edit paths retain original IDs; overlapping conflicts/unsupported effects are still validated.
+
+`motion/intent/repair.ts` / `planner.ts`: first Semantic Repair now requests typed field deltas instead of replacement requirements. Temporal-only defects use a timing-only response schema, omitting the full technique/parameter schema and all added-requirement/coverage payloads. Protected merge supplies empty omitted collections, retains unaffected rows/requirements and performs full validation. Semantic Recovery uses the same scoped schema. No timeout increases or extra retry allowance.
+
+`harness/recovery/supervisor.ts` deduplicates repeat observations at the same stage/fingerprint and binds later child failures to the existing substantive root even outside an active attempt. `motion/service.ts` records actual coverage issues in the original invariant instead of just `SEMANTIC_COVERAGE`. This preserves the defect for source investigation rather than promoting output/budget exceptions to independent roots.
+
+### Provider/token findings and continuation
+
+Installed `@openai/codex-sdk` 0.162.1 `TurnOptions` exposes `outputSchema`/`signal`, not a native `max_output_tokens`. AKELLA's Codex adapter correctly advertises `nativeOutputTokenLimit=false`: its cap is a post-response guard. Server-side OUTPUT_TRUNCATED does not prove AKELLA's configured cap was forwarded or that raising it fixes the server limit. Official SDK overview: https://learn.chatgpt.com/docs/codex-sdk . No unsupported SDK config was invented; response reduction is the remedy implemented here.
+
+Historical main call: 25,456 input + 5,121 output tokens, 59,261.76ms. Two subsequent semantic calls failed OUTPUT_TRUNCATED (usage unavailable, not zero). Two coding calls: 38,423/419 and 43,622/713 input/output; cached input 18,944 and 21,504 is a subset of input, not additional usage. Coding total **83,177**, above 60,000 configured tokens. Previous accounting was not double-counting cache; admission occurred only after spending the second call.
+
+`harness/recovery/code-service.ts` now accumulates input/output/cache separately, records usage even for rejected output, forecasts the next input using measured prior token/serialized-byte ratio plus output reservation, and stops before another call when infeasible. This is an estimate, not a tokenizer guarantee. Already-returned valid proposals are not discarded merely because the provider exceeded the estimated allowance; they still undergo the isolated test gate. Previous source-query outputs are no longer cumulatively repeated; latest evidence plus previous query references are sent. Original exact source remains in quarantine and can be queried.
+
+Persisted quarantine files: `provider-budget.json`, `source-investigation.json`, `investigation-continuation.json`, and on admission rejection `budget-continuation.json`. Inspector receives structured CODE_REPAIR_TOKEN_BUDGET with workspace and continuation availability. Explicit developer continuation:
+
+```
+npm run recovery -- resume-code --workspace /absolute/quarantine --max-total-tokens 120000
+```
+
+The total is cumulative, not a fresh reset. Same frozen source, observed queries, call/query counts and usage resume; policy schema still bounds limits. Source hashes in both active repository and quarantine must match. This command can invoke the configured external coding provider and is not automatically run after budget exhaustion. Proposed patches still require regression verification and explicit approval before production activation. No new supervisor or project executor.
+
+### Verification / remaining blockers
+
+Focused tests: seven semantic/coverage/production rendering tests and one coding-budget continuation integration test passed. Mock semantic/coding adapters were used; Skia rendering, FFmpeg, isolated regression execution and Git quarantine are real. Scale phase tests compare beginning/end pixels, verify larger peak, preserve both tracks and compare Preview RGBA with FFmpeg input frame digests. Lossy decoded MP4 pixel identity is NOT claimed.
+
+Full original request was replayed offline against a uniquely verified historical state in a temporary copy of test40. Coverage passes. Preflight next stops at **AMBIGUOUS_TARGET `500б`**; the saved semantic answer cannot supply a new project-recovery answer (replay ends INVALID_OUTPUT when it is reused for the wrong response contract). No target was guessed, no original project was changed. Whole original film execution/render is therefore **NOT VERIFIED / BLOCKED**. No new external model calls were made; no new live token/latency improvement is claimed. The original valid QR contract now requires zero semantic repair calls. Arbitrary natural-language completeness and universal autonomous self-repair are not guaranteed.
+
+Architecture Change History: 2026-10-26 — v1.1.5, temporal endpoint contract correction, deterministic semantic patches, sequential phase preservation, scoped deltas, causal deduplication and cumulative-budget Code Repair continuation. Full suite passed: 346 base/integration + 2 browser + 48 native = **396/396**, TypeScript and build exit 0. Final focused rerun after budget-result/accounting adjustments: **17/17**. Logs: `/tmp/akella-bd6-final-check.log`, `/tmp/akella-bd6-final-focused.log`. No new live-provider calls.

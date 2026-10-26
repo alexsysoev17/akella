@@ -45,10 +45,12 @@ export class GlobalFailureSupervisor {
   const failure=recoveryFailure(error,stage,this.options.revision);
   const rootCause=redactSecrets(failure.invariant);
   const fingerprint=hash([stage,failure.code,rootCause.replace(/[a-f0-9]{8}-[a-f0-9-]{27}/gi,'<id>'),detail.requirements??[],detail.objects??[]]);
+  const repeated=this.report.events.find(e=>e.failureFingerprint===fingerprint);
+  if(repeated){for(const evidence of detail.evidence??[])if(!repeated.validationEvidence.some(v=>JSON.stringify(v)===JSON.stringify(evidence)))repeated.validationEvidence.push(evidence);repeated.validationEvidence=repeated.validationEvidence.slice(-30);await this.save();return repeated;}
   let knownVerifiedRecipes:unknown[]=[];const evidence=[...failure.evidence,...detail.evidence??[]];
   try{knownVerifiedRecipes=await this.options.known?.(fingerprint)??[];}catch(error){evidence.push({source:'experience-lookup',detail:redactSecrets(String(error))});}
   const id='failure_'+this.sequence++;
-  const parent=this.report.events.find(e=>e.id===(detail.parentEventId??this.activeParent));
+  const parent=this.report.events.find(e=>e.id===(detail.parentEventId??this.activeParent??this.report.originalFailure?.id));
   const event:FailureEvent={id,rootEventId:parent?.rootEventId??id,parentEventId:parent?.id??null,stage,errorCode:failure.code,rootCause,failureCategory:failure.category,projectRevision:this.options.revision,originalUserRequest:this.options.request,affectedRequirements:detail.requirements??[],relevantObjectIds:detail.objects??[],attemptedOperations:detail.operations??[],validationEvidence:evidence,failureFingerprint:fingerprint,previousRecoveryAttempts:this.report.attempts.length,availableResources:{current:this.options.resources?.()??{},knownVerifiedRecipes},executionTrace:this.options.trace?.().slice(-12)??[],failure};
   if(!parent&&stage!=="context-admission"&&!this.report.originalFailure)this.report.originalFailure=structuredClone(event);
   this.report.events.push(event);if(this.report.events.length>100){const removable=this.report.events.findIndex(e=>e.id!==this.report.originalFailure?.id&&e.id!==event.rootEventId&&e.id!==event.id&&!this.report.events.some(child=>child.parentEventId===e.id));this.report.events.splice(removable>=0?removable:1,1);}

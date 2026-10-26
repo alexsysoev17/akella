@@ -155,14 +155,14 @@ test('source reserve and cancellation/deadline keep repair bounded independently
  const controller=new AbortController(),c=new GlobalFailureSupervisor({request:'x',revision:'r',maxAttempts:2,maxDurationMs:1000,signal:controller.signal,persist:async()=>{}});
  const e=await c.observe(injected('INTERNAL'),'execution');controller.abort();let called=0;assert.equal((await c.attempt(e,{...action,run:async()=>{called++;return{};}})).ok,false);assert.equal(called,0);
 });
-test('an absolute-time grow/return sequence is local to its clause and still requires an end dependency',async()=>{
+test('an absolute-time grow/return sequence is local to its clause and starts after anchor end, not end-aligned with the anchor',async()=>{
  const f=await identityFixture(1,s=>{s[0].children=[node('p','Product')];});try{
   const first='Product появляется через фейд. ',second='на 9 секунде Product увеличивается а потом встает на место';const request=first+second;
   const previous=objectRequirement('previous','s0','p','Product',['fadeIn'],first),grow=objectRequirement('grow','s0','p','Product',['scaleIn'],second),back=objectRequirement('back','s0','p','Product',['scaleIn'],second);
   previous.sourceClauseId='c0';grow.sourceClauseId='c1';back.sourceClauseId='c1';
-  grow.timing.startSeconds=9;back.timing.relation='afterRequirement';back.timing.anchorRequirementId='grow';back.timing.align='end';
+  grow.timing.startSeconds=9;back.timing.relation='afterRequirement';back.timing.anchorRequirementId='grow';back.timing.align='start';
   const plan={schemaVersion:'1.0.0' as const,sourceClauses:[{clauseId:'c0',text:first,start:0,end:first.length},{clauseId:'c1',text:second,start:first.length,end:request.length}],requirements:[previous,grow,back],coverage:[{sourceText:first,requirementIds:['previous'],classification:'executable' as const,explanation:'fixture'},{sourceText:second,requirementIds:['grow','back'],classification:'executable' as const,explanation:'fixture'}],assumptions:[]};
-  assert.equal(inspectSemanticCoverage(f.project,request,plan).issues.filter(i=>i.code==='MISSING_SEQUENTIAL_DEPENDENCY').length,0);back.timing.align='start';assert.ok(inspectSemanticCoverage(f.project,request,plan).issues.some(i=>i.code==='MISSING_SEQUENTIAL_DEPENDENCY'));
+  assert.equal(inspectSemanticCoverage(f.project,request,plan).issues.filter(i=>i.code==='MISSING_SEQUENTIAL_DEPENDENCY').length,0);back.timing.align='end';assert.ok(inspectSemanticCoverage(f.project,request,plan).issues.some(i=>i.code==='MISSING_SEQUENTIAL_DEPENDENCY'));
  }finally{await f.cleanup();}
 });
 

@@ -11,7 +11,7 @@ import {HarnessRun} from '../src/harness/runtime.js';
 import {recoveryProviderRuntime} from '../src/harness/recovery/provider-runtime.js';
 import {recoveryPolicySchema} from '../src/harness/recovery/config.js';
 import {recoveryFailure} from '../src/harness/recovery/failure.js';
-import {proposeCodeRepair} from '../src/harness/recovery/code-service.js';
+import {proposeCodeRepair,resumeCodeInvestigation} from '../src/harness/recovery/code-service.js';
 import {readRepairSources} from '../src/harness/recovery/source-reader.js';
 import {reviewCodeRepair} from '../src/harness/recovery/code-repair.js';
 import {deferRecovery,drainRecoveries,recoveryJobs,cancelRecovery} from '../src/harness/recovery/jobs.js';
@@ -113,6 +113,31 @@ test('Code Repair requests missing implementation, reads callers/tests, verifies
   await exec('git',['init','-q'],{cwd:root});await exec('git',['add','apps','package.json','.gitignore','tsconfig.check.json'],{cwd:root});await exec('git',['-c','user.name=Test','-c','user.email=test@localhost','commit','-qm','Fixture'],{cwd:root});
   const failure=recoveryFailure(Object.assign(Error('Exact timing failure'),{stack:'Error\n at /fixture/'+entry+':1:1'}),'execution','r');
   const result=await proposeCodeRepair(root,failure,recoveryPolicySchema.parse({}),{provider:'source-reader-fixture',model:''});assert.ok('workspace'in result);workspace=result.workspace as string;
+  assert.equal(result.status,'AWAITING_APPROVAL',JSON.stringify(result));const report=await reviewCodeRepair(workspace);assert.ok(report.baseline.some((t:{status:string})=>t.status==='FAILED'));assert.ok(report.tests.every((t:{status:string})=>t.status==='PASSED'));assert.equal(calls,2);assert.equal(await readFile(path.join(root,hidden),'utf8'),original);
+  await assert.rejects(()=>readRepairSources({id:'x',root,baseCommit:'x',files:[]},[{kind:'read',path:'../../secret'}],1000),/CODE_SOURCE_READ_SCOPE/);
+ }finally{stop();await rm(root,{recursive:true,force:true});if(workspace)await rm(workspace,{recursive:true,force:true});}
+});
+
+test('Code Repair budgets include cached input once, checkpoint before next call and explicitly resume tested patch',async()=>{
+ if(process.platform!=='darwin')return;
+ const root=await mkdtemp(path.join(os.tmpdir(),'causal-code-')),exec=promisify(execFile);let workspace:string|undefined,calls=0;
+ const entry='apps/scene-validator/src/motion/tools.ts',hidden='apps/scene-validator/src/motion/timing.ts';const original='export const exactTime=(n:number)=>n+1;\n';
+ const stop=registerProvider('source-budget-fixture',()=>({id:'source-budget-fixture',mode:'mock',capabilities:caps,generate:async req=>{
+  calls++;const context=JSON.parse(req.messages.find(m=>m.role==='user')!.content).context;
+  if(calls===1)return {...answer({action:'inspect',proposal:null,reason:'Need implementation and callers',queries:[{kind:'read',path:hidden,query:null,startLine:1,endLine:30},{kind:'callers',path:null,query:'exactTime',startLine:null,endLine:null},{kind:'tests',path:null,query:'exactTime',startLine:null,endLine:null}]}),usage:{inputTokens:38423,outputTokens:419,cachedInputTokens:18944}};
+  assert.ok(JSON.stringify(context.investigation).includes('n+1'));
+  return answer({action:'propose',reason:'Off-by-one in discovered function',proposal:{rootCause:'Exact time adds one',changes:[{path:hidden,beforeHash:hash(original),edits:[{find:'n+1',replace:'n'}]},{path:context.regressionPath,beforeHash:hash(''),content:"import test from 'node:test';import assert from 'node:assert/strict';import {exactTime} from '../src/motion/timing.js';test('exact time',()=>assert.equal(exactTime(3),3));\n"}],regressionTests:[context.regressionPath],risks:['synthetic defect']}});
+ }}));
+ try{
+  await mkdir(path.join(root,'apps/scene-validator/src/motion'),{recursive:true});await mkdir(path.join(root,'apps/scene-validator/tests'),{recursive:true});await writeFile(path.join(root,entry),"export {exactTime} from './timing.js';\n");await writeFile(path.join(root,hidden),original);
+  await writeFile(path.join(root,'package.json'),'{"type":"module"}');await writeFile(path.join(root,'.gitignore'),'node_modules\ndata/\n');await symlink(path.resolve('node_modules'),path.join(root,'node_modules'));
+  await writeFile(path.join(root,'tsconfig.check.json'),JSON.stringify({compilerOptions:{target:'ES2022',module:'NodeNext',moduleResolution:'NodeNext',strict:true,skipLibCheck:true,types:['node']},include:['apps/**/*.ts']}));
+  await exec('git',['init','-q'],{cwd:root});await exec('git',['add','apps','package.json','.gitignore','tsconfig.check.json'],{cwd:root});await exec('git',['-c','user.name=Test','-c','user.email=test@localhost','commit','-qm','Fixture'],{cwd:root});
+  const failure=recoveryFailure(Object.assign(Error('Exact timing failure'),{stack:'Error\n at /fixture/'+entry+':1:1'}),'execution','r');
+  const blocked=await proposeCodeRepair(root,failure,recoveryPolicySchema.parse({}),{provider:'source-budget-fixture',model:''});
+  assert.equal(blocked.status,'CODE_REPAIR_TOKEN_BUDGET');assert.equal(calls,1);assert.ok('workspace' in blocked);workspace=blocked.workspace as string;
+  assert.ok(workspace);const budget=JSON.parse(await readFile(path.join(workspace,'provider-budget.json'),'utf8'));assert.equal(budget.totalTokens,38842);assert.equal(budget.cachedInputTokens,18944);
+  const result=await resumeCodeInvestigation(root,workspace,120000);assert.ok('workspace'in result);workspace=result.workspace as string;
   assert.equal(result.status,'AWAITING_APPROVAL',JSON.stringify(result));const report=await reviewCodeRepair(workspace);assert.ok(report.baseline.some((t:{status:string})=>t.status==='FAILED'));assert.ok(report.tests.every((t:{status:string})=>t.status==='PASSED'));assert.equal(calls,2);assert.equal(await readFile(path.join(root,hidden),'utf8'),original);
   await assert.rejects(()=>readRepairSources({id:'x',root,baseCommit:'x',files:[]},[{kind:'read',path:'../../secret'}],1000),/CODE_SOURCE_READ_SCOPE/);
  }finally{stop();await rm(root,{recursive:true,force:true});if(workspace)await rm(workspace,{recursive:true,force:true});}

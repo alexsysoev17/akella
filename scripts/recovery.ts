@@ -1,3 +1,4 @@
+import {resumeCodeInvestigation} from "../apps/scene-validator/src/harness/recovery/code-service.ts";
 import {resumeProjectRecoveries} from "../apps/scene-validator/src/motion/service.ts";
 import {loadProject} from "../apps/scene-validator/src/project.ts";
 import {reviewForApproval,approveCodeRepair} from "../apps/scene-validator/src/harness/recovery/promotion.ts";
@@ -11,6 +12,11 @@ const args = process.argv.slice(2), command = args[0], value = (flag: string) =>
 if (command === "memory")
     console.log(JSON.stringify(await recoveryMemory(value("--project")), null, 2));
 else if(command === "resume") {await resumeProjectRecoveries(await loadProject(value("--project")));}
+else if(command === "resume-code") {
+ const maxTokens=Number(args[args.indexOf("--max-total-tokens")+1]);
+ if(!args.includes("--max-total-tokens")||!Number.isSafeInteger(maxTokens))throw Error("Explicit cumulative --max-total-tokens required");
+ console.log(JSON.stringify(await resumeCodeInvestigation(process.cwd(),value("--workspace"),maxTokens),null,2));
+}
 else if(command === "apply") {
     const workspace=value("--workspace"), identity=args[args.indexOf("--approve-patch")+1];
     if(!args.includes("--approve-patch")||!args.includes("--run"))throw Error("Explicit --approve-patch HASH and original --run UUID required");

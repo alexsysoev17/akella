@@ -121,7 +121,7 @@ export const compactRepairSchema=z.object({
  addedRequirements:z.array(intentRequirementSchema).max(12),coverageRows:z.array(intentPlanSchema.shape.coverage.element).max(200),
 }).strict();
 export function mergeCompactRepair(plan:IntentPlan,input:unknown,issues:Parameters<typeof mergeTargetedRepair>[2],request:string){
- const patch=compactRepairSchema.parse(input),seen=new Set<string>();
+ const patch=compactRepairSchema.parse({addedRequirements:[],coverageRows:[],...input as object}),seen=new Set<string>();
  const requirements=patch.updates.map(update=>{
   if(seen.has(update.requirementId))throw Error('DUPLICATE_REPAIR_REQUIREMENT');seen.add(update.requirementId);
   const original=plan.requirements.find(r=>r.requirementId===update.requirementId);if(!original)throw Error('REPAIR_UNKNOWN_REQUIREMENT');
@@ -130,4 +130,10 @@ export function mergeCompactRepair(plan:IntentPlan,input:unknown,issues:Paramete
   return intentRequirementSchema.parse(result);
  });
  return mergeTargetedRepair(plan,{requirements:[...requirements,...patch.addedRequirements],coverageRows:patch.coverageRows},issues,request);
+}
+
+/** Timing-only defects do not need the complete effect/parameter schema on the wire. */
+export function semanticRepairSchema(issues: {code?:string}[]): z.ZodType {
+ if(issues.length && issues.every(i=>i.code==='MISSING_SEQUENTIAL_DEPENDENCY'))return z.object({updates:z.array(z.object({requirementId:z.string(),changes:z.array(z.object({field:z.literal('timing'),value:intentRequirementSchema.shape.timing}).strict()).length(1)}).strict()).max(30)}).strict();
+ return compactRepairSchema;
 }

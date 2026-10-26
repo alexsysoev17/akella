@@ -1,4 +1,5 @@
-import {compactRepairSchema,mergeCompactRepair} from "./repair.js";
+import {patchSequentialDependencies} from "./semantic-patch.js";
+import {mergeCompactRepair,semanticRepairSchema} from "./repair.js";
 import {validateMentions,type ObjectMention} from "../mentions.js";
 import { assertCoverageScope } from "./coverage.js";
 import { resolveTextSettings } from "../../motion-library/techniques/text.js";
@@ -8,7 +9,7 @@ import {
   referenceDiagnostics,
 } from "./references.js";
 import { semanticBindings } from "../../motion-library/techniques/registry.js";
-import { targetedRepairSchema, mergeTargetedRepair } from "./repair.js";
+
 import { recoverSemanticProvenance, recoverSemanticRepair } from "../../harness/recovery/semantic.js";
 import {
   semanticGraphSchema,
@@ -186,7 +187,7 @@ export class SemanticProvider implements IntentProvider {
     const feedback = (
       context as {
         coverageFeedback?: {
-          issues: { sourceText: string; requirementIds: string[] }[];
+          issues: { code?:string; sourceText: string; requirementIds: string[] }[];
         };
       }
     )?.coverageFeedback;
@@ -217,11 +218,11 @@ export class SemanticProvider implements IntentProvider {
           ),
         },
         request,
-        "Repair ONLY the reported semantic relationships. Return replacement requirements preserving existing IDs and verbatim sourceText, plus coverageRows for the exact affected clauses. Do not change unrelated actions. New requirements are permitted only for an actually missing instruction in the reported clause. Preserve correct techniques, targets and dependencies. Technical execution is deterministic; never invent source IDs.",
-        targetedRepairSchema,
+        "Repair ONLY the reported semantic relationships. Return compact updates with requirementId and changed fields only, addedRequirements only for missing actions, and coverageRows only when mappings change. Preserve existing IDs and verbatim sourceText. Do not change unrelated actions. New requirements are permitted only for an actually missing instruction in the reported clause. Preserve correct techniques, targets and dependencies. Technical execution is deterministic; never invent source IDs.",
+        semanticRepairSchema(feedback.issues),
         "semantic-repair",
       );
-      return mergeTargetedRepair(plan, patch, feedback.issues, request);
+      return mergeCompactRepair(plan, patch, feedback.issues, request);
       };
       try{return await execute();}catch(error){
         if(!this.recovery)throw error;
@@ -236,7 +237,7 @@ export class SemanticProvider implements IntentProvider {
             failedRelationships:feedback.issues,
             affectedRequirements:minimal,
             anchors:plan.requirements.filter(r=>minimal.some(m=>m.timing.anchorRequirementId===r.requirementId||m.inheritFromRequirementId===r.requirementId)).map(r=>({requirementId:r.requirementId,target:r.target,techniques:r.techniques,timing:r.timing})),
-          },request,"Return a MINIMAL semantic repair: field deltas on affected requirement IDs, and addedRequirements only for proven missing instructions. Preserve exact source clauses, real target IDs and all unrelated actions. Do not reproduce unchanged fields, the full plan or null defaults. A disappearance uses fadeOut; source scene/reference scene are distinct. Full validation follows the protected merge.",compactRepairSchema,"semantic-recovery");
+          },request,"Return a MINIMAL semantic repair: field deltas on affected requirement IDs, and addedRequirements only for proven missing instructions. Preserve exact source clauses, real target IDs and all unrelated actions. Do not reproduce unchanged fields, the full plan or null defaults. A disappearance uses fadeOut; source scene/reference scene are distinct. Full validation follows the protected merge.",semanticRepairSchema(feedback.issues),"semantic-recovery");
           return mergeCompactRepair(plan,patch,feedback.issues,request);
         });
       }
@@ -796,6 +797,8 @@ export function validateIntentPlan(
   if (provenanceRepairs.length)
     resolutionContext?.onResolution?.({ event: "SEMANTIC_RECOVERY", stage: "semantic-coverage", procedure: "inherited-clause-provenance/1", llmCalls: 0, repairs: provenanceRepairs });
   const preliminary = inspectSemanticCoverage(project, request, plan, fps);
+  const temporalPatches = patchSequentialDependencies(plan, request, preliminary);
+  if (temporalPatches.length) resolutionContext?.onResolution?.({event:"DETERMINISTIC_SEMANTIC_PATCH", procedure:"sequential-dependency/1", llmCalls:0, patches:temporalPatches});
   for (const issue of preliminary.issues) {
     if (
       issue.code === "MISSING_INHERITANCE_LINK" &&

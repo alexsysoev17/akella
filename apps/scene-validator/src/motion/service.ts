@@ -485,7 +485,7 @@ export async function proposeMotion(
           enrichedContext,
           semanticProvider,
           async (stage, value) => {
-            if(harness&&stage.startsWith("coverage-suspicious"))await harness.supervisor.observe(Object.assign(Error("SEMANTIC_COVERAGE"),{code:"SEMANTIC_COVERAGE"}),"semantic-coverage",{evidence:[value]});
+            if(harness&&stage.startsWith("coverage-suspicious"))await harness.supervisor.observe(Object.assign(Error("SEMANTIC_COVERAGE: "+JSON.stringify((value as {issues?:unknown}).issues??value)),{code:"SEMANTIC_COVERAGE"}),"semantic-coverage",{evidence:[value]});
             if (
               harness &&
               (stage.startsWith("coverage") ||

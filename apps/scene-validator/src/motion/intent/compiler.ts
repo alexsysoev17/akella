@@ -180,8 +180,14 @@ export function requirementAnimations(
   const effects = r.techniques.filter(
     (t) => semanticBindings[t] === "animation",
   );
-  if (effects.length)
-    return own.filter((a) => effects.includes(a.effect as IntentTechnique));
+  if (effects.length) {
+    const matching=own.filter((a) => effects.includes(a.effect as IntentTechnique));
+    if(r.kind==='objectAnimation'){
+      const scoped=matching.filter(a=>a.animationId==='intent_'+stable([r.sceneId,r.target.sourceNodeId,a.effect,...(r.timing.relation==='afterRequirement'&&r.timing.anchorRequirementId?[r.requirementId]:[])]));
+      if(scoped.length)return scoped;
+    }
+    return matching;
+  }
   if (
     !r.techniques.some((t) => semanticBindings[t] === "easing") &&
     r.parameters.easing === null
@@ -353,7 +359,7 @@ export function compileRequirement(
         ? existingTargets[0]
         : undefined;
     const isSelfAnchor = Boolean(
-      anchor &&
+      !r.timing.anchorRequirementId && anchor &&
         r.timing.reference?.endpoint !== "end" &&
         (existingTargets.some((t) => t.animationId === anchor.animationId) ||
           (r.target.sourceNodeId &&
@@ -761,7 +767,8 @@ export function compileRequirement(
         } else requested.push("property");
       }
       for (const effect of requested) {
-        const old = state.animations.find((a) => own(a) && a.effect === effect);
+        const sequentialCreate = r.kind === "objectAnimation" && r.timing.relation === "afterRequirement" && !!anchor && start >= anchor.startFrame + anchor.durationFrames;
+        const old = state.animations.find((a) => own(a) && a.effect === effect && (!sequentialCreate || a.startFrame < start + duration && a.startFrame + a.durationFrames > start));
         if (
           effect === "fadeIn" &&
           state.animations.some(
@@ -776,7 +783,7 @@ export function compileRequirement(
           throw new Error("OPACITY_ENTRANCE_CONFLICT");
         const animationId =
           old?.animationId ??
-          "intent_" + stable([r.sceneId, r.target.sourceNodeId, effect]);
+          "intent_" + stable([r.sceneId, r.target.sourceNodeId, effect, ...(sequentialCreate ? [r.requirementId] : [])]);
         const common = {
           ...(r.parameters.text ? { text: r.parameters.text } : {}),
           animationId,
@@ -932,6 +939,7 @@ export function compileRequirement(
         for (const previous of state.animations.filter(
           (previous) =>
             own(previous) &&
+            (!sequentialCreate || previous.startFrame < start + duration && previous.startFrame + previous.durationFrames > start) &&
             (effect !== "fadeIn" || previous.animationId === a.animationId) &&
             (channels(previous).some((c) => writes.includes(c)) ||
               (effect === "trimPath" &&

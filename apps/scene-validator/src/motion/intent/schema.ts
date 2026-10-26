@@ -195,6 +195,7 @@ export const intentRequirementSchema = z
         reference: temporalReferenceSchema.optional(),
         offsetFrames: z.number().int().optional(),
         offsetPolicy: z.enum(["slightlyLater"]).optional(),
+        // Endpoint of THIS animation, not the anchor. afterRequirement + start = follows anchor end.
         align: z.enum(["start", "end"]).optional(),
         delaySeconds: z.number().min(-3600).max(3600),
       })
