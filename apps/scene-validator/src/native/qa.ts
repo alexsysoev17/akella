@@ -52,7 +52,7 @@ export async function nativeMotionQA(
   // Numerical QA retains dense endpoint/subframe sampling. Raster QA samples
   // the changed intervals; unrelated historical tracks must not be re-rendered.
   const rasterFrames = [...new Set(sampled.flatMap(e => [e.startFrame, e.startFrame+e.durationFrames/2, e.startFrame+e.durationFrames])
-    .map(f => Math.max(0,Math.min(state.settings.durationFrames-1,Math.round(f)))))];
+    .map(f => Math.round(f)))];
   const numeric = numericQA(
       targetScope
         ? {
@@ -69,7 +69,10 @@ export async function nativeMotionQA(
       request,
       statePresentation(project, state),
     ),
-    checks: Check[] = [...numeric.checks],
+    checks: Check[] = [...numeric.checks, ...(sampled.some(e=>e.startFrame<0||e.startFrame+e.durationFrames>state.settings.durationFrames)?[{
+      name:"OUTPUT_WINDOW_EXCLUDES_MOTION",category:"render" as const,status:"WARNING" as const,
+      reason:"Changed motion extends outside the fixed output window. Data and mathematical timing are preserved; enlarge Duration to include it in Preview/export.",
+    }]:[])],
     samples: { frame: number; file: string }[] = [],
     warnings = new Set<string>(),
     before = nativeDigest(project.inspection.document),
@@ -177,8 +180,7 @@ export async function nativeMotionQA(
         ) === i,
     )) {
       const start = track.startFrame,
-        end = Math.min(
-          state.settings.durationFrames - 1,
+        end = (
           start +
             track.durationFrames +
             Math.max(
@@ -186,7 +188,7 @@ export async function nativeMotionQA(
               ...(state.expressions ?? [])
                 .filter((e) => scope(e.sceneId, e.targetId))
                 .map((e) => e.durationFrames),
-            ),
+            )
         );
       const from = await render(state, start),
         to = await render(state, end),

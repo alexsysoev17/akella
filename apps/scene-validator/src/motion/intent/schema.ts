@@ -183,6 +183,9 @@ export const intentRequirementSchema = z
     timing: z
       .object({
         startSeconds: z.number().finite().nullable(),
+        startUnit: z.enum(["frames","seconds"]).optional(),
+        delayUnit: z.enum(["frames","seconds"]).optional(),
+        frameDelay: z.number().int().optional(),
         relation: z.enum([
           "sceneStart",
           "sceneEnd",

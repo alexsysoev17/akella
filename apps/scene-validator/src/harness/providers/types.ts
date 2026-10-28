@@ -65,7 +65,9 @@ export class ProviderError extends Error {
       | "PROVIDER_UNAVAILABLE"
       | "PROVIDER_AUTH_FAILED"
       | "PROVIDER_TIMEOUT"
-      | "PROVIDER_TRANSPORT_ERROR",
+      | "PROVIDER_TRANSPORT_ERROR"
+      | "PROVIDER_EVENT_PARSE_ERROR"
+      | "PROVIDER_JSON_INVALID",
     message: string,
   ) {
     super(`${code}: ${message}`);

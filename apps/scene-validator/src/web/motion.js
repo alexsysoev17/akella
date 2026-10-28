@@ -396,6 +396,7 @@ export async function mountMotion(
     if (result.diagnosticPersistence?.status === "FAILED")
       executionMessage +=
         " Изменения сохранены, запись диагностики не завершена.";
+    if(result.time?.warnings?.length)executionMessage+=" "+result.time.warnings.join(" ");
     pendingPlayback = !reconciliation || reconciliation.completed > 0;
     refresh(true);
     $("m-job").textContent = executionMessage || "Запускаем preview…";
@@ -405,13 +406,17 @@ export async function mountMotion(
         .map((t) => `${t.targetReference.name}: ${t.error}`)
         .join("\n");
   }
+  let settingsPending;
   async function plan() {
+    if(settingsPending)await settingsPending;
     if (busy) return;
     const request = $("m-ai").value;
     if (!request.trim()) throw new Error("Опишите анимацию.");
     if (/^(верни как было|отмени|undo)[.!\s]*$/i.test(request)) {
+      const seconds=frame/data.document.state.settings.fps;
       const r = await api("undo", { expectedRevision: data.document.revision });
       data.document = r.document;
+      frame=Math.round(seconds*data.document.state.settings.fps);
       refresh(true);
       return;
     }
@@ -723,32 +728,25 @@ export async function mountMotion(
     for (const action of ["undo", "redo"])
       $("m-" + action).onclick = guarded(async () => {
         pause();
+        const seconds=frame/data.document.state.settings.fps;
         data.document = (await api(action, { expectedRevision: data.document.revision })).document;
+        frame=Math.round(seconds*data.document.state.settings.fps);
         refresh(true);
       });
     $("m-settings").onclick = guarded(async () => {
-      const state = data.document.state;
-      const fps = Number($("m-fps").value),
-        durationFrames = Math.round(Number($("m-seconds").value) * fps);
-      const settings = {
-        fps,
-        durationFrames,
-        width: Number($("m-width").value),
-        height: Number($("m-height").value),
-        strictDuration: true,
-      };
-      const operations = [{ type: "setProjectSettings", settings }];
-      if (durationFrames !== state.settings.durationFrames) {
-        const last = [...state.blocks]
-          .sort((a, b) => a.startFrame - b.startFrame)
-          .at(-1);
-        operations.push({
-          type: "setBlockDuration",
-          blockId: last.blockId,
-          durationFrames: durationFrames - last.startFrame,
-        });
-      }
-      await changed(operations, "Изменить технические требования", true);
+      if(settingsPending)return;
+      pause();
+      $("m-settings").disabled=true;
+      $("m-generate").disabled=true;
+      const playheadSeconds=frame/data.document.state.settings.fps;
+      settingsPending=(async()=>{
+        const result=await api("settings",{expectedRevision:data.document.revision,fps:Number($("m-fps").value),...(Number($("m-seconds").value)!==data.document.state.settings.durationFrames/data.document.state.settings.fps?{durationSeconds:Number($("m-seconds").value)}:{}),width:Number($("m-width").value),height:Number($("m-height").value)});
+        data.document=result.document;
+        frame=Math.round(playheadSeconds*data.document.state.settings.fps);
+        refresh(true);
+        $("m-job").textContent=(result.warnings??[]).join(" ") || "Параметры видео сохранены.";
+      })();
+      try{await settingsPending;}finally{settingsPending=undefined;$("m-settings").disabled=false;$("m-generate").disabled=busy;}
     });
     $("m-read-response").onclick = guarded(async () =>
       showExecution(

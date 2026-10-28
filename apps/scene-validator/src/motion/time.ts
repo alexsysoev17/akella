@@ -19,3 +19,11 @@ export function dependencyStart(target: {durationFrames:number}, anchor: {startF
   intervalEnd(anchor); safeFrame(offset);
   return safeFrame(anchor.startFrame + (relation === "after" ? anchor.durationFrames : relation === "endWith" ? anchor.durationFrames-target.durationFrames : relation === "before" ? -target.durationFrames : 0) + offset);
 }
+
+export const timingMeasureSchema = z.object({unit:z.enum(["frames","seconds"]),value:z.number().finite(),secondsOffset:z.number().finite().optional()}).strict();
+export const timingOriginSchema = z.object({
+  entity:z.enum(["animation","expression","transition","block","dependency","scene","output"]), id:z.string().min(1),
+  basis:z.enum(["semantic","legacyPreserveSeconds","manual","framePolicy"]).optional(),
+  start:timingMeasureSchema.optional(), duration:timingMeasureSchema.optional(), offset:timingMeasureSchema.optional(),
+  keys:z.array(timingMeasureSchema).optional(),stagger:timingMeasureSchema.optional(),lookback:timingMeasureSchema.optional(),
+}).strict();

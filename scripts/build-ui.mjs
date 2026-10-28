@@ -108,3 +108,5 @@ await cp(
     import.meta.url,
   ),
 );
+
+await cp(new URL("../apps/scene-validator/src/harness/providers/codex-stream-proxy.mjs",import.meta.url),new URL("../apps/scene-validator/dist/src/harness/providers/codex-stream-proxy.mjs",import.meta.url));

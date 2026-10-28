@@ -30,6 +30,8 @@ const components = [
   "motion/constraints",
   "motion/intervals",
   "motion/time",
+  "motion/project-time",
+  "harness/providers/codex-stream-proxy.mjs",
   "motion/presentation-lifetime",
   "harness/recovery/source-context",
   "motion/tool-runtime",
@@ -124,7 +126,7 @@ export async function codeVersions(
       ids.map(async (id) => {
         let content: string;
         try {
-          content = await readFile(new URL(id + ".ts", base), "utf8");
+          content = await readFile(new URL(id.endsWith(".mjs")?id:id + ".ts", base), "utf8");
         } catch (e) {
           if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
           try {

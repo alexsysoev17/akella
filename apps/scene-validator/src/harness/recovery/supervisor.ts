@@ -91,6 +91,9 @@ export class GlobalFailureSupervisor {
   const event=await this.observe(error,stage,detail);
   const root=(this.report.events.find(e=>e.id===event.rootEventId)??(this.report.originalFailure?.id===event.rootEventId?this.report.originalFailure:undefined))??event;
   const diagnosis=diagnoseFailure(root);
+  if(['TRANSPORT','PROVIDER_TRANSPORT_ERROR','PROVIDER_EVENT_PARSE_ERROR'].includes(root.errorCode) && this.report.attempts.some(a=>a.procedure==='bounded-provider-transport-retry/1'&&a.status==='FAILED')){
+    this.report.status='RECOVERY_EXHAUSTED';this.report.finalReason='Provider transport remained invalid after one budgeted retry of the immutable request; no project operations applied. Inspect original event envelope and child failure.';await this.save();return this.report;
+  }
   if(this.persistenceFailure)return this.report;
   if(this.terminalInvestigations.has(event.failureFingerprint)){this.report.finalReason='Identical terminal failure already investigated';await this.save();return this.report;}
   this.terminalInvestigations.add(event.failureFingerprint);this.busy=true;

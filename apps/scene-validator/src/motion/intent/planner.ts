@@ -63,6 +63,8 @@ Use moveTo with moveToCenter=true for moving to canvas center; offsets x/y are n
 export { semanticContext } from "../../harness/semantic-context.js";
 import { semanticContext } from "../../harness/semantic-context.js";
 export function semanticFailureCategory(error: unknown) {
+  if((error as {code?:string})?.code === "PROVIDER_EVENT_PARSE_ERROR")return "PROVIDER_EVENT_FAILURE";
+  if((error as {code?:string})?.code === "PROVIDER_JSON_INVALID")return "PROVIDER_JSON_FAILURE";
   if((error as {code?:string})?.code === "CONTEXT_EXHAUSTED")return "CONTEXT_ADMISSION_FAILURE";
   if((error as {code?:string})?.code === "OUTPUT_TRUNCATED")return "PROVIDER_OUTPUT_LIMIT";
   if((error as {code?:string})?.code === "VALIDATOR_SCOPE_CONTRADICTION")return "VALIDATOR_DEFECT";

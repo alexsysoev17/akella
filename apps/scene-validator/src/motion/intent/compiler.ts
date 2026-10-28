@@ -1003,6 +1003,21 @@ export function compileRequirement(
       }
     }
   }
+  const r = reqs[0], fps = state.settings.fps;
+  if(task.kind==="sceneTiming")for(const requirement of reqs.filter(r=>r.timing.startUnit))operations.push({type:"setTimingOrigin",origin:{entity:"scene",id:requirement.sceneId!,basis:"semantic",start:{unit:requirement.timing.startUnit??"seconds",value:requirement.timing.startUnit==="frames"?Math.round(requirement.timing.startSeconds!*fps):requirement.timing.startSeconds!}}});
+
+  for (const op of [...operations]) {
+    if(!r.timing.startUnit && !r.timing.delayUnit)continue;
+    if(op.type === "addAnimation" || op.type === "updateAnimation" || op.type === "setExpression" || op.type === "animateObjectStateTransition") {
+      const item=op.type === "animateObjectStateTransition" ? op : op.type === "setExpression" ? op.expression : op.animation;
+      const entity=op.type === "animateObjectStateTransition" ? "transition" as const : op.type === "setExpression" ? "expression" as const : "animation" as const;
+      const id="animationId" in item ? item.animationId : "expressionId" in item ? item.expressionId : item.transitionId;
+      if(op.type !== "updateAnimation")operations.push({type:"setTimingOrigin",origin:{entity,id,basis:"semantic",
+        start:{unit:r.timing.startUnit??"seconds",value:r.timing.startUnit==="frames"?item.startFrame:item.startFrame/fps},
+        duration:{unit:"seconds",value:item.durationFrames/fps}}});
+    }
+    if(op.type === "setTimingDependency")operations.push({type:"setTimingOrigin",origin:{entity:"dependency",id:op.dependency.dependencyId,basis:"semantic",offset:{unit:r.timing.delayUnit??"seconds",value:r.timing.delayUnit==="frames"?(r.timing.frameDelay??op.dependency.offsetFrames):op.dependency.offsetFrames/fps,...(r.timing.frameDelay!=null?{secondsOffset:(op.dependency.offsetFrames-r.timing.frameDelay)/fps}:{})}}});
+  }
   return {
     status: "ready",
     summary: "Исполнено требование: " + task.userIntent,

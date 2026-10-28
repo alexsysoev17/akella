@@ -1,3 +1,4 @@
+import {refreshTimingOrigins} from "../project-time.js";
 import { requiredProjectFrames, TimelineConstraintError } from "../constraints.js";
 import { MotionToolError, motionStateDigest } from "../tools.js";
 import { failureCategory, infrastructureFailure } from "../qa/failure.js";
@@ -168,11 +169,19 @@ export function assertIntentScope(
       ...(next.objectTransitions ?? []).filter(allowedTransition),
     ];
   }
+  const allowedOrigin = (origin:NonNullable<MotionState["timingOrigins"]>[number]) =>
+    origin.entity === "animation" ? allowedIds.has(origin.id) :
+    origin.entity === "expression" ? [...(before.expressions??[]),...(next.expressions??[])].some(e=>e.expressionId===origin.id&&exprAllowed(e)) :
+    origin.entity === "transition" ? [...(before.objectTransitions??[]),...(next.objectTransitions??[])].some(t=>t.transitionId===origin.id&&t.logicalObjectId===r.target.logicalObjectId&&r.techniques.includes("objectStateTransition")) :
+    origin.entity === "dependency" ? [...(baseline.timingDependencies??[])].some(d=>d.dependencyId===origin.id&&allowedIds.has(d.animationId)) : false;
+  if(before.timingOrigins || next.timingOrigins) baseline.timingOrigins=[...(before.timingOrigins??[]).filter(o=>!allowedOrigin(o)),...(next.timingOrigins??[]).filter(allowedOrigin)];
   const scoped = structuredClone(baseline);
   resolveTimingDependencies(scoped);
   reanchorExpressions(scoped, before, new Set((scoped.expressions ?? []).filter(exprAllowed).map(e=>e.expressionId)));
+  refreshTimingOrigins(before,scoped,new Set((scoped.timingOrigins??[]).filter(allowedOrigin).map(o=>o.entity+":"+o.id)));
   const canonical = (s: MotionState) => ({
     ...s,
+    ...(s.timingOrigins?{timingOrigins:[...s.timingOrigins].sort((a,b)=>(a.entity+a.id).localeCompare(b.entity+b.id))}:{}),
     expressions: [...(s.expressions ?? [])].sort((a, b) =>
       a.expressionId.localeCompare(b.expressionId),
     ),

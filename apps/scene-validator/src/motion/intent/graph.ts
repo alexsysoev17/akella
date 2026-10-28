@@ -275,6 +275,9 @@ export function normalizeSemanticGraph(
           offsetPolicy: action.delayPolicy,
           align: action.align,
           startSeconds,
+          startUnit: action.start?.unit,
+          delayUnit: action.delayFrames != null ? "frames" : action.delaySeconds != null ? "seconds" : undefined,
+          frameDelay: action.delayFrames,
           relation:
             action.relation ??
             (action.dependsOn

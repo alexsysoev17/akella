@@ -1,3 +1,4 @@
+import {projectTime} from "./project-time.js";
 import {runtimeCode} from "../runtime-code.js";
 import {deferRecovery,drainRecoveries} from "../harness/recovery/jobs.js";
 import type {IntentPlan} from "./intent/schema.js";
@@ -90,6 +91,7 @@ export async function projectMotion(project: LoadedProject) {
   const registry = await ensureRegistry(project);
   return {
     document,
+    time: projectTime(document.state,document.revision),
     renderer: renderingMode(),
     registry,
     diagnostics: [
@@ -378,6 +380,7 @@ export async function proposeMotion(
       doc,
     ).slice(0, 5);
     enrichedContext.projectRevision = doc.revision;
+    enrichedContext.project = {...(enrichedContext.project as Record<string,unknown>), time:projectTime(doc.state,doc.revision)};
     enrichedContext.selectedObjectIds =
       request.selectedObjectIds ??
       (request.selectedObjectId ? [request.selectedObjectId] : []);
@@ -755,6 +758,7 @@ export async function proposeMotion(
           reconciliation: generated.reconciliation,
           status: generated.reconciliation.completed ? "applied" : "failed",
           document: committed,
+          time: projectTime(committed.state,committed.revision),
           playbackStart: starts.length ? Math.min(...starts) : 0,
           taskExecution: true,
           persistence: {

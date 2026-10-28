@@ -187,7 +187,7 @@ export class HarnessRun {
     });
     await this.persist("RUNNING");
   }
-  async invoke(adapter: ProviderAdapter, request: ProviderRequest) {
+  async invoke(adapter: ProviderAdapter, request: ProviderRequest, transportRetried = false): Promise<ProviderResponse> {
     this.phase = "provider-startup";
     this.providerInitializationStatus = "ADAPTER_READY";
     const reservedRecovery=request.purpose==="semantic-recovery"||request.purpose==="project-recovery";
@@ -356,18 +356,25 @@ export class HarnessRun {
       this.phase = request.purpose ?? "semantic-planning";
       return { ...result, callIndex: this.calls.indexOf(call) + 1 };
     } catch (e) {
-      await this.supervisor.observe(e,request.purpose??"provider-call",{evidence:[{provider:adapter.id,requestBytes:call.requestBytes,stack:e instanceof Error?e.stack:undefined}]});
+      const event = await this.supervisor.observe(e,request.purpose??"provider-call",{evidence:[{provider:adapter.id,requestBytes:call.requestBytes,stack:e instanceof Error?e.stack:undefined}]});
       call.status = String(e);
+      call.latencyMs = performance.now()-start;
       this.providerInitializationStatus = "CALL_FAILED";
+      const code = (e as {code?:string})?.code;
+      if (!transportRetried && !this.signal.aborted && ["TRANSPORT","PROVIDER_TRANSPORT_ERROR","PROVIDER_EVENT_PARSE_ERROR"].includes(code ?? "") && this.calls.length < this.config.maxLLMCalls) {
+        const recovery = await this.supervisor.attempt(event, {strategy:"deterministic",procedure:"bounded-provider-transport-retry/1",reason:"One transient transport retry against the identical immutable request; normal call/time/context budgets still apply",run:()=>this.invoke(adapter,request,true),verify:async result=>({status:"PASSED",responseReceived:true,callIndex:result.callIndex})});
+        if (recovery.ok) return recovery.value!;
+        throw recovery.error;
+      }
       throw e;
     } finally {
-      call.latencyMs = performance.now() - start;
+      if(!call.latencyMs)call.latencyMs = performance.now() - start;
       this.events.push({
         stage: "provider-completed",
         at: new Date().toISOString(),
         durationMs: performance.now() - this.started,
         data: {
-          callIndex: this.calls.length,
+          callIndex: this.calls.indexOf(call) + 1,
           provider: adapter.id,
           status: call.status,
           latencyMs: call.latencyMs,

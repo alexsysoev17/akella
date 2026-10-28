@@ -1,4 +1,4 @@
-import {globalFrameSchema, intervalDurationSchema, nonnegativeFrameSchema, coordinateSchema, MAX_FLOAT32} from "./time.js";
+import {timingOriginSchema, globalFrameSchema, intervalDurationSchema, nonnegativeFrameSchema, coordinateSchema, MAX_FLOAT32} from "./time.js";
 import { presetIdSchema } from "../motion-library/presets/registry.js";
 import { z } from "zod";
 const id = z.string().min(1).max(180);
@@ -190,6 +190,7 @@ export const blockSchema = z
 export const settingsSchema = z
   .object({
     fps: z.number().int().min(1).max(60),
+    timelineModel: z.literal("independentOutput").optional(),
     width: z.number().int().min(2).max(4096),
     height: z.number().int().min(2).max(4096),
     durationFrames: outputDuration,
@@ -242,6 +243,7 @@ export const timingDependencySchema = z
 export const motionSchema = z
   .object({
     schemaVersion: z.literal("1.0.0"),
+    timingOrigins: z.array(timingOriginSchema).max(20000).optional(),
     sceneAnchors: z.array(z.object({sceneId:id,startFrame:frame}).strict()).max(1000).optional(),
     staticObjects: z.array(z.object({ logicalObjectId: id, sceneId: id, targetId: id }).strict()).max(1000).optional(),
     settings: settingsSchema,
@@ -259,6 +261,9 @@ export const motionSchema = z
   .strict();
 const animRef = { animationId: id };
 export const operationSchema = z.discriminatedUnion("type", [
+  z.object({type:z.literal("setProjectTime"),fps:z.number().int().min(1).max(60).optional(),durationSeconds:z.number().positive().max(108000).optional(),fpsPolicy:z.enum(["preserveSeconds","preserveFrames"]).optional(),width:z.number().int().min(2).max(4096).optional(),height:z.number().int().min(2).max(4096).optional()}).strict(),
+  z.object({type:z.literal("setTimingOrigin"),origin:timingOriginSchema}).strict(),
+
   z.object({ type: z.literal("setStaticObject"), object: z.object({ logicalObjectId: id, sceneId: id, targetId: id }).strict() }).strict(),
   z.object({ type: z.literal("removeStaticObject"), logicalObjectId: id }).strict(),
   z

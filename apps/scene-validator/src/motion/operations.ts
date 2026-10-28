@@ -1,3 +1,4 @@
+import {updateProjectTime,refreshTimingOrigins} from "./project-time.js";
 import { requiredProjectFrames, TimelineConstraintError } from "./constraints.js";
 import { intervalConflict } from "./intervals.js";
 import { retimeScenes, resolveTimingDependencies, reanchorExpressions } from "./intent/retime.js";
@@ -177,14 +178,14 @@ export function validateMotion(
     if (blockIds.has(b.blockId)) throw new Error("Повтор blockId");
     blockIds.add(b.blockId);
     if (!sceneIds.has(b.sceneId)) throw new Error("Неизвестная сцена блока");
-    if (b.startFrame + b.durationFrames > state.settings.durationFrames)
+    if (state.settings.timelineModel !== "independentOutput" && b.startFrame + b.durationFrames > state.settings.durationFrames)
       throw new Error("Блок выходит за длительность ролика");
     if (b.transition.type === "cut" && b.transition.durationFrames !== 0)
       throw new Error("Cut должен иметь длительность перехода 0");
     const next = blocks[i + 1];
     if (!next) {
       if (
-        (state.settings.tailPolicy === "holdLastScene" ? b.startFrame + b.durationFrames > state.settings.durationFrames : b.startFrame + b.durationFrames !== state.settings.durationFrames) ||
+        (state.settings.timelineModel !== "independentOutput" && (state.settings.tailPolicy === "holdLastScene" ? b.startFrame + b.durationFrames > state.settings.durationFrames : b.startFrame + b.durationFrames !== state.settings.durationFrames)) ||
         b.transition.durationFrames !== 0
       )
         throw new Error(
@@ -249,6 +250,12 @@ export function applyOperations(
     if ("blockId" in op && !block)
       throw new Error(`Блок не найден: ${op.blockId}`);
     switch (op.type) {
+      case "setProjectTime":
+        updateProjectTime(state, op);
+        break;
+      case "setTimingOrigin":
+        state.timingOrigins=[...(state.timingOrigins??[]).filter(o=>o.entity!==op.origin.entity||o.id!==op.origin.id),op.origin];
+        break;
       case "setStaticObject":
         state.staticObjects = [...(state.staticObjects ?? []).filter(o => o.logicalObjectId !== op.object.logicalObjectId), op.object];
         break;
@@ -473,7 +480,7 @@ export function applyOperations(
   const unscheduled = structuredClone(state);
   resolveTimingDependencies(state, explicitStarts, explicitEdges);
   const explicitEffects=new Set(ops.filter(op=>op.type==="setExpression").filter(op=>op.expression.startFrame!==previous.expressions?.find(e=>e.expressionId===op.expression.expressionId)?.startFrame).map(op=>op.expression.expressionId));
-  reanchorExpressions(state, previous, explicitEffects);
+  reanchorExpressions(state, ops.some(op=>op.type==="setProjectTime") ? unscheduled : previous, explicitEffects);
   // Explicit effect timestamps were compiled against the unscheduled candidate.
   // Account for any further transitive anchor movement exactly once.
   const scheduledEffects = { ...state, expressions: state.expressions?.filter(e=>explicitEffects.has(e.expressionId)) };
@@ -489,6 +496,7 @@ export function applyOperations(
     throw new Error(
       "ANIMATION_HAS_DEPENDENT_EXPRESSION: remove the expression explicitly first",
     );
+  if(!ops.some(op=>op.type==="setProjectTime"))refreshTimingOrigins(previous,state,new Set(ops.filter(op=>op.type==="setTimingOrigin").map(op=>op.origin.entity+":"+op.origin.id)));
   return validateMotion(state, project);
 }
 export function motionDiff(before: MotionState, after: MotionState) {

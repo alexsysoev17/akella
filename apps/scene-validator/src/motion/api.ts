@@ -1,3 +1,4 @@
+import {projectTime} from "./project-time.js";
 import {runtimeCode} from "../runtime-code.js";
 import {recoveryJobs,cancelRecovery} from "../harness/recovery/jobs.js";
 import {reviewForApproval,approveCodeRepair,sourcePromotionBusy} from "../harness/recovery/promotion.js";
@@ -563,6 +564,13 @@ export async function motionApi(
       if (qa.status === "FAILED") throw new MotionFailure(qa);
       json(await changeMotion(project.root, data));
       return true;
+    }
+    if(action === "settings") {
+      const settingsInput=z.object({expectedRevision:z.string(),fps:z.number().int().min(1).max(60),durationSeconds:z.number().positive().optional(),width:z.number().int().min(2).max(4096),height:z.number().int().min(2).max(4096),fpsPolicy:z.enum(["preserveSeconds","preserveFrames"]).optional()}).strict().parse(input);
+      const {expectedRevision,...change}=settingsInput;
+      const result=await changeMotion(project.root,{expectedRevision,request:"Изменить длительность/FPS",operations:[{type:"setProjectTime",...change}]});
+      const time=projectTime(result.document.state,result.document.revision);
+      json({...result,time,warnings:[...time.warnings,...(result.diff.some(d=>d.path==="settings.fps")&&time.migration.legacyOriginCount?["Для старых временных данных без исходных единиц сохранено время в секундах. Явно заданные покадровые задержки сохранены в кадрах."]:[])]});return true;
     }
     if (action === "undo" || action === "redo") {
       const data = z
