@@ -31,6 +31,7 @@ const components = [
   "motion/intervals",
   "motion/time",
   "motion/project-time",
+  "motion/text-clearance",
   "harness/providers/codex-stream-proxy.mjs",
   "motion/presentation-lifetime",
   "harness/recovery/source-context",

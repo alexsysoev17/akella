@@ -1,3 +1,4 @@
+import {textViewportOffset} from "./text-clearance.js";
 import { configureTextPlane } from "./text-transport.js";
 import { snapshotText, type TextLayout, type TextUnit } from "./text-layout.js";
 import type { Animation, MotionState } from "./schema.js";
@@ -215,31 +216,8 @@ export function applyTextAnimation(
               unit.bounds.y + unit.bounds.height,
             ],
           ].map(([x, y]) => new DOMPoint(x, y).matrixTransform(ctm));
-          const delta =
-            a.effect === "slideDown"
-              ? { x: 0, y: box.y - Math.max(...corners.map((p) => p.y)) - 1 }
-              : a.effect === "slideUp"
-                ? {
-                    x: 0,
-                    y:
-                      box.y +
-                      box.height -
-                      Math.min(...corners.map((p) => p.y)) +
-                      1,
-                  }
-                : a.effect === "slideRight"
-                  ? {
-                      x: box.x - Math.max(...corners.map((p) => p.x)) - 1,
-                      y: 0,
-                    }
-                  : {
-                      x:
-                        box.x +
-                        box.width -
-                        Math.min(...corners.map((p) => p.x)) +
-                        1,
-                      y: 0,
-                    };
+          const mode = "mode" in a.parameters ? a.parameters.mode : "in";
+          const delta = textViewportOffset(corners,box,a.effect,mode);
           const inv = ctm.inverse();
           const local = {
             x: inv.a * delta.x + inv.c * delta.y,
@@ -247,7 +225,7 @@ export function applyTextAnimation(
           };
           Object.assign(copy, {
             effect: "moveTo",
-            parameters: { fromX: local.x, fromY: local.y, toX: 0, toY: 0 },
+            parameters: mode === "out" ? {fromX:0,fromY:0,toX:local.x,toY:local.y} : { fromX: local.x, fromY: local.y, toX: 0, toY: 0 },
           });
         }
       }

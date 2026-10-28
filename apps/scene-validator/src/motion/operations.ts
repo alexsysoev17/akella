@@ -1,3 +1,4 @@
+import {textLayoutContract} from "../motion-library/techniques/text.js";
 import {updateProjectTime,refreshTimingOrigins} from "./project-time.js";
 import { requiredProjectFrames, TimelineConstraintError } from "./constraints.js";
 import { intervalConflict } from "./intervals.js";
@@ -135,7 +136,7 @@ export function validateMotion(
         b.sceneId === a.sceneId &&
         b.text &&
         b.text.segmentation !== "block" &&
-        JSON.stringify(a.text) !== JSON.stringify(b.text),
+        textLayoutContract(a.text!) !== textLayoutContract(b.text),
     );
     if (other)
       throw new Error(

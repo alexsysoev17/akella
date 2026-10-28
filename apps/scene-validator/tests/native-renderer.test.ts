@@ -753,3 +753,28 @@ test("native SVG asset decoding rejects external relative file references", asyn
     await f.cleanup();
   }
 });
+
+test("segmented local entrance and offscreen exit share typography while the exit moves outward and fades", async()=>{
+ const f=await fixture();
+ try{
+  const {applyOperations}=await import('../src/motion/operations.js');
+  const base={...f.state,settings:{...f.state.settings,width:320,height:240,durationFrames:48},blocks:f.state.blocks.map(b=>({...b,durationFrames:48}))};
+  const entry={...slide('line'),durationFrames:12,text:{...slide('line').text!,timing:'staggered' as const,staggerFrames:3}};
+  const exit={...entry,animationId:'exit',effect:'slideLeft' as const,startFrame:24,parameters:{distance:100,mode:'out' as const},text:{...entry.text!,origin:'outsideViewport' as const}};
+  const fade={...entry,animationId:'fade',effect:'fadeIn' as const,parameters:{from:0,to:1}};
+  const fadeOut={...exit,animationId:'fade-out',effect:'fadeOut' as const,parameters:{from:1,to:0}};
+  const state=applyOperations(base,[{type:'addAnimation',animation:entry},{type:'addAnimation',animation:fade},{type:'addAnimation',animation:exit},{type:'addAnimation',animation:fadeOut}],f.project);
+  const settled=await renderNativeFrame(f.project,state,12),start=await renderNativeFrame(f.project,state,24),middle=await renderNativeFrame(f.project,state,30),end=await renderNativeFrame(f.project,state,36);
+  assert.deepEqual(start.png,settled.png,'exit holds the settled pose until its start');
+  assert.ok(middle.text[0].offsets.every(o=>o.x<0&&o.y===0&&o.opacity>0&&o.opacity<1));
+  assert.notEqual(middle.text[0].offsets[0].opacity,middle.text[0].offsets[1].opacity,"line stagger is evaluated per unit during exit");
+  assert.ok(end.text[0].offsets.every(o=>o.opacity===0));
+  end.text[0].lines.forEach((line,i)=>assert.ok(45.25+line.x+line.width+end.text[0].offsets[i].x<0,'each shaped line clears the left viewport edge'));
+  assert.deepEqual((await renderNativeFrame(f.project,state,24)).png,start.png,'random seeking does not retain exit transforms');
+  assert.throws(()=>applyOperations(state,[{type:'updateAnimation',animationId:'exit',animation:{...exit,text:{...exit.text,origin:'masked'}}}],f.project),/TEXT_SEGMENT_SETTINGS_CONFLICT/);
+  assert.throws(()=>applyOperations(state,[{type:'updateAnimation',animationId:'exit',animation:{...exit,text:{...exit.text,segmentation:'word'}}}],f.project),/TEXT_SEGMENT_SETTINGS_CONFLICT/);
+  const saved=await readMotion(f.project);await changeMotion(f.project.root,{expectedRevision:saved.revision,request:'line entrance and exit',operations:[{type:'setProjectSettings',settings:state.settings},{type:'setBlocks',blocks:state.blocks},...state.animations.map(animation=>({type:'addAnimation' as const,animation}))]});
+  const video=await exportVideo(f.project.root,()=>{},{renderer:'native'});assert.ok('frameDigests' in video);
+  assert.equal(video.frameDigests.find(d=>d.frame===24)?.sha256,createHash('sha256').update((await renderProjectFrame(f.project,24,{encoding:'rgba'})).png).digest('hex'));
+ }finally{await closeNativeRenderer();await f.cleanup();}
+});

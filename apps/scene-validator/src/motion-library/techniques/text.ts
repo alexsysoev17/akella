@@ -28,3 +28,9 @@ export function resolveTextSettings(
     ),
   };
 }
+
+/** Local/offscreen origins are per-track translation policies over the same
+ * shaped plane. Masked origin changes the compositor topology and cannot mix. */
+export function textLayoutContract(text: NonNullable<Animation["text"]>) {
+  return JSON.stringify({...text,origin:text.origin === "masked" ? "masked" : "unmasked"});
+}

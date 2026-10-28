@@ -1,3 +1,4 @@
+import {textViewportOffset} from "../motion/text-clearance.js";
 import {buildRegistry} from "../motion/registry.js";
 import {motionPresentationHosts} from "../motion/presentation-lifetime.js";
 import {MAX_FLOAT32} from "../motion/time.js";
@@ -779,31 +780,13 @@ export class NativeRenderer {
                       x: world[0][0] * x + world[0][1] * y + world[0][2],
                       y: world[1][0] * x + world[1][1] * y + world[1][2],
                     }));
-                    const dx =
-                        a.effect === "slideRight"
-                          ? -Math.max(...corners.map((p) => p.x)) - 1
-                          : a.effect === "slideLeft"
-                            ? state.settings.width -
-                              Math.min(...corners.map((p) => p.x)) +
-                              1
-                            : 0,
-                      dy =
-                        a.effect === "slideDown"
-                          ? -Math.max(...corners.map((p) => p.y)) - 1
-                          : a.effect === "slideUp"
-                            ? state.settings.height -
-                              Math.min(...corners.map((p) => p.y)) +
-                              1
-                            : 0,
-                      inv = inverse(world);
+                    const mode = "mode" in a.parameters ? a.parameters.mode : "in";
+                    const delta=textViewportOffset(corners,{x:0,y:0,width:state.settings.width,height:state.settings.height},a.effect,mode);
+                    const inv=inverse(world);
+                    const local={x:inv[0][0]*delta.x+inv[0][1]*delta.y,y:inv[1][0]*delta.x+inv[1][1]*delta.y};
                     Object.assign(copy, {
                       effect: "moveTo",
-                      parameters: {
-                        fromX: inv[0][0] * dx + inv[0][1] * dy,
-                        fromY: inv[1][0] * dx + inv[1][1] * dy,
-                        toX: 0,
-                        toY: 0,
-                      },
+                      parameters: mode === "out" ? {fromX:0,fromY:0,toX:local.x,toY:local.y} : {fromX:local.x,fromY:local.y,toX:0,toY:0},
                     });
                   }
                   return copy;
