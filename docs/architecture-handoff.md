@@ -6,9 +6,9 @@
 |---|---|
 | Last Updated | 2026-10-29 (Europe/Moscow) — Motion Skills2 contracts/catalogue, native text handoff collision QA and bounded repair; targeted update, not a full audit |
 | Last Full Audit | 2026-10-13; unchanged, this update is not a full renderer/provider audit |
-| Git Commit | Baseline `84d6105`; local checkpoint `bb36bed` before Skills2 work. v1.1.11 changes uncommitted at this documentation snapshot. |
+| Git Commit | Implementation `54099fe`, checkpoint `bb36bed`. UI-only copy/accent polish pending at this documentation snapshot. |
 | Git Branch | `temporal-recovery-loop`, local only |
-| Working Tree Status | Clean at start; Skills2 source/tests/docs pending. No original client Motion State or Figma data modified. Real-scene rendering uses an isolated controlled fixture. |
+| Working Tree Status | Main implementation committed; UI-only Russian copy and monochrome control polish pending. No original client Motion State or Figma data modified. |
 | Documentation Version | 1.1.11 |
 | Scope of Last Update | Unified skill contracts and library UI; semantic role binding; Text Handoff native glyph coverage, safe temporal correction, persistence/FPS/cancellation and Inspector. Existing primitive evaluators retained. |
 | Code snapshot SHA-256 | NOT RECALCULATED; refer to component digests and final source commit. |
@@ -2427,3 +2427,5 @@ Ignored evidence: `data/harness/reports/skills-2026-10-29/` contains qa.json, fi
 Architecture Change History: v1.1.11 — shared Skills catalogue/contracts/executor, semantic role bindings, native visible glyph collision probes, bounded temporal repair, explicit placement, persisted skill constraints and async commit cancellation. Existing primitive registries/compiler/easing/shaping/renderer/history reused; optional fields only, no old project migration or user source modification. Partial audit, not a full architecture re-audit.
 
 Final v1.1.11 verification: `npm run check` exit0, **433/433** (358 base/integration,2 existing browser,73 native), TypeScript/build PASSED.18 new native test groups include the9combination FPS/text matrix and real Chromium/API/production mock execution. Failed skill QA is persisted, with no second provider call and no candidate commit. Temporary experimental formatting/schema/demo errors were fixed; no existing test or tolerance was weakened. Real fixture/video and exact full-resolution crop verification PASSED; live-provider understanding NOT VERIFIED (zero new external calls). Source was frozen for this final full check.
+
+Post-implementation UI-only polish: Russian handoff description and currentColor range accent (no system blue). Final TypeScript/build and focused Chromium catalogue/demo/API test PASSED. Animation mathematics, contract fields and operations unchanged after the433-test full pass.
