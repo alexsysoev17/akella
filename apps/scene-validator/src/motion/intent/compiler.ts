@@ -1,3 +1,4 @@
+import {compileSemanticEdit} from "../rules.js";
 import { TimelineConstraintError } from "../constraints.js";
 import { freezeObjectOperations } from "../static-object.js";
 import { statePresentation } from "../transitions.js";
@@ -326,6 +327,7 @@ export function compileRequirement(
     );
   const operations: Plan["operations"] = [],
     warnings: string[] = [];
+  if(reqs[0]?.semanticEdit)return {status:"ready",summary:"Инкрементальная правка правил движения",assumptions:[],warnings:[],operations:compileSemanticEdit(project,state,reqs[0].semanticEdit,reqs[0].sourceText,reqs[0].target.logicalObjectId??undefined)};
   if (reqs[0]?.motionAction === "freezeProject") return { status: "ready", summary: "Объект зафиксирован на весь ролик", assumptions: [], warnings: [], operations: freezeObjectOperations(project, state, reqs[0].target.logicalObjectId!) };
   if (reqs[0]?.kind === "objectAnimation" && state.staticObjects?.some(o => o.logicalObjectId === reqs[0].target.logicalObjectId))
     operations.push({type:"removeStaticObject",logicalObjectId:reqs[0].target.logicalObjectId!});

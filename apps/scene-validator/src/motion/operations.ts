@@ -1,3 +1,4 @@
+import {materializeRules} from "./rules.js";
 import {textLayoutContract} from "../motion-library/techniques/text.js";
 import {updateProjectTime,refreshTimingOrigins} from "./project-time.js";
 import { requiredProjectFrames, TimelineConstraintError } from "./constraints.js";
@@ -243,6 +244,14 @@ export function applyOperations(
 ): MotionState {
   const ops = operationsSchema.parse(input),
     state = structuredClone(previous);
+  // An owned compiled field must never be silently overwritten by rematerialization.
+  // Semantic rule editing emits setMotionRule; low-level clients must use that contract too.
+  for(const op of ops){
+    const entity=op.type==="setExpression"?op.expression.expressionId:op.type==="removeExpression"||op.type==="scaleExpressionParameter"?op.expressionId:undefined;
+    if(entity&&previous.ruleMaterializations?.some(m=>m.entity==="expression"&&m.id===entity))throw Error("RULE_OWNED_EFFECT: edit its rule or add an explicit object exception");
+    const animationId="animationId" in op?op.animationId:undefined;
+    if(animationId&&(op.type==="setEasing"||op.type==="updateAnimation")&&previous.ruleMaterializations?.some(m=>m.entity==="animation"&&m.id===animationId&&m.before&&"easing" in (m.before as object)))throw Error("RULE_OWNED_EASING: use a scoped motion rule override");
+  }
   for (const op of ops) {
     const animation =
       "animationId" in op
@@ -257,6 +266,8 @@ export function applyOperations(
     if ("blockId" in op && !block)
       throw new Error(`Блок не найден: ${op.blockId}`);
     switch (op.type) {
+      case "setMotionRule": state.motionRules=[...(state.motionRules??[]).filter(r=>r.ruleId!==op.rule.ruleId),op.rule];break;
+      case "removeMotionRule":state.motionRules=state.motionRules?.filter(r=>r.ruleId!==op.ruleId);break;
       case "setSkillApplication": state.skillApplications=[...(state.skillApplications??[]).filter(a=>a.applicationId!==op.application.applicationId),op.application];break;
       case "removeSkillApplication": state.skillApplications=state.skillApplications?.filter(a=>a.applicationId!==op.applicationId);break;
       case "setProjectTime":
@@ -507,6 +518,7 @@ export function applyOperations(
     );
   if(!ops.some(op=>op.type==="setProjectTime"))refreshTimingOrigins(previous,state,new Set(ops.filter(op=>op.type==="setTimingOrigin").map(op=>op.origin.entity+":"+op.origin.id)));
   for(const app of state.skillApplications??[])if(app.enabled&&[...app.outgoing.animationIds,...app.incoming.animationIds].some(id=>!state.animations.some(a=>a.animationId===id&&a.enabled)))app.enabled=false;
+  materializeRules(state,project);
   return validateMotion(state, project);
 }
 export function motionDiff(before: MotionState, after: MotionState) {
@@ -539,6 +551,8 @@ export function motionDiff(before: MotionState, after: MotionState) {
     after.objectTransitions ?? [],
     "objectTransitions",
   );
+  diff(before.motionRules??[],after.motionRules??[],"motionRules");
+  diff(before.ruleMaterializations??[],after.ruleMaterializations??[],"ruleMaterializations");
   diff(before.skillApplications??[],after.skillApplications??[],"skillApplications");
   for (const id of new Set(
     [...before.animations, ...after.animations].map((a) => a.animationId),

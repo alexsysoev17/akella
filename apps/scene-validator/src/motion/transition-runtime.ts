@@ -1,3 +1,4 @@
+import {transitionOffsetMatrix} from "./geometry.js";
 import { evaluateEasing } from "../motion-library/easings/registry.js";
 import type { MotionState, ObjectTransition } from "./schema.js";
 import {
@@ -169,7 +170,7 @@ export function applyObjectTransitions(
         continue;
       // Parent * wrapper * local = interpolated canvas transform / geometry dimensions.
       const offset = effects[t.transitionId] ?? {};
-      const visual = multiply([[1, 0, offset.x ?? 0], [0, 1, offset.y ?? 0]], v.matrix);
+      const visual = transitionOffsetMatrix(v.matrix,offset);
       const wrapper = multiply(
         multiply(multiply(inverse(current.parentCanvas), visual), [
           [1 / current.width, 0, 0],

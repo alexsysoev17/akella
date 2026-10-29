@@ -229,6 +229,7 @@ export async function changeMotion(
       const {prepareSkill}=await import("../motion-library/skills/runtime.js");
       for(const app of doc.state.skillApplications.filter(a=>a.enabled))await prepareSkill(project,doc.state,app,{repair:false,signal:input.signal,beforeRender:input.checkpoint});
     }
+    if(doc.state.motionRules?.length||before.motionRules?.length){const {ruleQA}=await import("./rule-qa.js");const qa=await ruleQA(project,doc.state,before,input.signal,input.checkpoint);if(qa.status!=="PASSED")throw Object.assign(Error("MOTION_RULE_QA_FAILED"),{report:qa});}
     const previousRevision = doc.revision;
     doc.revision = randomUUID();
     if (input.transactionId)

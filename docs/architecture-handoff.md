@@ -4,13 +4,13 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-29 (Europe/Moscow) — Motion Skills2 contracts/catalogue, native text handoff collision QA and bounded repair; targeted update, not a full audit |
+| Last Updated | 2026-10-29 (Europe/Moscow) — persistent semantic motion rules, incremental overrides and native transform composition; targeted update, not a full audit |
 | Last Full Audit | 2026-10-13; unchanged, this update is not a full renderer/provider audit |
-| Git Commit | Implementation `54099fe`, checkpoint `bb36bed`. UI-only copy/accent polish pending at this documentation snapshot. |
+| Git Commit | Baseline `f82ad22`; local checkpoint `9add7db`. Rule implementation is an uncommitted working-tree update at this documentation snapshot. |
 | Git Branch | `temporal-recovery-loop`, local only |
-| Working Tree Status | Main implementation committed; UI-only Russian copy and monochrome control polish pending. No original client Motion State or Figma data modified. |
-| Documentation Version | 1.1.11 |
-| Scope of Last Update | Unified skill contracts and library UI; semantic role binding; Text Handoff native glyph coverage, safe temporal correction, persistence/FPS/cancellation and Inspector. Existing primitive evaluators retained. |
+| Working Tree Status | Source/tests/documentation changes for motion rules pending commit. Synthetic temporary project fixtures only; original client state/assets unchanged. |
+| Documentation Version | 1.1.12 |
+| Scope of Last Update | SemanticEdit contract, project Motion Rule Registry and materializations; incremental compilation/coverage/scope, inherited rules, native logical rotation/scale composition, selective QA, Skills/Inspector and tests. |
 | Code snapshot SHA-256 | NOT RECALCULATED; refer to component digests and final source commit. |
 
 Git 2.54.0 (Apple Git-157): локальная история, текущая ветка указана в Document Status, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
@@ -2429,3 +2429,58 @@ Architecture Change History: v1.1.11 — shared Skills catalogue/contracts/execu
 Final v1.1.11 verification: `npm run check` exit0, **433/433** (358 base/integration,2 existing browser,73 native), TypeScript/build PASSED.18 new native test groups include the9combination FPS/text matrix and real Chromium/API/production mock execution. Failed skill QA is persisted, with no second provider call and no candidate commit. Temporary experimental formatting/schema/demo errors were fixed; no existing test or tolerance was weakened. Real fixture/video and exact full-resolution crop verification PASSED; live-provider understanding NOT VERIFIED (zero new external calls). Source was frozen for this final full check.
 
 Post-implementation UI-only polish: Russian handoff description and currentColor range accent (no system blue). Final TypeScript/build and focused Chromium catalogue/demo/API test PASSED. Animation mathematics, contract fields and operations unchanged after the433-test full pass.
+
+
+## Persistent Semantic Motion Editing — 2026-10-29 (v1.1.12)
+
+**Targeted implementation, not a full architecture audit.** Existing semantic planner, operation executor, registry, transition evaluator, Skia worker, transaction store and history remain the production path. No second state, planner, motion engine or library was introduced.
+
+### Data and execution contracts
+
+`motion/rule-contract.ts` defines optional `IntentRequirement.semanticEdit` and project `motionRules` / `ruleMaterializations` under the backward-compatible Motion State schema1.0.0. Old projects have no required migration. Eight semantic operations are ADD_EFFECT, MODIFY_EFFECT, REMOVE_EFFECT, ADD_RULE, MODIFY_RULE, REMOVE_RULE, ADD_EXCEPTION and REMOVE_EXCEPTION. Supported rule effects are inertialOvershoot, wiggle, fade and easing. This is deliberately not a claim of a generic rule engine for every existing technique.
+
+Scope stores canonical logical IDs, explicit selector objects/project, optional scene and signed seconds interval, and all/entrance phase. Empty object selection cannot become a project-wide mutation. Scene/time filters match the **start of a base movement**, rather than cropping arbitrary parts of an animation. Exceptions store logical IDs; sourceText records the actual requirement clause, not invented prose. Rule priority is latest explicit instruction first, then object/scene/time specificity; an override applies only within its matching scope. Equal-priority disjoint rules are harmless; normal compiler edits allocate increasing priority.
+
+`motion/intent/graph.ts` extends the existing action schema, retaining its action/requirement/clause provenance. One edit action may bind a target set in semanticEdit.targets while using an ordinary real object anchor for the existing task contract. `coverage.ts` verifies those canonical target sets through the existing registry; unrelated clauses and missing techniques still fail coverage. Graph-to-plan expansion preserves the typed edit. `planner.ts` also maps a simple legacy/compact edit of an existing rule-owned wiggle/inertia into the same semantic-edit contract. This preserves old natural-language editing paths without adding a keyword-only agent.
+
+```mermaid
+flowchart LR
+  U[User follow-up] --> SP[Existing semantic planner]
+  SP --> E[Typed SemanticEdit on requirement]
+  E --> R[Canonical registry resolution and rule delta]
+  R --> O[Existing applyOperations]
+  O --> M[Materialize matching owned effects]
+  M --> V[Technical validation and exact task-scope replay]
+  V --> Q[Selective numeric plus native frame QA]
+  Q --> C[Revision-checked atomic commit / Undo / Redo]
+```
+
+`motion/rules.ts::compileSemanticEdit` emits the existing typed operation batch, primarily setMotionRule/removeMotionRule. `operations.ts::applyOperations` materializes rules after scheduling and anchoring, so new matching animations and transitions inherit rules through the same entry point as edits. `intent/execution.ts` validates a rule task by replaying its exact deterministic delta against the previous candidate. For ordinary animation tasks, deterministic materialization is part of the scoped expected state. Unrelated state cannot be admitted by changing a rule report.
+
+Materializations are compact ownership records: ruleId, entity, stable ID and, only for rule-controlled easing/fade, the original **property** value. They do not duplicate scene geometry or full Motion State. Generated expression IDs depend on the canonical logical object/base/property, not on the winning rule ID, so parameter edits retain identity. Reapplying a rule cannot accumulate duplicate expressions. Removing a rule restores its owned property; removing an object effect creates a stronger zero-amplitude override instead of deleting the group rule. Explicit ADD_EXCEPTION/REMOVE_EXCEPTION update the group's ID list. Direct existing expressions can be modified in place; a new rule colliding with an independently owned direct effect fails explicitly instead of stacking effects without permission.
+
+### Evaluators and composition
+
+Inertia uses the existing core ae-version instantaneous incoming-velocity evaluator, with real animation/transition endpoints and immutable Figma geometry. It is attached to enabled x/y movement channels, never fade-only tracks. The tail ends at the earliest of its declared duration, next movement, scope end and last rendered settled endpoint. Existing smoothTail windowing makes the truncated tail reach zero. Contiguous motions with no post-motion interval have no inserted tail; overlapping incompatible bases produce RULE_OVERLAPPING_BASE_MOTIONS. This is deterministic interval suppression, not a replacement of inertia by easing.
+
+Continuous wiggle defaults to rotation amplitude3/frequency0.8, uses seeded existing noise and logical ownership across source instances. X/Y and scaleX/scaleY are also supported. `evaluation.ts`, shared `geometry.ts::transitionOffsetMatrix`, native renderer and browser compatibility transition adapter compose rotation/scale offsets around the reference geometry origin. Once a transition owns presentation, a logical offset is applied through that transition exactly once, including its completed held pose; it is not applied again through the instance node. Original base tracks and transition geometry remain unchanged.
+
+Visibility remains the existing Motion Engine/renderer lifecycle and alpha, not an invented visibility track. Wiggle does not itself reveal a hidden object or replace its entrance. Arbitrary negative scales, unsupported masks and conflicting base compositions retain existing technical validation.
+
+### Persistence, QA, UI and limits
+
+All data lives in each project's existing `motion/motion.json` and transaction history. Rules use seconds for time scope; FPS conversion rebuilds generated intervals from the real base state and retains frequency in seconds. Undo/Redo restores actual saved rule state. Source Figma data is not written. Low-level manual edits to a rule-owned compiled expression/easing must go through a rule override; otherwise an explicit RULE_OWNED_EFFECT / RULE_OWNED_EASING error prevents the edit from being silently discarded during materialization.
+
+`motion/rule-qa.ts` densely samples changed expressions (65 samples), checks finite/repeatable values, finite inertia endpoints and bounded wiggle amplitude. It renders relevant changed/removed expression and animation intervals through the native worker, at most16 distinct frames per invocation; unchanged projects are not globally re-rendered. Service and final store admission both check the candidate; repeated native frame requests use the existing cache. No video or extra LLM call is part of ordinary rule QA. Actual rasterization is distinguished from artistic assessment, which remains NOT_TESTED. Normal technical validation and transaction revision checks are retained. These checks do not constitute a universal proof of artistic quality or the absence of every subframe artifact.
+
+Library adds four contracts in `motion-library/skills/rule-skills.ts`: inertia after motion, continuous wiggle, rule overrides and natural-language effect removal. Catalogue now has81 entries, with the same library UI. Inspector → QA shows current authoritative rules, source clauses, ownership/materializations and the run's rules.json candidate/QA. Current state is labeled separately from historical evidence. Rule source text is redacted from limited-privacy run diagnostics; required project-document provenance remains in project state. Harness component versions include all new executable rule modules.
+
+Known boundaries: no live-model language qualification in this task; prepared provider outputs exercise real production execution instead. Project-wide semantics require an explicit project selector and a real existing anchor for the current task system. Rule override support covers the four effects above. An existing direct effect versus a newly declared rule can require explicit conflict resolution; it is not silently adopted. Existing base/transition overlap and arbitrary complex compositing limitations remain. Same-place segmented Text Handoff limitations from v1.1.11 are unchanged.
+
+### Verification
+
+`tests/native-rules.test.ts` has10 synthetic native/integration groups: several/future movements, fade-only exclusion, stable IDs, group removal, repeated relative edits, different per-object amplitudes, explicit project/scene/time scopes, exceptions, entrance-only inertia, transition inertia/rotation, random seeks, save/reopen/FPS/Undo/Redo, three production mock-provider turns with no extra model calls, Preview/FFmpeg source frame parity and actual MP4 decode. Original client projects/assets are not test fixtures and are unchanged. Focused10/10 and TypeScript passed. Final full-regression results are recorded below; no live provider result is claimed.
+
+Architecture Change History: v1.1.12 — optional persistent rule/edit/ownership contracts, deterministic materialization inside existing operations and task scope, native logical transform effects, selective QA and Inspector/Skills. Reuses all existing mathematical evaluators and storage; no second engine, user source mutation or schema migration. Partial update only.
+
+Final v1.1.12 verification: `npm run check` exit0, **443/443** (358 existing base/integration,2 browser,83 native), TypeScript and build PASSED; a second full run also exited0. The10 new rule groups include three production execution turns with a prepared provider, native random-access frames, actual60-frame MP4 encoding/decoding and Preview/export source hashes. No tests or tolerances were weakened. Zero live-provider calls; artistic quality and arbitrary-language generalization remain NOT VERIFIED. Local application restarted after checking all7 projects for active jobs; runtime CURRENT and /api/skills exposes81 entries including4 Motion Rules contracts.

@@ -1,3 +1,4 @@
+import {ruleQA} from "./rule-qa.js";
 import {preparePlanSkills} from "../motion-library/skills/runtime.js";
 import {compositionQA} from "../native/composition-qa.js";
 import {projectTime} from "./project-time.js";
@@ -636,6 +637,8 @@ export async function proposeMotion(
           },
           verify: async (task, next, before, attempt) => {
             onStage("checking");
+            const ruleRequirement=contract.requirements.find(r=>task.requirementIds.includes(r.requirementId)&&r.semanticEdit);
+            if(ruleRequirement){const started=performance.now();const report=await ruleQA(project,next,before,options.signal,()=>harness?.beforeRender());if(harness)harness.qaDurationMs+=performance.now()-started;await atomicJson(path.join(directory,task.taskId+"-rules-qa.json"),report);await atomicJson(path.join(directory,"rules.json"),{taskId:task.taskId,rules:harness&&harness.config.privacy!=="full"?"REDACTED":next.motionRules,materializations:next.ruleMaterializations,qa:report});return report;}
             const qa = runQA
               ? await runQA.verify(task, next, before, attempt)
               : await motionQA(

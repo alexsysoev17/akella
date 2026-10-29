@@ -1,3 +1,4 @@
+import {semanticEditSchema} from "../rule-contract.js";
 import {skillPlanningInstructions} from "./graph.js";
 import {patchSequentialDependencies} from "./semantic-patch.js";
 import {mergeCompactRepair,semanticRepairSchema} from "./repair.js";
@@ -478,6 +479,10 @@ export function validateIntentPlan(
       continue;
     }
     const target = result.target;
+    if(!r.semanticEdit&&target&&r.kind==="editAnimation"&&r.techniques.length===1&&["wiggle","inertialOvershoot"].includes(r.techniques[0])&&currentState.ruleMaterializations?.some(m=>m.entity==="expression"&&currentState.expressions?.some(e=>e.expressionId===m.id&&e.type===r.techniques[0]&&(e.ownership?.logicalObjectId===target.logicalObjectId||e.sceneId===target.sceneId&&e.targetId===target.sourceNodeId)))) {
+      if(r.effectOperation?.action==="remove"||r.expressionAction==="remove"||r.parameters.amplitudeFactor!=null||r.parameters.amplitude!=null||r.parameters.frequency!=null||r.parameters.decay!=null)r.semanticEdit=semanticEditSchema.parse({operation:r.effectOperation?.action==="remove"||r.expressionAction==="remove"?"REMOVE_EFFECT":"MODIFY_EFFECT",effect:r.techniques[0],targets:[target.logicalObjectId],scope:{selector:"objects",phase:"all",...(r.targetScope==="instance"?{sceneId:target.sceneId}:{})},parameters:Object.fromEntries(["amplitude","frequency","decay"].filter(key=>(r.parameters as Record<string,unknown>)[key]!=null).map(key=>[key,(r.parameters as Record<string,unknown>)[key]])),...(r.parameters.amplitudeFactor!=null?{amplitudeFactor:r.parameters.amplitudeFactor}:{})});
+    }
+    if(r.semanticEdit&&target){r.kind="editAnimation";r.sceneId=target.sceneId;r.target={sourceNodeId:target.sourceNodeId,logicalObjectId:target.logicalObjectId,name:r.target.name};r.unresolvedReason=null;continue;}
     const lookup = target
       ? resolveExistingAnimation(state, target, r.techniques)
       : undefined;

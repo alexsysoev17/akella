@@ -1,5 +1,5 @@
 import {safeFrame} from "./time.js";
-import { presentationBlocks } from "./transition-runtime.js";
+import { presentedTransitions,presentationBlocks } from "./transition-runtime.js";
 import { inverse } from "./geometry.js";
 import { scopedExpressionValue } from "./transition-effects.js";
 import type { StatePresentation } from "./transition-runtime.js";
@@ -205,11 +205,13 @@ export function evaluateMotion(state: MotionState, frame: number, presentation: 
       const states = presentation[e.ownership.logicalObjectId!];
       if (!states) throw new Error("MISSING_LOGICAL_EFFECT_GEOMETRY");
       for (const [sceneId, s] of Object.entries(states)) {
+        if(presentedTransitions(state,frame).some(t=>t.logicalObjectId===e.ownership?.logicalObjectId))continue;
         const parent = inverse(s.parentCanvas);
         const x = e.property === "x" ? offset : 0, y = e.property === "y" ? offset : 0;
         const v = nodes[JSON.stringify([sceneId, s.sourceNodeId])] ??= {};
         v.x = (v.x ?? 0) + parent[0][0] * x + parent[0][1] * y;
         v.y = (v.y ?? 0) + parent[1][0] * x + parent[1][1] * y;
+        if(e.property!=="x"&&e.property!=="y")v[e.property]=(v[e.property]??(e.property.startsWith("scale")?1:0))+offset;
       }
     }
     for (const id of bindings) {

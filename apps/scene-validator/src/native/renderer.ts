@@ -1,3 +1,4 @@
+import {transitionOffsetMatrix} from "../motion/geometry.js";
 import {textViewportOffset} from "../motion/text-clearance.js";
 import {buildRegistry} from "../motion/registry.js";
 import {motionPresentationHosts} from "../motion/presentation-lifetime.js";
@@ -557,7 +558,7 @@ export class NativeRenderer {
             frame,
           ),
           offset = evaluation.transitionEffects[t.transitionId] ?? {},
-          visual = multiply([[1, 0, offset.x ?? 0], [0, 1, offset.y ?? 0]], v.matrix),
+          visual = transitionOffsetMatrix(v.matrix,offset),
           wrapper = multiply(
             multiply(multiply(inverse(current.parentCanvas), visual), [
               [1 / current.width, 0, 0],

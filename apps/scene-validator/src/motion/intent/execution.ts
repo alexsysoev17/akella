@@ -1,3 +1,4 @@
+import {materializeRules,compileSemanticEdit} from "../rules.js";
 import {refreshTimingOrigins} from "../project-time.js";
 import { requiredProjectFrames, TimelineConstraintError } from "../constraints.js";
 import { MotionToolError, motionStateDigest } from "../tools.js";
@@ -68,6 +69,7 @@ export function assertIntentScope(
   )!;
   const own = (a: { sceneId: string; targetId: string }) =>
     a.sceneId === r.sceneId && a.targetId === r.target.sourceNodeId;
+  if(r.semanticEdit){const expected=applyOperations(before,compileSemanticEdit(project,before,r.semanticEdit,r.sourceText,r.target.logicalObjectId??undefined),project);if(!isDeepStrictEqual(expected,next))throw Error("RULE_EDIT_SCOPE_VIOLATION");return;}
   if (r.motionAction === "freezeProject") {
     const expected = applyOperations(before, freezeObjectOperations(project, before, r.target.logicalObjectId!), project);
     if (!isDeepStrictEqual(next, expected)) throw new Error("STATIC_OBJECT_SCOPE_VIOLATION");
@@ -179,6 +181,7 @@ export function assertIntentScope(
   resolveTimingDependencies(scoped);
   reanchorExpressions(scoped, before, new Set((scoped.expressions ?? []).filter(exprAllowed).map(e=>e.expressionId)));
   refreshTimingOrigins(before,scoped,new Set((scoped.timingOrigins??[]).filter(allowedOrigin).map(o=>o.entity+":"+o.id)));
+  materializeRules(scoped,project);
   const canonical = (s: MotionState) => ({
     ...s,
     ...(s.timingOrigins?{timingOrigins:[...s.timingOrigins].sort((a,b)=>(a.entity+a.id).localeCompare(b.entity+b.id))}:{}),
@@ -204,6 +207,7 @@ export function requirementChecks(
   previous?: MotionState,
   committed: MotionState | undefined = previous,
 ) {
+  if(r.semanticEdit){const edit=r.semanticEdit;const changed=!isDeepStrictEqual(state.motionRules,previous?.motionRules)||!isDeepStrictEqual(state.expressions,previous?.expressions);const applied=edit.operation==="REMOVE_RULE"?!state.motionRules?.some(rule=>rule.ruleId===edit.ruleId):changed||state.motionRules?.some(rule=>rule.sourceText===r.sourceText);return [{name:"semanticEditApplied",requirementId:r.requirementId,status:applied?"PASSED":"FAILED"}];}
   if (r.techniques.includes("objectStateTransition")) {
     const matches = (state.objectTransitions ?? []).filter(t => t.logicalObjectId === r.target.logicalObjectId && (r.parameters.fromSceneId?t.fromSceneId===r.parameters.fromSceneId:[t.fromSceneId, t.toSceneId].includes(r.sceneId!)) && (!r.parameters.toSceneId || t.toSceneId === r.parameters.toSceneId));
     if (r.effectOperation?.action === "remove") return [{ name: "stateTransitionRemoved", requirementId: r.requirementId, status: matches.length === 0 ? "PASSED" : "FAILED" }];

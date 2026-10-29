@@ -11,6 +11,7 @@ export function semanticContext(context: unknown): unknown {
       objectIndex: c.objectIndex,
       recentSuccessfulActions: c.recentSuccessfulActions,
       effectInventory: c.effectInventory,
+      motionRules:(c.motion as Record<string,unknown>|undefined)?.motionRules??c.motionRules,
       animationInventory: c.animationInventory,
       lifecycleCatalog: c.lifecycleCatalog,
       extraGuidance: c.extraGuidance,

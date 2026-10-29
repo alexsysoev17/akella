@@ -1,3 +1,4 @@
+import {resolveRuleTargets} from "../rules.js";
 import { buildRegistry } from "../registry.js";
 import type { LoadedProject } from "../../types.js";
 import type {
@@ -84,7 +85,8 @@ export function inspectSemanticCoverage(
   const scenes = project.inspection.document.scenes;
   const roots = new Set(scenes.map((s) => s.figmaNodeId));
   const registry = buildRegistry(project.inspection.document, project.inspection.fingerprint);
-  const coversTarget = (r: IntentRequirement, id: string) => r.sceneId + "/" + r.target.sourceNodeId === id ||
+  const editCovers=(r:IntentRequirement,id:string)=>{if(!r.semanticEdit||r.unresolvedReason)return false;try{const edit=r.semanticEdit;const selected=edit.targets.length?resolveRuleTargets(project,edit.targets):edit.scope.logicalObjectIds;return registry.objects.some(o=>(edit.scope.selector==="project"||selected.includes(o.logicalObjectId))&&o.sourceInstances.some(i=>i.sceneId+"/"+i.sourceNodeId===id)&&(!edit.scope.sceneId||edit.scope.sceneId===id.split("/")[0]));}catch{return false;}};
+  const coversTarget = (r: IntentRequirement, id: string) => editCovers(r,id)|| r.sceneId + "/" + r.target.sourceNodeId === id ||
     (r.targetScope === "logicalObject" && !r.unresolvedReason && registry.objects.some(o => o.logicalObjectId === r.target.logicalObjectId && o.sourceInstances.some(i => i.sceneId + "/" + i.sourceNodeId === id)));
   const objects = scenes
     .flatMap(objectsIn)
@@ -460,7 +462,7 @@ export function inspectSemanticCoverage(
         );
       if (
         /в(?:двое|\s*2\s*раза)\s*(?:слаб|меньше)/i.test(text) &&
-        (r.kind !== "editAnimation" || r.parameters.amplitudeFactor !== 0.5)
+        (r.kind !== "editAnimation" || (r.semanticEdit?.amplitudeFactor ?? r.parameters.amplitudeFactor) !== 0.5)
       )
         issue("MISSING_RELATIVE_EDIT", text, [r], {
           kind: "editAnimation",

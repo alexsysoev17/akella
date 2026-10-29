@@ -1,3 +1,4 @@
+import {semanticEditSchema} from "../rule-contract.js";
 import {skillBindingSchema} from "../../motion-library/skills/contracts.js";
 import {coordinateSchema, MAX_FLOAT32} from "../time.js";
 import { textAnimationSchema } from "../schema.js";
@@ -48,6 +49,7 @@ export const temporalReferenceSchema = z
   .strict();
 export const intentRequirementSchema = z
   .object({
+    semanticEdit:semanticEditSchema.optional(),
     semanticActionId: z.string().optional(),
     motionAction: z.enum(["freezeProject"]).optional(),
     sourceClauseId: z.string().optional(),

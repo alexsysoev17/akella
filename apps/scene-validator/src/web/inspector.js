@@ -184,6 +184,7 @@ export function attachInspector(container, url) {
           : tree("NOT_AVAILABLE"));
     if (tab === 3)
       body.innerHTML =
+        block("Правила движения, источники и объектные исключения",data.motionRules??"NOT_AVAILABLE") +
         block("Motion Skills: применение, коррекция, пиксельная QA до/после",data.skills??"NOT_AVAILABLE") +
         (Array.isArray(data.skills)&&data.commitEvidence?.status==="COMMITTED"?data.skills.map(s=>{const frame=s.before.collisionFrames?.[0]??s.before.samples?.[Math.floor(s.before.samples.length/2)]?.frame??0;const base=url+'/skill-frame?applicationId='+encodeURIComponent(s.application.applicationId)+'&frame='+frame;return `<section><h3>${esc(s.skill)} · ${esc(s.strategy)}</h3><p>Кадр ${frame}. Слева: текущее состояние без сохранённой коррекции времени. Справа: текущий результат.</p><div style="display:flex"><img style="width:50%" alt="До коррекции" src="${base}&phase=before"><img style="width:50%" alt="После коррекции" src="${base}&phase=after"></div></section>`;}).join(''):"") +
         block("Текст: строки, локальное время и непрерывность", data.textMotion ?? "NOT_AVAILABLE") +
