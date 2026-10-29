@@ -358,7 +358,9 @@ test("completed transition hands off to neutral destination exit and scale phase
     const qa=await nativeMotionQA(f.project,candidate,"motion/qa/handoff-incremental","Circle exits",base,{sceneId:"s1",targetId:"c1"},{beforeRender:()=>{renders++;}});
     assert.notEqual(qa.status,"FAILED",JSON.stringify(qa.checks));
     assert.deepEqual(qa.samples.map(s=>s.frame),[24,30,36],"raster samples cover changed interval, not old transition or project endpoints");
-    assert.equal(renders,5,"three interval frames plus two fresh determinism renders; dense numerical QA is retained");
+    assert.equal(renders,4,"three interval frames plus one uncached determinism replay against the actual saved sample; dense numerical QA is retained");
+    assert.equal(qa.checks.find(c=>c.name==="NATIVE_RANDOM_ACCESS_DETERMINISM")?.status,"PASSED");
+    assert.ok(qa.renderMetrics.reusedRequests>=1,"existing raster baseline is reused, not the independent replay");
     const removalQA=await nativeMotionQA(f.project,base,"motion/qa/handoff-removal","Remove exit",candidate,{sceneId:"s1",targetId:"c1"});
     assert.notEqual(removalQA.status,"FAILED");
     assert.deepEqual(removalQA.samples.map(s=>s.frame),[24,30,36],"removed effect interval is still rendered, not only output endpoints");

@@ -90,6 +90,7 @@ export class SemanticProvider implements IntentProvider {
   }
   constructor(private providerFor: (phase: string) => Promise<CodexProvider>,private recovery?:{
     recover:(error:unknown,stage:string,replay:()=>Promise<IntentPlan>)=>Promise<IntentPlan>;
+    diagnostic?:(value:unknown)=>Promise<void>;
   }) {}
   async interpret(context: unknown, request: string, feedback?: unknown) {
     const referenceRepair = (
@@ -228,7 +229,8 @@ export class SemanticProvider implements IntentProvider {
       );
       return mergeCompactRepair(plan, patch, feedback.issues, request);
       };
-      try{return await execute();}catch(error){
+      try{const result=await execute();await this.recovery?.diagnostic?.((result as IntentPlan&{repairScopeDiagnostics?:unknown}).repairScopeDiagnostics);return result;}catch(error){
+        await this.recovery?.diagnostic?.((error as {repairScopeDiagnostics?:unknown}).repairScopeDiagnostics);
         if(!this.recovery)throw error;
         return this.recovery.recover(error,"semantic-repair",async()=>{
           const ids=new Set(feedback.issues.flatMap(i=>i.requirementIds));
@@ -238,6 +240,7 @@ export class SemanticProvider implements IntentProvider {
             project:(context as Record<string,unknown>).project,
             sceneIndex:(context as Record<string,unknown>).sceneIndex,
             objectIndex:((context as Record<string,unknown>).objectIndex as {sourceNodeId:string;sceneId:string;name:string}[]|undefined)?.filter(o=>affected.some(r=>r.target.sourceNodeId===o.sourceNodeId||r.target.name===o.name)||feedback.issues.some(i=>i.sourceText.includes(o.name))),
+            rejectedPatch:(error as {repairScopeDiagnostics?:unknown}).repairScopeDiagnostics,
             failedRelationships:feedback.issues,
             affectedRequirements:minimal,
             anchors:plan.requirements.filter(r=>minimal.some(m=>m.timing.anchorRequirementId===r.requirementId||m.inheritFromRequirementId===r.requirementId)).map(r=>({requirementId:r.requirementId,target:r.target,techniques:r.techniques,timing:r.timing})),
@@ -873,6 +876,7 @@ export function validateIntentPlan(
     }
   }
   const coverage = inspectSemanticCoverage(project, request, plan, fps);
+  if(coverage.temporalRelations?.length)resolutionContext?.onResolution?.({event:"TEMPORAL_RELATION_EVIDENCE",relations:coverage.temporalRelations});
   if (coverage.status !== "PASSED") {
     assertCoverageScope(project,request,plan,coverage);
     throw new SemanticCoverageError(coverage);
@@ -1060,6 +1064,7 @@ export async function semanticPlan(
             audited,
           );
         } catch (repairError) {
+          if((repairError as {repairScopeDiagnostics?:unknown}).repairScopeDiagnostics)await trace("repair-scope-"+attempt,(repairError as {repairScopeDiagnostics?:unknown}).repairScopeDiagnostics);
           // A repair transport/merge failure is not a reason to regenerate the
           // whole plan. The shared Recovery Runtime can reconstruct only proven
           // provenance edges, then must pass the complete semantic validator.
@@ -1072,6 +1077,7 @@ export async function semanticPlan(
             throw terminal;
           }
         }
+        if((repaired as IntentPlan&{repairScopeDiagnostics?:unknown}).repairScopeDiagnostics)await trace("repair-scope-"+attempt,(repaired as IntentPlan&{repairScopeDiagnostics?:unknown}).repairScopeDiagnostics);
         await trace("selective-audit-" + attempt, repaired);
         await trace("semantic-retry-result-" + attempt, {
           planChanged:

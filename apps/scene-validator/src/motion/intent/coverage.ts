@@ -1,3 +1,5 @@
+import {locateSource} from "./provenance.js";
+import {temporalCues,hasActionSequence,type TemporalEvidence} from "./temporal-evidence.js";
 import {resolveRuleTargets} from "../rules.js";
 import { buildRegistry } from "../registry.js";
 import type { LoadedProject } from "../../types.js";
@@ -25,6 +27,7 @@ export class SemanticCoverageError extends Error {
   }
 }
 export interface CoverageReport {
+  temporalRelations?:TemporalEvidence[];
   status: "PASSED" | "SUSPICIOUS";
   issues: CoverageIssue[];
   clauses: {
@@ -61,8 +64,6 @@ function explicitTechniques(text: string): IntentTechnique[] {
   return techniques;
 }
 const inheritance = /аналогично|так\s+же|как\s+предыдущ|как\s+перв/i;
-const sequential =
-  /(?:в\s+момент\s+)?(?:как|когда)\s*(?:он[аои]?\s*)?(?:законч|заканч|конча)|после\s+(?:заверш|оконч|перв)|когда\s*(?:он[аои]?\s*)?(?:законч|конча)|(?:а\s+)?(?:потом|затем)|сразу\s+(?:вслед|после)/i;
 const ordinals: Record<string, number> = {
   первой: 1,
   первую: 1,
@@ -95,9 +96,10 @@ export function inspectSemanticCoverage(
     (plan.sourceClauses ?? []).map((c) => [c.clauseId, c]),
   );
   const belongs = (r: IntentRequirement, start: number, end: number) => {
-    const clause = r.sourceClauseId
+    let clause: {start:number;end:number;text:string}|undefined = r.sourceClauseId
       ? sourceClauses.get(r.sourceClauseId)
       : undefined;
+    if(!clause){try{clause=locateSource(request,r.sourceText.trim());}catch{/* Ambiguous legacy provenance cannot authorize a guessed span. */}}
     const ref = r.timing.reference?.sourceClauseId
       ? sourceClauses.get(r.timing.reference.sourceClauseId)
       : undefined;
@@ -170,6 +172,8 @@ export function inspectSemanticCoverage(
     pendingIds: string[] = [],
     previous: IntentRequirement | undefined,
     pendingAfter: string | undefined;
+  let pendingCue:TemporalEvidence["sourceSpan"]|undefined;
+  let activeClock:number|undefined;
   const issue = (
     code: string,
     text: string,
@@ -216,6 +220,7 @@ export function inspectSemanticCoverage(
       pendingIds = [];
       previous = undefined;
       pendingAfter = undefined;
+      activeClock=undefined;
     }
     if (header && /начина|starts|\bна\s/i.test(text)) {
       const time = text.match(
@@ -282,8 +287,10 @@ export function inspectSemanticCoverage(
             r.timing.reference!.target.sourceNodeId,
         ),
     );
+    // Named temporal anchors are reads, not an instruction to animate them again.
+    if(temporalCues(text).some(c=>c.relation==='afterEnd'||c.relation==='afterStart'))for(const r of plan.requirements.filter(r=>belongs(r,start,end))){const a=plan.requirements.find(a=>a.requirementId===r.timing.anchorRequirementId);if(a&&!belongs(a,start,end)&&a.target.name&&objectMentionRanges(a.target.name,text).length)readTargets.add(a.sceneId+"/"+a.target.sourceNodeId);}
     const writes = new Set(
-      plan.requirements.map((r) => r.sceneId + "/" + r.target.sourceNodeId),
+      plan.requirements.filter(r=>belongs(r,start,end)).map((r) => r.sceneId + "/" + r.target.sourceNodeId),
     );
     const writeIds = ids.filter((id) => !readTargets.has(id) || writes.has(id));
     const targetIds = writeIds.length
@@ -321,12 +328,12 @@ export function inspectSemanticCoverage(
     // A semantically bound action consumes its targets even when the conservative
     // keyword probe does not recognize its technique (e.g. lateral motion/scale).
     // Only a genuinely bare target list carries forward to the next instruction.
-    if (ids.length && !rs.length && !techs.length && !inherit && !sequential.test(text) && !staticLifetime) {
+    if (ids.length && !rs.length && !techs.length && !inherit && !hasActionSequence(text) && !staticLifetime) {
       pendingIds = [...new Set([...pendingIds, ...ids])];
       activeIds = ids;
       continue;
     }
-    if (!ids.length && !techs.length && !inherit && !sequential.test(text) && !staticLifetime)
+    if (!ids.length && !techs.length && !inherit && !hasActionSequence(text) && !staticLifetime)
       continue;
     if (staticLifetime)
       for (const id of targetIds)
@@ -357,16 +364,39 @@ export function inspectSemanticCoverage(
             techniques: techs,
           });
       }
-    const absoluteSequence=sequential.test(text)&&/(?:на|at)\s*\d+(?:[.,]\d+)?\s*(?:сек|second|кадр|frame)/iu.test(text)&&rs.some(r=>r.timing.startSeconds!==null);
+    const cues=temporalCues(text);
+    report.temporalRelations??=[];
+    for(const cue of cues.filter(c=>c.relation==='proceduralAfterMotion'))for(const r of rs.filter(r=>effective(r).has('inertialOvershoot')))
+      report.temporalRelations.push({sourceSpan:{start:start+cue.start,end:start+cue.end,text:request.slice(start+cue.start,start+cue.end)},sourceRequirementId:r.requirementId,targetRequirementId:r.requirementId,relation:'proceduralAfterMotion',classification:'explicit',evidence:"The cue describes its own inertial tail, not a preceding object movement."});
+    const recordEdge=(anchor:string,child:string,relation:TemporalEvidence['relation']='afterEnd')=>{const cue=cues.find(c=>c.relation===relation);const span=cue?{start:start+cue.start,end:start+cue.end,text:request.slice(start+cue.start,start+cue.end)}:pendingCue;if(span)report.temporalRelations!.push({sourceSpan:span,sourceRequirementId:anchor,targetRequirementId:child,relation,classification:'explicit',evidence:request.slice(start,end)});};
+    for(const cue of cues.filter(c=>c.relation==='afterStart'))for(const r of rs){const anchor=plan.requirements.find(a=>a.requirementId===r.timing.anchorRequirementId);if(!anchor||anchor===r||!anchor.target.name||!objectMentionRanges(anchor.target.name,text.slice(cue.end)).length)continue;recordEdge(anchor.requirementId,r.requirementId,'afterStart');if(r.timing.relation!=='withRequirement'||r.timing.align==='end')issue('INCORRECT_TEMPORAL_RELATION',text,[r],{relation:'withRequirement',anchorRequirementId:anchor.requirementId,align:'start'},r.timing);}
+    const clock=text.match(/(?:на|at)\s*\d+(?:[.,]\d+)?\s*(?:сек|second|кадр|frame)/iu);
+    if(clock){const value=clock[0].match(/\d+(?:[.,]\d+)?/)![0];activeClock=Number(value.replace(',','.'))/(/кадр|frame/iu.test(clock[0])?fps:1);}
+    if(clock)for(const r of rs.filter(r=>r.timing.startSeconds!==null))report.temporalRelations.push({sourceSpan:{start:start+clock.index!,end:start+clock.index!+clock[0].length,text:clock[0]},sourceRequirementId:null,targetRequirementId:r.requirementId,relation:'absolute',classification:'explicit',evidence:'An explicit clock does not create an after-end edge between listed objects.'});
+    const delay=text.match(/(?:спустя|через|after)\s*(?:\d+|полсекунды|секунду)(?:[.,]\d+)?\s*(?:кадр[а-я]*|сек[а-я]*|frames?|seconds?)?/iu);
+    if(delay)for(const r of rs.filter(r=>r.timing.delaySeconds!==0))report.temporalRelations.push({sourceSpan:{start:start+delay.index!,end:start+delay.index!+delay[0].length,text:delay[0]},sourceRequirementId:r.timing.anchorRequirementId,targetRequirementId:r.requirementId,relation:'delay',classification:'explicit',evidence:'The delay is separate from whether the anchor endpoint is start or end.'});
+    if(activeClock!==undefined&&!hasActionSequence(text)&&!cues.some(c=>c.relation==='afterStart')&&!delay)for(const r of rs.filter(r=>r.kind==='objectAnimation'&&r.timing.relation==='afterRequirement'&&r.timing.anchorRequirementId!==pendingAfter&&!r.timing.reference&&(r.timing.align??'start')==='start'&&(r.timing.offsetFrames??0)===0&&r.timing.delaySeconds===0)){
+      const anchor=plan.requirements.find(a=>a.requirementId===r.timing.anchorRequirementId);
+      if(anchor?.timing.startSeconds===activeClock)issue('UNSUPPORTED_SEQUENTIAL_DEPENDENCY',text,[r],{startSeconds:activeClock,reason:'The explicit shared clock supplies no evidence for waiting for the preceding object.'},r.timing);
+    }
+    const absoluteSequence=hasActionSequence(text)&&/(?:на|at)\s*\d+(?:[.,]\d+)?\s*(?:сек|second|кадр|frame)/iu.test(text)&&rs.some(r=>r.timing.startSeconds!==null);
     if(absoluteSequence){
       const roots=rs.filter(r=>r.timing.startSeconds!==null&&!r.unresolvedReason);
       if(roots.length===1){
         const root=roots[0],children=rs.filter(r=>r!==root&&!r.unresolvedReason);
-        for(const child of children)if(child.timing.relation!=="afterRequirement"||child.timing.anchorRequirementId!==root.requirementId||child.timing.align==="end")issue("MISSING_SEQUENTIAL_DEPENDENCY",text,[child],{relation:"afterRequirement",anchorRequirementId:root.requirementId,align:"start"},child.timing);
+        for(const child of children){recordEdge(root.requirementId,child.requirementId);if(child.timing.relation!=="afterRequirement"||child.timing.anchorRequirementId!==root.requirementId||child.timing.align==="end")issue("MISSING_SEQUENTIAL_DEPENDENCY",text,[child],{relation:"afterRequirement",anchorRequirementId:root.requirementId,align:"start"},child.timing);}
       }
       pendingAfter=undefined;
     }
-    else if (sequential.test(text) && previous)pendingAfter = previous.requirementId;
+    else if (hasActionSequence(text) && previous){
+      // A named anchor must match the preceding requirement; a different named
+      // object is evidence against guessing that previous array item as anchor.
+      const cue=cues.find(c=>c.relation==='afterEnd')!;
+      const namedAnchors=plan.requirements.filter(a=>a!==previous&&!rs.some(r=>r.requirementId===a.requirementId)&&a.target.name&&objectMentionRanges(a.target.name,text.slice(cue.end)).some(m=>m.start<30));
+      const declaredAnchor=rs.map(r=>plan.requirements.find(a=>a.requirementId===r.timing.anchorRequirementId)).find(a=>a?.target.name&&objectMentionRanges(a.target.name,text.slice(cue.end)).some(m=>m.start<30));
+      pendingAfter=declaredAnchor?.requirementId??(!namedAnchors.length?previous.requirementId:undefined);
+      pendingCue={start:start+cue.start,end:start+cue.end,text:request.slice(start+cue.start,start+cue.end)};
+    }
     if (
       techs.length &&
       !targetIds.length &&
@@ -434,6 +464,7 @@ export function inspectSemanticCoverage(
         for (const technique of effective(previous))
           if (!have.has(technique))
             issue("INCOMPLETE_INHERITANCE", text, [r], technique, [...have]);
+      if(pendingAfter&&pendingAfter!==r.requirementId)recordEdge(pendingAfter,r.requirementId);
       if (
         !r.timing.reference &&
         pendingAfter &&

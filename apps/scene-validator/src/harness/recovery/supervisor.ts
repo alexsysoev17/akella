@@ -100,7 +100,9 @@ export class GlobalFailureSupervisor {
   this.terminalInvestigations.add(event.failureFingerprint);this.busy=true;
   try{
    if(diagnosis.kind==='external'||this.options.signal?.aborted||event.errorCode==='RECOVERY_DEPENDENT_DELETE_NOT_AUTHORIZED'){this.report.decisions.push({eventId:event.id,strategy:'external',disposition:'BLOCKED',reason:event.errorCode==='RECOVERY_DEPENDENT_DELETE_NOT_AUTHORIZED'?diagnoseFailure(event).reason:diagnosis.reason});this.report.status='RECOVERY_BLOCKED';this.report.finalReason=event.errorCode==='RECOVERY_DEPENDENT_DELETE_NOT_AUTHORIZED'?diagnoseFailure(event).reason:diagnosis.reason;return this.report;}
+   const scopedCandidateFailure=this.report.events.some(e=>e.rootEventId===root.id&&/^REPAIR_(?:SOURCE_|FIELD_|COVERAGE_TARGET_)?SCOPE_VIOLATION$/.test(e.errorCode));
    for(const strategy of ['deterministic','project','code'] as const){
+    if(strategy==='code'&&scopedCandidateFailure&&!this.report.events.some(e=>e.rootEventId===root.id&&e.errorCode==='VALIDATOR_SCOPE_CONTRADICTION')){this.report.decisions.push({eventId:event.id,strategy:'code',disposition:'SKIPPED',reason:'Rejected semantic repair delta is an invalid candidate, not evidence of an implementation defect. Preserve the original coverage root and exact field/source diagnostics; do not resend application source.'});continue;}
     const action=hooks[strategy];
     if(!action||(strategy==='code'&&hooks.codeEnabled===false)){this.report.decisions.push({eventId:event.id,strategy,disposition:'UNAVAILABLE',reason:strategy==='code'&&hooks.codeEnabled===false?'Code investigation disabled in project configuration':`No safe ${strategy} transformation is established for this stage; preserving original request and state`});continue;}
     const outcome=await this.attempt(event,action);

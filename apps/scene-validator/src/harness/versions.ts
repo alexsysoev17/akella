@@ -63,6 +63,7 @@ const components = [
   "motion/qa/policy",
   "motion/qa/failure",
   "motion/intent/repair-context",
+  "motion/intent/temporal-evidence",
   "motion/engine",
   "motion/evaluation",
   "motion/video",

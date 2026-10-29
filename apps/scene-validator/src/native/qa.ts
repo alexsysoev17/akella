@@ -156,7 +156,9 @@ export async function nativeMotionQA(
       metrics: { renderer: "skia-cpu/1", frames: frames.length },
     });
     const sampleFrame = frames[Math.floor(frames.length / 2)] ?? 0,
-      a = await render(state, sampleFrame, true),
+      // Reuse the actual sample already rasterized above, then independently
+      // re-render it uncached. This still compares two native rasterizations.
+      a = await render(state, sampleFrame),
       b = await render(state, sampleFrame, true);
     checks.push({
       name: "NATIVE_RANDOM_ACCESS_DETERMINISM",

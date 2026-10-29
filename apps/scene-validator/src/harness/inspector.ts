@@ -332,6 +332,7 @@ export async function inspectorRun(root: string, id: string, raw = false) {
     understanding: tasks,
     skills:full?await saved(root,`motion/ai/${id}/skills.json`):"REDACTED",
     motionRules:full?{scope:"current authoritative state, not historical replay",rules:(doc.state as Data)?.motionRules??[],materializations:(doc.state as Data)?.ruleMaterializations??[],candidate:await saved(root,`motion/ai/${id}/rules.json`)}:"REDACTED",
+    repairSourceScope:full?await saved(root,`motion/ai/${id}/intent-repair-scope.json`):"REDACTED",
     semanticTaskGraph,
     globalRecovery:full ? await saved(root,`motion/ai/${id}/global-recovery.json`) : {status:"REDACTED",reason:"Run privacy policy"},
     recovery: full ? await saved(root, `motion/ai/${id}/recovery.json`) : "REDACTED",

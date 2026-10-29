@@ -146,6 +146,7 @@ export function attachInspector(container, url) {
           : "<p>NOT_AVAILABLE</p>");
     if (tab === 2)
       body.innerHTML =
+        block("Область Semantic Repair: разрешённые требования, поля и причины отказа",data.repairSourceScope??"NOT_AVAILABLE") +
         block("Автоматическое восстановление — решения и проверки",data.globalRecovery) +
         `<h3>Уровень 1 — восстановление проекта</h3><p>${esc(data.recovery?.status ?? "Не запускалось")}</p>` +
         block("Исходная и текущая ошибка, операции и попытки", data.recovery) +

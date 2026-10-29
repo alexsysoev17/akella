@@ -17,7 +17,8 @@ export function codeSources(failure:RecoveryFailure){
   [/recovery|repair|RECOVERY/,["harness/recovery/runtime","harness/recovery/semantic","harness/recovery/provider-runtime","harness/recovery/code-service","harness/recovery/supervisor"]],
   [/reconcil|RECONCIL|execution|operation/,["motion/intent/execution","motion/operations","motion/intent/compiler","motion/service"]],
  ] as const;
- const selected=[...stack,...contexts.filter(([pattern])=>pattern.test(text)).flatMap(([,files])=>files.map(f=>'apps/scene-validator/src/'+f+'.ts'))];
+ const localized=/SEMANTIC_COVERAGE|REPAIR_(?:SOURCE_|FIELD_)?SCOPE_VIOLATION/.test(failure.code)?["motion/intent/coverage","motion/intent/temporal-evidence","motion/intent/repair","motion/intent/provenance"].map(f=>"apps/scene-validator/src/"+f+".ts"):[];
+ const selected=[...localized,...stack,...contexts.filter(([pattern])=>pattern.test(text)).flatMap(([,files])=>files.map(f=>'apps/scene-validator/src/'+f+'.ts'))];
  if(!selected.length)selected.push('apps/scene-validator/src/motion/service.ts','apps/scene-validator/src/motion/intent/compiler.ts','apps/scene-validator/src/motion/intent/execution.ts');
  return [...new Set(selected)].filter(repairSourceReadable).slice(0,5);
 }

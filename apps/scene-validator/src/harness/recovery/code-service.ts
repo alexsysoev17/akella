@@ -83,7 +83,7 @@ export async function proposeCodeRepair(repository: string, failure: RecoveryFai
             lastInput=result.usage?.inputTokens??0;lastRequestBytes=requestBytes;
             // Cached tokens are a subset of input, not additional tokens. Preserve
             // an already returned useful answer; admission blocks the NEXT call.
-            usage={totalTokens,inputTokens:totalInput,outputTokens:totalOutput,cachedInputTokens:totalCached,estimatedCost:totalCost,budgetExceeded:totalTokens>policy.codeRepair.maxTokens};
+            usage={totalTokens,inputTokens:totalInput,outputTokens:totalOutput,cachedInputTokens:totalCached,estimatedCost:totalCost,uncachedInputTokens:Math.max(0,totalInput-totalCached),inputIncludesCached:true,maxTokens:policy.codeRepair.maxTokens,remainingTokens:Math.max(0,policy.codeRepair.maxTokens-totalTokens),budgetExceeded:totalTokens>policy.codeRepair.maxTokens};
             await atomicJson(path.join(workspace.root,"provider-budget.json"),usage);
             if (result.toolCalls.length)
                 throw new Error("CODE_REPAIR_FORBIDDEN_TOOL");

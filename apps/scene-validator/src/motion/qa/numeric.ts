@@ -51,6 +51,7 @@ export function numericQA(state: MotionState, request = "", presentation: StateP
     if (e.parameters.temporalMode === "continuous") checks.push({ name: "wiggleContinuousInterval", target: e.expressionId, category: "mathematics", required: true,
       status: Number.isSafeInteger(e.startFrame + e.durationFrames) ? "PASSED" : "FAILED" });
   }
+  const checkedVectors=new Set<string>();
   for (const e of state.expressions ?? []) {
     if (!e.enabled || e.type !== "inertialOvershoot") continue;
     const duration = e.durationFrames / state.settings.fps,
@@ -77,6 +78,16 @@ export function numericQA(state: MotionState, request = "", presentation: StateP
       : e.property === "rotation"
         ? 0.01
         : 0.05;
+    const partner=(e.property==='x'||e.property==='y')?(state.expressions??[]).find(p=>p.enabled&&p.type==='inertialOvershoot'&&p.expressionId!==e.expressionId&&p.property===(e.property==='x'?'y':'x')&&p.sceneId===e.sceneId&&p.targetId===e.targetId&&p.sourceAnimationId===e.sourceAnimationId&&p.transitionId===e.transitionId&&p.startFrame===e.startFrame&&p.durationFrames===e.durationFrames&&JSON.stringify(p.parameters)===JSON.stringify(e.parameters)):undefined;
+    if(partner){
+      const key=[e.expressionId,partner.expressionId].sort().join('/');
+      if(!checkedVectors.has(key)){
+        checkedVectors.add(key);
+        const vectorMax=Math.max(...samples.map((v,i)=>Math.hypot(v,scopedExpressionValue(state,partner,e.startFrame+e.durationFrames*i/count,presentation))));
+        checks.push({name:'visiblePositionalInertia',target:e.sourceAnimationId,status:vectorMax>threshold?'PASSED':'FAILED',reason:vectorMax<=threshold?'Combined X/Y inertia is below the unchanged positional visibility threshold':undefined,metrics:{maximumOffset:vectorMax,threshold,expressionIds:[e.expressionId,partner.expressionId]}});
+      }
+      checks.push({name:'positionalInertiaComponent',target:e.expressionId,status:Number.isFinite(max)?'PASSED':'FAILED',reason:'Visibility is measured on the combined positional vector, not independently on each axis.',metrics:{maximumOffset:max,componentVisible:max>threshold}});
+    }else{
     checks.push({
       name: "visibleOscillation",
       target: e.expressionId,
@@ -89,7 +100,8 @@ export function numericQA(state: MotionState, request = "", presentation: StateP
           : undefined,
       metrics: { maximumOffset: max },
     });
-    const periodic = hz * duration >= 1.5;
+    }
+    const periodic = hz * duration >= 1.5 && !(partner && max <= 1e-12);
     const halfPeriods = peaks
       .slice(1)
       .map((p, i) => p.time - peaks[i].time)

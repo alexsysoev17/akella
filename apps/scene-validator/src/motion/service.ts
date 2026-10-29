@@ -484,7 +484,7 @@ export async function proposeMotion(
                   return recoveryProviderRuntime(harness,semanticRecoveryStart??harness.calls.length).invoke(adapter,{...input,purpose:"semantic-recovery"});
                 }}:harness?.providerRuntime(),
             ),
-          {recover:recoverSemantic},
+          {recover:recoverSemantic,diagnostic:async value=>{if(value){await atomicJson(path.join(directory,"intent-repair-scope.json"),value);await harness?.diagnostic("semantic-repair-scope",value);}}},
         );
         const contract = options.resumeContract?validateIntentPlan(project,request.request,options.resumeContract,doc.state.settings.fps,{state:doc.state,projectRevision:doc.revision,mentions:request.mentions}):await semanticPlan(
           project,

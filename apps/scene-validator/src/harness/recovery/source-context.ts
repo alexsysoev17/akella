@@ -8,7 +8,7 @@ export function codeSourceContext(files: CodeRepairWorkspace["files"], byteBudge
     const lines=f.content.split("\n"), chosen=new Set<number>();
     const add=(at:number,radius:number)=>{for(let i=Math.max(0,at-radius);i<=Math.min(lines.length-1,at+radius);i++)chosen.add(i);};
     // Imports, exact invariant sites and scheduling/scoping branches precede unrelated implementation.
-    const anchors=[0,...lines.flatMap((line,i)=>/TASK_SCOPE_VIOLATION|removeTimingDependency|dependencyStart|resolveTimingDependencies|requirementTiming|isSelfAnchor|startFrame <|PROVIDER_SCHEMA_INVALID/.test(line)?[i]:[])];
+    const anchors=[0,...lines.flatMap((line,i)=>/TASK_SCOPE_VIOLATION|removeTimingDependency|dependencyStart|resolveTimingDependencies|requirementTiming|isSelfAnchor|startFrame <|PROVIDER_SCHEMA_INVALID|MISSING_SEQUENTIAL_DEPENDENCY|REPAIR_SOURCE_SCOPE_VIOLATION|pendingAfter|temporalCues/.test(line)?[i]:[])];
     for(const at of anchors){
       const previous=new Set(chosen);add(at,at===0?18:12);
       if(Buffer.byteLength([...chosen].sort((a,b)=>a-b).map(i=>lines[i]).join("\n"))>each-1500){chosen.clear();previous.forEach(i=>chosen.add(i));break;}
