@@ -1,3 +1,4 @@
+import {preparePlanSkills} from "../motion-library/skills/runtime.js";
 import {compositionQA} from "../native/composition-qa.js";
 import {projectTime} from "./project-time.js";
 import {runtimeCode} from "../runtime-code.js";
@@ -705,6 +706,19 @@ export async function proposeMotion(
           const failure=Object.assign(Error("UNVERIFIED_MOTION_RESULT"),{code:"UNVERIFIED_MOTION_RESULT",report:{failure:JSON.stringify(generated.requirements.filter(r=>r.status!=="PASSED").map(r=>({requirementId:r.requirementId,error:r.error,qaResult:r.qaResult})))}});
           await superviseRunFailure(harness,failure,project,request.settings,onStage,doc.revision);
         }
+        if(generated.reconciliation.status==="SUCCESS"&&contract.skillBindings?.length){
+          const skillStarted=performance.now();
+          const prepared=await preparePlanSkills(project,generated.next,contract,{signal:options.signal,beforeRender:()=>harness?.beforeRender()}).catch(async error=>{
+            const report=(error as Error&{report?:unknown}).report;
+            await atomicJson(path.join(directory,"skills.json"),[{skill:"text.handoff.no-overlap",status:"FAILED",...(harness&&harness.config.privacy!=="full"?{reason:String(error)}:{report,reason:String(error)})}]);
+            throw error;
+          });
+          if(harness)harness.qaDurationMs+=performance.now()-skillStarted;
+          generated.next=prepared.state;generated.operationBatches.push(prepared.operations);generated.plan.operations.push(...prepared.operations);
+          generated.plan.assumptions.push(...prepared.reports.filter(r=>r.strategy!=="unchanged").map(r=>`Text Handoff: входящий текст сдвинут по времени; политика ${r.application.overlapPolicy}, подробности в Inspector.`));
+          generated.reconciliation.operationCount+=prepared.operations.length;generated.reconciliation.appliedOperationCount+=prepared.operations.length;generated.reconciliation.compiledOperationCount+=prepared.operations.length;
+          await atomicJson(path.join(directory,"skills.json"),prepared.reports);await harness?.record("motion-skills",prepared.reports.map(r=>({skill:r.skill,application:r.application,strategy:r.strategy,status:r.after.status})));
+        }
         if(generated.reconciliation.status==="SUCCESS"&&renderingMode()==="native"&&generated.next.objectTransitions?.some(t=>t.timelinePolicy==="referenceStates")){
           const composition=await compositionQA(project,generated.next,`motion/qa/${id}/composition`,{signal:options.signal,beforeRender:()=>harness?.beforeRender()});
           await harness?.record("composition-qa",{status:composition.status,frames:composition.frames,failedChecks:composition.checks.filter(c=>c.status==="FAILED")});
@@ -723,6 +737,7 @@ export async function proposeMotion(
           harness?.checkpoint();
           onStage("applying");
           const publication = await commitChanges(project.root, {
+            signal:harness?.signal??options.signal,checkpoint:()=>harness?.checkpoint(),
             expectedRevision: doc.revision,
             expectedSourceFingerprint: project.inspection.fingerprint,
             operationBatches: generated.operationBatches,

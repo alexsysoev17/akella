@@ -1,3 +1,4 @@
+import {skillPlanningInstructions} from "./graph.js";
 import {patchSequentialDependencies} from "./semantic-patch.js";
 import {mergeCompactRepair,semanticRepairSchema} from "./repair.js";
 import {validateMentions,type ObjectMention} from "../mentions.js";
@@ -176,7 +177,7 @@ export class SemanticProvider implements IntentProvider {
       ).structured(
         { ...(semanticContext(context) as object), feedback },
         request,
-        graphInstructions,
+        graphInstructions+"\n"+skillPlanningInstructions,
         semanticResponseSchema,
         "semantic-planning",
         semanticGraphSchema,
@@ -964,7 +965,7 @@ export async function semanticPlan(
     providerConversation: projectedContext.recentConversation ?? [],
     contextProjectionBytes: Buffer.byteLength(JSON.stringify(projectedContext)),
     instructionBytes: Buffer.byteLength(
-      compactTier ? selectorEditInstructions : graphInstructions,
+      compactTier ? selectorEditInstructions : graphInstructions+"\n"+skillPlanningInstructions,
     ),
     outputSchemaBytes: Buffer.byteLength(
       JSON.stringify(

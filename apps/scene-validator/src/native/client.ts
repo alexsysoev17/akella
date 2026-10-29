@@ -94,6 +94,7 @@ export async function renderNativeFrame(
     transparent?: boolean;
     encoding?: "png" | "rgba";
     diagnostics?: boolean;
+    coverageProbe?: {focus:{sceneId:string;targetId:string}[];ignore:{sceneId:string;targetId:string}[];roi?:boolean};
     cache?: boolean;
     signal?: AbortSignal;
   } = {},
@@ -123,6 +124,7 @@ export async function renderNativeFrame(
           encoding: options.encoding ?? "png",
           cache: options.cache ?? true,
           diagnostics: options.diagnostics ?? false,
+          coverageProbe: options.coverageProbe,
         },
       },
       options.signal,
@@ -168,6 +170,7 @@ export async function renderNativeFrame(
           encoding: options.encoding ?? "png",
           cache: options.cache ?? true,
           diagnostics: options.diagnostics ?? false,
+          coverageProbe: options.coverageProbe,
         },
       },
       options.signal,

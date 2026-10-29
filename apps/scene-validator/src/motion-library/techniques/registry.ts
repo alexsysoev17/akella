@@ -8,7 +8,7 @@ export const techniques = [
       "Explicit non-destructive text clipping reveal; never added to ordinary slide/fade",
     queries: ["mask reveal text", "текст через маску"],
     implementation:
-      "Cached SVG clip wrapper sized from source bounds and loaded HTML line boxes",
+      "Native shaped-text clip coverage in Skia; explicit browser compatibility uses SVG wrappers",
     properties: ["reveal"],
     parameters: ["from", "to", "direction"],
     limits: [
@@ -72,7 +72,7 @@ export const techniques = [
     description: "Native path-length mask reveal preserving source paint",
     queries: ["Trim Paths", "прорисуй линию вдоль траектории", "path reveal"],
     implementation:
-      "getTotalLength + stroke-dasharray/dashoffset on centerline mask",
+      "Native CanvasKit PathMeasure contour segments on immutable centerline geometry; browser compatibility uses SVG dash masks",
     properties: ["trim"],
     parameters: ["from", "to", "direction", "durationFrames", "easing"],
     limits: [

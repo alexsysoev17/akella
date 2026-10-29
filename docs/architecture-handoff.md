@@ -4,13 +4,13 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-29 (Europe/Moscow) — reference-state scene compositing, persistent instances, native Frame Inspector and whole-composition QA; targeted update, not a full audit |
+| Last Updated | 2026-10-29 (Europe/Moscow) — Motion Skills2 contracts/catalogue, native text handoff collision QA and bounded repair; targeted update, not a full audit |
 | Last Full Audit | 2026-10-13; unchanged, this update is not a full renderer/provider audit |
-| Git Commit | Baseline `4405d1c`; local checkpoint `89d42e7` before this repair. v1.1.10 source/tests/docs uncommitted at this documentation snapshot. |
+| Git Commit | Baseline `84d6105`; local checkpoint `bb36bed` before Skills2 work. v1.1.11 changes uncommitted at this documentation snapshot. |
 | Git Branch | `temporal-recovery-loop`, local only |
-| Working Tree Status | Clean at start; targeted v1.1.10 rendering/QA/Inspector changes pending. Original test42 unchanged; investigation/export use an isolated copy. |
-| Documentation Version | 1.1.10 |
-| Scope of Last Update | Successful run07eaf6fa rendering failure, first incorrect frame120, source instance persistence and scene layer slots; deterministic/native/UI/video verification. Semantic Planning and Motion State unchanged. |
+| Working Tree Status | Clean at start; Skills2 source/tests/docs pending. No original client Motion State or Figma data modified. Real-scene rendering uses an isolated controlled fixture. |
+| Documentation Version | 1.1.11 |
+| Scope of Last Update | Unified skill contracts and library UI; semantic role binding; Text Handoff native glyph coverage, safe temporal correction, persistence/FPS/cancellation and Inspector. Existing primitive evaluators retained. |
 | Code snapshot SHA-256 | NOT RECALCULATED; refer to component digests and final source commit. |
 
 Git 2.54.0 (Apple Git-157): локальная история, текущая ветка указана в Document Status, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
@@ -2352,3 +2352,78 @@ Ignored evidence: `data/harness/reports/composition-2026-10-28/` — before/afte
 Architecture Change History: v1.1.10 — authoritative reference-scene epochs, independent logical-object persistent poses, interleaved source layer slots, actual Frame Inspector and final native composition admission. Existing planner/compiler/animation mathematics and stored project contracts reused; no schema migration. Partial architecture update only.
 
 Final v1.1.10 verification: `npm run check` exit0, **415/415** (358 base/integration,2 browser,55 native), TypeScript/build PASSED. Native Frame Inspector Chromium/API tests included. A superseded parallel intermediate run had one existing provider-timeout fixture failure; final full check passed without modifying its test/tolerance. Actual final-source native frame parity and18-frame whole-composition QA PASSED. All360 original-state frames were evaluated and the full12second video decoded. No new provider calls.
+
+
+## Motion Skills Library2 and Intelligent Text Handoff — 2026-10-29 (v1.1.11)
+
+### Audit and unified contracts
+
+Existing executable behavior remains authoritative in `motion-library/registry/capabilities.ts` (schemas/operations), `techniques/registry.ts` (semantic bindings and technique guidance), `expressions/registry.ts` (procedural schemas/lifecycles), `easings/registry.ts` (evaluators), `presets/registry.ts` (one-time primitive expansion), existing intent compiler, numeric/native QA and Recovery. Four Markdown files in `motion-library/skills/` were guidance, not executable skills. Verified inconsistent descriptions claimed HTML foreignObject and DOM stroke dash as the primary implementations; those descriptions now distinguish native Skia from explicit browser compatibility. No old technique/preset/guide was removed.
+
+`motion-library/skills/registry.ts::skillsCatalog` adapts the real registries into one app-facing machine-readable catalogue: **77 entries =64 existing capabilities +8 existing presets +4 guidance documents +1 new native composite**. Guidance is explicitly marked `guidance only`; this is not a claim that all77 are new executable animations. Primitive parameter defaults come from their actual JSON schemas. Metadata includes identity/name/category/version, supported targets, defaults/parameters, constraints, operations, geometry, easing/expression compatibility references, QA, recovery, examples and implementation/engine references. Primitive evaluator code is not copied. Contract version2.0.0 is distinct from an algorithm-version change.
+
+The complex contract is defined once in `skills/handoff.ts`; defaults and typed bindings/applications live in `skills/contracts.ts`. `skillContracts`, the discriminated binding schema and `skills/runtime.ts::skillExecutors` are the extension points. New complex behavior registers a contract/schema/compiler-executor using existing operations; it does not require a new UI, provider adapter, Motion Engine or Renderer. This first implementation has one complex executor. Future composites with new data shapes still require a typed application schema and handler; arbitrary unknown IDs are not accepted as supported.
+
+### Semantic/compilation lifecycle
+
+```mermaid
+flowchart LR
+  U[User request] --> G[Existing semantic graph + skillBindings]
+  G --> C[Existing role requirements and Motion Compiler]
+  C --> S[preparePlanSkills: bind canonical IDs and compiled track IDs]
+  S --> P[Native glyph coverage and final pose QA]
+  P --> R[Bounded deterministic correction if permitted]
+  R --> T[Append exact primitive edits and skill metadata to candidate]
+  T --> V[Revision checked store: validate again before write]
+  V --> H[One transaction and Undo/Redo]
+  H --> N[Existing native Preview / FFmpeg]
+```
+
+Semantic graph/IntentPlan add optional `skillBindings`: skillId, outgoing/incoming action IDs (normalized to actual requirement IDs), placement, overlap policy and timing locks. This is an explicit replacement relationship alongside the two ordinary actions, not a second planner or compiler. The role actions keep source clauses and existing slide/fade techniques. Instructions are derived from the contract; relevant knowledge receives its public contract without duplicating the selection instructions. Intent/context parsing remains provider independent. Unrelated text movements must not acquire a replacement binding. Simultaneous movement does not itself authorize spatial overlap.
+
+`preparePlanSkills` resolves roles against the validated requirements and actual compiled animations, then uses the registered executor. Explicit incoming `startSeconds` locks timing even if a provider omits the lock flag. Existing compiler/schema/QA still validate primitives. Additional skill operations are appended before revision-checked commit, with actual operation counts and correction assumptions. `motion/ai/<runId>/skills.json` and the run trace preserve application/strategy, before/after frames, collision counts, QA and adjustments. No additional provider call is used for collision correction.
+
+Placement=`reference` preserves the incoming Figma state by default. Placement=`outgoingOrigin` is for an explicit same-place instruction: align the incoming reference's top-left to the outgoing reference while preserving incoming typography, scale and rotation. Parent inverse transforms convert the requested displacement into its existing motion channels. A typed moveTo replaces the owned incoming position track, retaining its ID/timing/easing; endpoints are then checked against the selected policy. Nonzero same-place relocation of an independently segmented position track is explicitly unsupported rather than silently substituting block animation. Reference-aligned segmented motion remains supported.
+
+### Native visible geometry and collision policy
+
+`native/skill-coverage.ts::handoffCoverage` evaluates **every integer output frame** in the bounded handoff interval using the same native worker. Per-target coverage probes tint the focused text white and other scene content black, ignoring only the other handoff text, so third-party alpha occlusion, masks, clipping, parent transforms, text segmentation and scene presentation remain in the actual draw path. Source text shaping/runs/fonts are unchanged. The probe measures premultiplied white contribution, not text-box intersection or CSS. Ordinary Preview/export never uses the diagnostic tint.
+
+Policy: a glyph contributes when coverage>=13/255 (about5%); collision requires at least one output pixel contributed by both. Pure bounds overlap and geometry touching without shared covered pixels are not errors. Sub-threshold AA/nearly transparent contribution is ignored. Require checks actual covered overlap; allow does not fail for overlap. Contrast readability and subjective artistic quality are NOT_TESTED.
+
+Coverage can read back a conservative shaped-text ROI at full native resolution, mapping sparse occupied pixels back to global canvas coordinates. This is cropping, not downsampling. No PictureRecorder rendering substitute remains: an experimental recorded pass changed a few threshold pixels in a real scene and was rejected; normal rasterization is retained. Black-only normal-compositing subtrees below the first focused draw can be skipped because the probe background is opaque black. Real FullHD ROI counts were verified exactly equal to the earlier full-resolution coverage. Shape/effect padding is conservative. Ordinary rendering output remains unaffected.
+
+The six checks are `TEXT_HANDOFF_VISIBLE_COLLISION`, `TARGET_REACHED`, `TIMING_VALID`, `FINAL_STATE`, `CONTINUITY`, `OVERLAP_POLICY` (all prefixed TEXT_HANDOFF). Incoming final geometry must reach its intended reference/placement, incoming glyphs must be visible, outgoing glyphs must be gone, and source glyphs must initially be present. Both texts disappearing cannot create a false pass. Invisible intervals are reported, but a deliberate timed gap is not rejected by a universal settling/readability rule. Initially visible source, finally visible replacement and finite actual poses are required. The current skill interval is limited to5seconds and must fit the output range including its final pose; normal Harness resource limits also apply.
+
+### Bounded repair and safety
+
+For avoid-policy collisions, sparse masks estimate the smallest frame delay within the permitted window. The actual new candidate is re-rendered; estimates are not accepted as proof when moving occluders/parents alter composition. A full outgoing-duration delay (bounded by the permitted window) is the fallback. The transient sparse-mask cache is capped at32MiB; on exhaustion QA continues but delay estimation falls back to the bounded candidate. Default maxDelay=2seconds, configurable0..5seconds. Outgoing tracks, final positions, motion direction/easing and unrelated animations stay unchanged. Incoming slide/opacity and attached expressions move together. Explicit incoming start locks and incoming dependency edges are not rewritten. If no candidate is safe, return `TEXT_HANDOFF_CONSTRAINT_CONFLICT` with the actual report; retain the original project and animations. Trajectory detours, intermediate spatial offsets and staggered-visibility-only repair are **NOT IMPLEMENTED** in this first executor.
+
+The existing Recovery taxonomy/Supervisor recognizes an exhausted handoff user-constraint conflict as an external/constraint outcome, not evidence that the application source must be patched. It does not regenerate the semantic plan or start Code Repair for this precise error. No new Supervisor exists and technical validation stays enabled.
+
+Persisted Motion State adds optional `skillApplications`; old documents remain valid under schema1.0.0. Typed setSkillApplication/removeSkillApplication attach/unlink the constraint. Unlinking alone does not remove animations. Removing/disabling a bound animation deactivates its skill metadata; Undo restores the previous active application. Existing revision locks, candidate equality, history and source fingerprint are unchanged. `changeMotion` revalidates active skills before every write, including FPS/settings/manual edits and Undo/Redo. Invalid FPS-induced geometry cannot be committed; this guard does not silently reinterpret hard timing. Commit accepts optional cancellation/checkpoint hooks for the new asynchronous validation and checks them again immediately before atomic publication. Aborted validation changes no saved revision/history.
+
+Rotated/reflected parent offscreen motion previously threw OFFSCREEN_PARENT_TRANSFORM_UNSUPPORTED. The existing slide schema now accepts an optional local2D displacement vector; the same easing evaluator applies it to x/y, while legacy scalar slides are unchanged. `intent/entrance.ts::transformedOffscreenVector` maps canvas clearance through the parent inverse, reused by the compiler and the handoff tool. Channel validation records both channels. No second movement evaluator was introduced.
+
+### UI and local API
+
+Library: `/#skills`, linked from the project list and project Settings. It supports title/ID search, category filtering, defaults/parameter schemas, limitations/examples, engine support and version. Only the new handoff has a native interactive demo so far; others explicitly say a demo is not connected. The demo is a synthetic temporary local project rendered through the same engine/Skia pipeline at24FPS; it is not a CSS simulation or client project modification. One temporary demo instance per process is reused.
+
+- GET /api/skills — shared catalogue.
+- GET /api/skills/text.handoff.no-overlap/demo/frame?frame=0..71 — actual native demo PNG.
+- POST /api/projects/:id/motion/apply-skill — revision + two canonical source references + start/duration/locks/policy/placement; compile, native QA/repair and one atomic commit.
+- GET /api/projects/:id/motion/skill-frame?applicationId=...&frame=N&phase=before|after — actual current candidate; before subtracts saved timing corrections, explicitly not an arbitrary historical project replay.
+
+Inspector QA shows skill identity, bound references, placement, intervals, poses, collisions, overlap policy, chosen correction and all checks. Before/after images are shown only for the currently committed run; historical reports retain diagnostics without pretending the current state is their historical state. Full prompt-related skill diagnostics respect existing full/privacy rules. No new dependency, cloud service, AI model setting or project database.
+
+### Actual verification and limits
+
+Permanent `tests/native-skills.test.ts` covers the catalogue, simultaneous noncollision, real collision correction, allow/require, fixed starts, different widths and multiline at24/30/60FPS, rotated parent/clipping/mask, cross-scene reference lifetimes, final visibility failure, persistence/reopen/FPS/Undo/Redo, mock semantic graph through production execution/one commit, real API/Chromium catalogue/demo, exact ROI pixels, disjoint glyphs with overlapping boxes, uncached random seeks, safe constraint classification, explicit same-place placement and cancellation during transaction validation. Mock interpretation is not live-provider understanding.
+
+Real fixture: a controlled Motion State in an isolated copy of test42, using unmodified real Figma Text1/Text2 nodes, assets and fonts. Original full advertising motion is not claimed replayed by this skill-specific fixture. Native coverage found20 colliding frames18..37; incoming position+opacity were delayed12frames/.4seconds, with outgoing tracks and final reference positions intact. Re-rendered correction had zero collision frames and all six checks passed. FullHD3second90frame30FPS video exported/decoded, with Preview/FFmpeg source hashes matching at0/45/89. Final crop coverage exactly matches previous FullHD counts. The original Motion State hash is unchanged; no client source files were edited and no live provider call occurred in this task.
+
+Ignored evidence: `data/harness/reports/skills-2026-10-29/` contains qa.json, final-native-verification.json, before.png, after.png, figma-text-handoff.mp4, result.json and video-decode.log. Final frozen-source full-check totals are recorded below after completion. There is no claim of pixel-perfect Figma fidelity, complete artistic QA, universal auto-repair or live natural-language qualification. General complex root blend/effect limitations documented in v1.1.10 remain; this skill inherits them.
+
+Architecture Change History: v1.1.11 — shared Skills catalogue/contracts/executor, semantic role bindings, native visible glyph collision probes, bounded temporal repair, explicit placement, persisted skill constraints and async commit cancellation. Existing primitive registries/compiler/easing/shaping/renderer/history reused; optional fields only, no old project migration or user source modification. Partial audit, not a full architecture re-audit.
+
+Final v1.1.11 verification: `npm run check` exit0, **433/433** (358 base/integration,2 existing browser,73 native), TypeScript/build PASSED.18 new native test groups include the9combination FPS/text matrix and real Chromium/API/production mock execution. Failed skill QA is persisted, with no second provider call and no candidate commit. Temporary experimental formatting/schema/demo errors were fixed; no existing test or tolerance was weakened. Real fixture/video and exact full-resolution crop verification PASSED; live-provider understanding NOT VERIFIED (zero new external calls). Source was frozen for this final full check.

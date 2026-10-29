@@ -65,6 +65,7 @@ export function evaluateAnimation(a: Animation, frame: number): Values {
     case "slideDown":
     case "slideLeft":
     case "slideRight": {
+      if(a.parameters.vector){const q=a.parameters.mode==="in"?1-t:t;return {x:a.parameters.vector.x*q,y:a.parameters.vector.y*q};}
       const direction =
         a.effect === "slideUp" || a.effect === "slideLeft" ? 1 : -1;
       const q = a.parameters.mode === "in" ? 1 - t : -t;

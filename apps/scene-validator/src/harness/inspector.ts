@@ -329,6 +329,7 @@ export async function inspectorRun(root: string, id: string, raw = false) {
       : "NOT_AVAILABLE",
     request,
     understanding: tasks,
+    skills:full?await saved(root,`motion/ai/${id}/skills.json`):"REDACTED",
     semanticTaskGraph,
     globalRecovery:full ? await saved(root,`motion/ai/${id}/global-recovery.json`) : {status:"REDACTED",reason:"Run privacy policy"},
     recovery: full ? await saved(root, `motion/ai/${id}/recovery.json`) : "REDACTED",

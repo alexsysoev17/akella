@@ -1,3 +1,4 @@
+import {handoffOperations,prepareHandoff} from "../motion-library/skills/runtime.js";
 import {compareFrameComposition} from "../native/composition-qa.js";
 import {projectTime} from "./project-time.js";
 import {runtimeCode} from "../runtime-code.js";
@@ -87,7 +88,28 @@ export async function motionApi(
     });
     response.end(JSON.stringify(value));
   };
+    if(action==="apply-skill"&&request.method==="POST"){
+      runtimeCode.assertCurrent();
+      const ref=z.object({sceneId:z.string(),targetId:z.string()}).strict();
+      const input=z.object({revision:z.string(),applicationId:z.string().min(1).max(100),outgoing:ref,incoming:ref,startFrame:z.number().int(),durationFrames:z.number().int().positive(),placement:z.enum(["reference","outgoingOrigin"]).optional(),overlapPolicy:z.enum(["avoid","allow","require"]).optional(),fixedIncomingStart:z.boolean().optional(),fixedOutgoingStart:z.boolean().optional(),maxDelaySeconds:z.number().min(0).max(5).optional()}).strict().parse(JSON.parse((await body(request,65536)).toString()));
+      const doc=await readMotion(project);if(doc.revision!==input.revision)throw Error("STALE_PROJECT_REVISION");
+      const operations=handoffOperations(project,input),candidate=applyOperations(doc.state,operations,project),prepared=await prepareHandoff(project,candidate,candidate.skillApplications!.find(a=>a.applicationId===input.applicationId)!,{repair:true});
+      const changed=await changeMotion(project.root,{expectedRevision:doc.revision,request:"Text Handoff",operations:[...operations,...prepared.operations],expectedCandidate:prepared.state});
+      json({document:changed,skill:prepared.report});return true;
+    }
   if (request.method === "GET") {
+    if(action==="skill-frame"&&request.method==="GET"){
+      const query=new URL(request.url!,"http://local").searchParams,doc=await readMotion(project),id=query.get("applicationId");
+      const app=doc.state.skillApplications?.find(a=>a.applicationId===id);if(!app)throw Error("SKILL_APPLICATION_NOT_FOUND");
+      const frame=z.coerce.number().int().nonnegative().parse(query.get("frame"));let state=doc.state;
+      if(query.get("phase")==="before"){
+        const operations=app.incoming.animationIds.map(animationId=>({type:"setStartFrame" as const,animationId,startFrame:doc.state.animations.find(a=>a.animationId===animationId)!.startFrame-Math.round(app.adjustments.filter(a=>a.animationId===animationId).reduce((sum,a)=>sum+a.delaySeconds,0)*doc.state.settings.fps)}));
+        state=applyOperations(state,operations,project);
+      }
+      if(frame>=state.settings.durationFrames)throw Error("FRAME_OUTSIDE_OUTPUT_WINDOW");
+      const {renderNativeFrame}=await import("../native/client.js");const image=await renderNativeFrame(project,state,frame,{scale:.5});response.writeHead(200,{"Content-Type":"image/png","Cache-Control":"no-store"});response.end(image.png);return true;
+    }
+
     if(action==="inspect-frame"&&request.method==="GET"){
       const query=new URL(request.url!,"http://local").searchParams;
       const frame=z.coerce.number().int().nonnegative().parse(query.get("frame")??0);

@@ -1,3 +1,4 @@
+import {handoffContract} from "../skills/handoff.js";
 import { textMotionDefaults } from "../techniques/text.js";
 import { semanticBindings } from "../techniques/registry.js";
 import { z } from "zod";
@@ -84,6 +85,7 @@ export const capabilityRegistry = [
   })),
 ];
 const catalog = [
+  {id:handoffContract.id,kind:"skill" as const,supportedObjectTypes:handoffContract.supportedObjects,semanticTechniques:[] as string[],lifecycle:{storage:"skill",create:"skillBindings",update:"existing typed operations",remove:"removeSkillApplication"},parameterSchema:handoffContract.inputParameters,supportedProperties:["text replacement"],constraints:handoffContract.constraints,validation:handoffContract.qa,implementationReference:handoffContract.implementation.execute},
   ...capabilityRegistry.map(({ evaluator, ...entry }) => {
     const { renderer, ...data } = entry as typeof entry & {
       renderer?: unknown;

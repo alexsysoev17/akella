@@ -143,6 +143,8 @@ export async function changeMotion(
   projectPath: string,
   input: {
     expectedRevision: string;
+    signal?:AbortSignal;
+    checkpoint?:()=>void;
     expectedSourceFingerprint?: string;
     operations?: unknown;
     operationBatches?: unknown[];
@@ -157,6 +159,7 @@ export async function changeMotion(
 ) {
   const unlock = await lockProject(projectPath);
   try {
+    input.signal?.throwIfAborted();input.checkpoint?.();
     const project = await loadProject(projectPath),
       doc = await readMotion(project);
     if (
@@ -222,6 +225,10 @@ export async function changeMotion(
       doc.cursor = doc.history.length;
     }
     validateMotion(doc.state, project);
+    if(doc.state.skillApplications?.some(a=>a.enabled)){
+      const {prepareSkill}=await import("../motion-library/skills/runtime.js");
+      for(const app of doc.state.skillApplications.filter(a=>a.enabled))await prepareSkill(project,doc.state,app,{repair:false,signal:input.signal,beforeRender:input.checkpoint});
+    }
     const previousRevision = doc.revision;
     doc.revision = randomUUID();
     if (input.transactionId)
@@ -238,6 +245,7 @@ export async function changeMotion(
     // Validate the persisted envelope too: aggregated batches must respect history limits.
     documentSchema.parse(doc);
     await safeDirectory(project.root, "motion");
+    input.signal?.throwIfAborted();input.checkpoint?.();
     try {
       await atomicJson(path.join(project.root, "motion/motion.json"), doc, {
         durable: true,

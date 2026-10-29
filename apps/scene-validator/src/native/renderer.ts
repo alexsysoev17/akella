@@ -72,6 +72,7 @@ export interface NativeFrame {
     targetId: string;
     points: { x: number; y: number }[];
   }[];
+  coverageRegion?: {x:number;y:number;width:number;height:number;canvasWidth:number;canvasHeight:number};
   composition?: {
     activeScenes: {sceneId:string;opacity:number}[];
     transitions: {transitionId:string;logicalObjectId:string;fromSceneId:string;toSceneId:string;hostSceneId:string;progress:number;active:boolean}[];
@@ -480,8 +481,10 @@ export class NativeRenderer {
       transparent?: boolean;
       encoding?: "png" | "rgba";
       diagnostics?: boolean;
+      coverageProbe?: {focus:{sceneId:string;targetId:string}[];ignore:{sceneId:string;targetId:string}[];roi?:boolean};
     } = {},
   ): NativeFrame {
+    if(options.coverageProbe&&(options.encoding!=="rgba"||(options.scale??1)!==1))throw new NativeRenderError("COVERAGE_ENCODING_REQUIRED","Coverage probes use raw RGBA only");
     if (this.disposed)
       throw new NativeRenderError("RENDERER_DISPOSED", "Session released");
     const started = performance.now(),
@@ -505,7 +508,12 @@ export class NativeRenderer {
         "SURFACE_ALLOCATION_FAILED",
         `${width}x${height}`,
       );
+    const cropProbe=options.coverageProbe?.roi!==false&&Boolean(options.coverageProbe);
     let canvas = surface.getCanvas();
+    const probePoints:{x:number;y:number}[]=[];
+    let coverageRegion:NativeFrame["coverageRegion"];
+    let effectPadding=8;
+    if(cropProbe){const visit=(n:NativeNode)=>{for(const e of list(n.properties?.effects))if(e.visible!==false){const o=record(e.offset);effectPadding+=3*(num(e.radius)+num(e.spread)+Math.abs(num(o.x))+Math.abs(num(o.y)));}(n.children??[]).forEach(visit);};for(const scene of this.project.inspection.document.scenes)visit(scene as unknown as NativeNode);}
     const presentation = statePresentation(this.project, state);
     const evaluation = evaluateMotion(state, requestedFrame, presentation),
       frame = evaluation.frame,
@@ -519,6 +527,12 @@ export class NativeRenderer {
     canvas.scale(scale, scale);
     const registry=buildRegistry(this.project.inspection.document,this.project.inspection.fingerprint);
     const identities=new Map(registry.objects.flatMap(o=>o.sourceInstances.map(i=>[JSON.stringify([i.sceneId,i.sourceNodeId]),o.logicalObjectId] as const)));
+    const probe=options.coverageProbe;
+    const probeFocus=new Set(probe?.focus.map(i=>JSON.stringify([i.sceneId,i.targetId])));
+    const probeIgnore=new Set(probe?.ignore.map(i=>JSON.stringify([i.sceneId,i.targetId])));
+    const probeAncestors=new Set<string>();
+    if(probe)for(const scene of this.project.inspection.document.scenes){const walk=(n:NativeNode):boolean=>{const key=JSON.stringify([scene.sceneId,n.figmaNodeId]);const child=(n.children??[]).map(walk).some(Boolean);if(child)probeAncestors.add(key);return probeFocus.has(key)||child;};walk(scene as unknown as NativeNode);}
+    let probeDepth=0,probePainted=false;
     const trace=new Map<string,NonNullable<NativeFrame["composition"]>["instances"][number]>();
     let sceneOpacity=1,drawOrder=0;
     const overrides = new Map<string, { wrapper: Matrix; opacity: number; composeInstance: boolean }>(),
@@ -606,6 +620,11 @@ export class NativeRenderer {
       maskOnly = false,
     ) => {
       const nodeKey=JSON.stringify([sceneId,n.figmaNodeId]);
+      if(probe&&!maskOnly&&probeIgnore.has(nodeKey))return;
+      const probeInk=probe&&!maskOnly&&probeDepth===0&&!probeAncestors.has(nodeKey)?(probeFocus.has(nodeKey)?"white":"black"):undefined;
+      if(probeInk==="black"&&!probePainted&&[undefined,"NORMAL","PASS_THROUGH"].includes(n.properties?.blendMode as string|undefined))return;
+      if(probeInk==="white")probePainted=true;
+      if(probe&&!maskOnly&&probeAncestors.has(nodeKey))n={...n,properties:{...n.properties,fills:[],strokes:[]}};
       const diagnostic=options.diagnostics ? {sceneId,targetId:n.figmaNodeId,logicalObjectId:identities.get(nodeKey),parentId:(n as NativeNode & {parentId?:string}).parentId,visible:false,animationIds:state.animations.filter(a=>a.enabled&&a.sceneId===sceneId&&a.targetId===n.figmaNodeId).map(a=>a.animationId)} : undefined;
       const exclude=(reason:string)=>{if(diagnostic&&!trace.get(nodeKey)?.visible)trace.set(nodeKey,{...diagnostic,reason});};
       if (onlyActive && !maskOnly && !activeTree.has(nodeKey)) {exclude("INACTIVE_REFERENCE_SUBTREE");return;}
@@ -650,6 +669,7 @@ export class NativeRenderer {
         throw new NativeRenderError("NUMERIC_TRANSFORM_OVERFLOW", n.figmaNodeId);
       canvas.save();
       canvas.concat(affine(combined));
+      if(probeInk){const p=new k.Paint(),filter=k.ColorFilter.MakeBlend(probeInk==="white"?k.WHITE:k.BLACK,k.BlendMode.SrcIn);p.setColorFilter(filter);canvas.saveLayer(p);filter.delete();p.delete();probeDepth++;}
       const contents = () => {
         if (maskOnly && (p.maskType === "VECTOR" || !list(p.fills).length)) {
           const paint = this.paint(
@@ -672,6 +692,13 @@ export class NativeRenderer {
         if (n.type === "TEXT") {
           const layout = this.texts.get(n.figmaNodeId)!;
           warnings.push(...layout.warnings);
+          const captureProbe=(offsets:{x:number;y:number}[]=[])=>{
+            if(!cropProbe||!probeFocus.has(key))return;
+            const pad=effectPadding+2*num(record(n.text).fontSize,48),
+              x=Math.min(0,...layout.lines.map(l=>l.x))-pad,y=Math.min(0,layout.offsetY,...layout.lines.map(l=>l.y))-pad,
+              right=Math.max(num(p.width),...layout.lines.map(l=>l.x+l.width))+pad,bottom=Math.max(num(p.height),layout.height+layout.offsetY,...layout.lines.map(l=>l.y+l.height))+pad;
+            for(const offset of offsets.length?offsets:[{x:0,y:0}])for(const [px,py] of [[x,y],[right,y],[right,bottom],[x,bottom]])probePoints.push({x:world[0][0]*(px+offset.x)+world[0][1]*(py+offset.y)+world[0][2],y:world[1][0]*(px+offset.x)+world[1][1]*(py+offset.y)+world[1][2]});
+          };
           layout.fontFamilies.forEach((f) => usedFonts.add(f));
           const tracks = state.animations.filter(
             (a) =>
@@ -712,6 +739,7 @@ export class NativeRenderer {
             );
           }
           if (!tracks.length) {
+            captureProbe();
             drawStableText(
               k,
               canvas,
@@ -857,6 +885,7 @@ export class NativeRenderer {
               );
               canvas.restore();
             }
+            captureProbe(offsets);
             textTrace.push({
               targetId: n.figmaNodeId,
               sceneId,
@@ -1279,6 +1308,7 @@ export class NativeRenderer {
       } finally {
         filter?.delete();
       }
+      if(probeInk){probeDepth--;canvas.restore();}
       canvas.restore();
     };
     try {
@@ -1342,6 +1372,11 @@ export class NativeRenderer {
         drawNode({ ...source, properties: { ...source.properties, visible: true, opacity: originalOpacity > 0 ? originalOpacity : 1 } }, unit, fit, entry.sceneId);
         canvas.restore(); drawingStatic = false; currentStaticRoot = null;
       }
+      if(cropProbe){
+        const x=Math.max(0,Math.min(width-1,Math.floor(Math.min(...probePoints.map(p=>p.x),width-1)*scale))),y=Math.max(0,Math.min(height-1,Math.floor(Math.min(...probePoints.map(p=>p.y),height-1)*scale))),right=Math.min(width,Math.max(x+1,Math.ceil(Math.max(...probePoints.map(p=>p.x),0)*scale))),bottom=Math.min(height,Math.max(y+1,Math.ceil(Math.max(...probePoints.map(p=>p.y),0)*scale)));
+        coverageRegion={x,y,width:right-x,height:bottom-y,canvasWidth:width,canvasHeight:height};
+
+      }
       const drawn = performance.now();
       surface.flush();
       const snapshot = surface.makeImageSnapshot();
@@ -1349,9 +1384,9 @@ export class NativeRenderer {
       try {
         const bytes =
           options.encoding === "rgba"
-            ? snapshot.readPixels(0, 0, {
-                width,
-                height,
+            ? snapshot.readPixels(coverageRegion?.x??0, coverageRegion?.y??0, {
+                width:coverageRegion?.width??width,
+                height:coverageRegion?.height??height,
                 colorType: k.ColorType.RGBA_8888,
                 alphaType: k.AlphaType.Unpremul,
                 colorSpace: k.ColorSpace.SRGB,
@@ -1370,8 +1405,9 @@ export class NativeRenderer {
         png,
         encoding: options.encoding ?? "png",
         frame,
-        width,
-        height,
+        width:coverageRegion?.width??width,
+        height:coverageRegion?.height??height,
+        coverageRegion,
         renderer: this.renderer,
         environment: {
           engine: "canvaskit-wasm/0.42.0",

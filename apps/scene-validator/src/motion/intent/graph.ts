@@ -1,3 +1,5 @@
+import {skillBindingSchema} from "../../motion-library/skills/contracts.js";
+import {skillContracts} from "../../motion-library/skills/registry.js";
 import { locateSource } from "./provenance.js";
 import { editingContract } from "../../motion-library/editing-contract.js";
 import { z } from "zod";
@@ -17,6 +19,7 @@ export const semanticGraphSchema = z
     schemaVersion: z.literal("semantic-graph/1.0"),
     timelineExtension: z.enum(["safeExtend", "fixed"]).optional(),
     timelineConstraintSource: z.string().min(1).max(2000).optional(),
+    skillBindings:z.array(skillBindingSchema).max(50).optional(),
     clauses: z
       .array(
         z
@@ -319,6 +322,7 @@ export function normalizeSemanticGraph(
     timelineExtension: graph.timelineExtension,
     timelineConstraintSource: graph.timelineConstraintSource,
     requirements,
+    skillBindings:graph.skillBindings?.map(b=>({...b,outgoing:anchor(b.outgoing)!,incoming:anchor(b.incoming)!})),
     sourceClauses: [...clauses].map(([clauseId, c]) => ({ clauseId, ...c })),
     coverage: graph.clauses.map((clause) => ({
       sourceText: clauses.get(clause.clauseId)!.text,
@@ -347,3 +351,5 @@ Use current request, not previous conversation, to choose action/technique. Defa
 // Lifecycle interpretation belongs to the same semantic graph and compiler.
 
 // Lifecycle and scope contracts are shared by every provider.
+
+export const skillPlanningInstructions=skillContracts.map(c=>c.semanticInstructions).join("\n");

@@ -22,6 +22,7 @@ export function channels(a: Animation): string[] {
     return [a.parameters.property];
   if (a.effect.startsWith("fade")) return ["opacity"];
   if (a.effect.startsWith("scale")) return ["scale"];
+  if(["slideUp","slideDown","slideLeft","slideRight"].includes(a.effect)&&"vector" in a.parameters&&a.parameters.vector)return ["x","y"];
   if (a.effect === "slideUp" || a.effect === "slideDown") return ["y"];
   if (a.effect === "slideLeft" || a.effect === "slideRight") return ["x"];
   if (a.effect === "moveTo") return ["x", "y"];
@@ -124,6 +125,11 @@ export function validateMotion(
       )
         throw new Error("Ключевые кадры должны включать 0 и durationFrames.");
     }
+  }
+  for(const app of state.skillApplications??[]){
+    if(!app.enabled)continue;
+    const ids=[...app.outgoing.animationIds,...app.incoming.animationIds];
+    if(ids.some(id=>!state.animations.some(a=>a.animationId===id&&a.enabled)))throw Error("SKILL_ANIMATION_REFERENCE_MISSING: "+app.applicationId);
   }
   const enabled = state.animations.filter((a) => a.enabled);
   for (const a of enabled.filter(
@@ -251,6 +257,8 @@ export function applyOperations(
     if ("blockId" in op && !block)
       throw new Error(`Блок не найден: ${op.blockId}`);
     switch (op.type) {
+      case "setSkillApplication": state.skillApplications=[...(state.skillApplications??[]).filter(a=>a.applicationId!==op.application.applicationId),op.application];break;
+      case "removeSkillApplication": state.skillApplications=state.skillApplications?.filter(a=>a.applicationId!==op.applicationId);break;
       case "setProjectTime":
         updateProjectTime(state, op);
         break;
@@ -498,6 +506,7 @@ export function applyOperations(
       "ANIMATION_HAS_DEPENDENT_EXPRESSION: remove the expression explicitly first",
     );
   if(!ops.some(op=>op.type==="setProjectTime"))refreshTimingOrigins(previous,state,new Set(ops.filter(op=>op.type==="setTimingOrigin").map(op=>op.origin.entity+":"+op.origin.id)));
+  for(const app of state.skillApplications??[])if(app.enabled&&[...app.outgoing.animationIds,...app.incoming.animationIds].some(id=>!state.animations.some(a=>a.animationId===id&&a.enabled)))app.enabled=false;
   return validateMotion(state, project);
 }
 export function motionDiff(before: MotionState, after: MotionState) {
@@ -530,6 +539,7 @@ export function motionDiff(before: MotionState, after: MotionState) {
     after.objectTransitions ?? [],
     "objectTransitions",
   );
+  diff(before.skillApplications??[],after.skillApplications??[],"skillApplications");
   for (const id of new Set(
     [...before.animations, ...after.animations].map((a) => a.animationId),
   ))

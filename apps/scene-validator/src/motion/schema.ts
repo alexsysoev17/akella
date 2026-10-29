@@ -1,3 +1,4 @@
+import {skillApplicationSchema} from "../motion-library/skills/contracts.js";
 import {timingOriginSchema, globalFrameSchema, intervalDurationSchema, nonnegativeFrameSchema, coordinateSchema, MAX_FLOAT32} from "./time.js";
 import { presetIdSchema } from "../motion-library/presets/registry.js";
 import { z } from "zod";
@@ -41,6 +42,7 @@ const fade = z
 const slide = z
   .object({
     distance: z.number().min(0).max(MAX_FLOAT32).default(100),
+    vector:z.object({x:coordinateSchema,y:coordinateSchema}).strict().optional(),
     mode: z.enum(["in", "out"]).default("in"),
   })
   .strict();
@@ -243,6 +245,7 @@ export const timingDependencySchema = z
 export const motionSchema = z
   .object({
     schemaVersion: z.literal("1.0.0"),
+    skillApplications: z.array(skillApplicationSchema).max(1000).optional(),
     timingOrigins: z.array(timingOriginSchema).max(20000).optional(),
     sceneAnchors: z.array(z.object({sceneId:id,startFrame:frame}).strict()).max(1000).optional(),
     staticObjects: z.array(z.object({ logicalObjectId: id, sceneId: id, targetId: id }).strict()).max(1000).optional(),
@@ -261,6 +264,8 @@ export const motionSchema = z
   .strict();
 const animRef = { animationId: id };
 export const operationSchema = z.discriminatedUnion("type", [
+  z.object({type:z.literal("setSkillApplication"),application:skillApplicationSchema}).strict(),
+  z.object({type:z.literal("removeSkillApplication"),applicationId:z.string()}).strict(),
   z.object({type:z.literal("setProjectTime"),fps:z.number().int().min(1).max(60).optional(),durationSeconds:z.number().positive().max(108000).optional(),fpsPolicy:z.enum(["preserveSeconds","preserveFrames"]).optional(),width:z.number().int().min(2).max(4096).optional(),height:z.number().int().min(2).max(4096).optional()}).strict(),
   z.object({type:z.literal("setTimingOrigin"),origin:timingOriginSchema}).strict(),
 

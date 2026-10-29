@@ -1,3 +1,4 @@
+import {mountSkills} from "/skills.js";
 import { mountMotion, unmountMotion } from "/motion.js";
 const $ = (id) => document.getElementById(id),
   app = $("app");
@@ -113,7 +114,7 @@ function renderWelcome(projects = [], showProjects = false) {
     </div>
     <div class="welcome-panel">
       <h1 class="welcome-title"><span>Welcome to</span><img src="/brand/akella.svg" alt="AKELLA"></h1>
-      <div class="welcome-actions">${showProjects ? `<button id="new">Новый проект</button><button id="open-project" aria-controls="project-list">Открыть проект</button>
+      <div class="welcome-actions">${showProjects ? `<button id="new">Новый проект</button><button id="open-project" aria-controls="project-list">Открыть проект</button><a href="#skills">Библиотека анимаций</a>
       <nav id="project-list" class="welcome-projects" aria-label="Проекты">${projects.map(p => `<a href="#project/${encodeURIComponent(p.projectId)}">${escape(p.name)}</a>`).join("") || '<p>Пока нет проектов</p>'}</nav>` : '<button id="start">Старт</button>'}</div>
     </div></section>`;
   const tagline = app.querySelector(".welcome-tagline");
@@ -151,6 +152,7 @@ async function route() {
   const version = ++routeVersion;
   unmountMotion();
   try {
+    if(location.hash==="#skills"){disposeWelcome=await mountSkills(app);return;}
     const id = location.hash.match(/^#project\/([^/]+)/)?.[1];
     if (!id) {
       current = undefined;

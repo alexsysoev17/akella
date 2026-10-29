@@ -82,3 +82,18 @@ export function offscreenDistance(
     (pm?.[axis][axis] ?? 1)
   );
 }
+
+/** Rotated/reflected parents need a 2D local displacement to preserve a canvas
+ * direction. Returning undefined keeps historical axis-aligned scalar tracks. */
+export function transformedOffscreenVector(project:LoadedProject,sceneId:string,targetId:string,effect:string,mode:'in'|'out'){
+ const scene=project.inspection.document.scenes.find(s=>s.sceneId===sceneId);if(!scene)throw Error('UNKNOWN_SCENE');
+ const find=(n:any):any=>n.figmaNodeId===targetId?n:(n.children??[]).map(find).find(Boolean);
+ const target=find(scene);if(!target)throw Error('TARGET_NOT_FOUND');
+ const parentFind=(n:any,id:string):any=>n.figmaNodeId===id?n:(n.children??[]).map((c:any)=>parentFind(c,id)).find(Boolean);
+ const pm=target.parentId&&target.parentId!==scene.figmaNodeId?parentFind(scene,target.parentId)?.sceneTransform:undefined;
+ if(!pm||Math.abs(pm[0][1])<1e-8&&Math.abs(pm[1][0])<1e-8&&pm[0][0]>0&&pm[1][1]>0)return undefined;
+ const m=target.sceneTransform,p=target.properties,w=Number(p.width),h=Number(p.height),points=[[0,0],[w,0],[w,h],[0,h]].map(([x,y])=>({x:m[0][0]*x+m[0][1]*y+m[0][2],y:m[1][0]*x+m[1][1]*y+m[1][2]}));
+ const vertical=['slideUp','slideDown'].includes(effect),positive=(effect==='slideUp'||effect==='slideLeft')===(mode==='in'),values=points.map(p=>vertical?p.y:p.x),delta=positive?(vertical?scene.height:scene.width)-Math.min(...values)+2:-Math.max(...values)-2;
+ const det=pm[0][0]*pm[1][1]-pm[0][1]*pm[1][0];if(Math.abs(det)<1e-12)throw Error('SINGULAR_PARENT_TRANSFORM');const dx=vertical?0:delta,dy=vertical?delta:0;
+ return {x:(pm[1][1]*dx-pm[0][1]*dy)/det,y:(-pm[1][0]*dx+pm[0][0]*dy)/det};
+}

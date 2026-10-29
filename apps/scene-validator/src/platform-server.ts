@@ -1,3 +1,5 @@
+import {skillsCatalog} from "./motion-library/skills/registry.js";
+import {skillDemoFrame} from "./motion-library/skills/demo.js";
 import {runtimeCode} from "./runtime-code.js";
 import {resumeProjectRecoveries} from "./motion/service.js";
 import { recoverInterruptedRuns } from "./harness/runtime.js";
@@ -79,6 +81,10 @@ export async function servePlatform(projectsRoot: string, port = 4173) {
       const url = new URL(request.url ?? "/", `http://${host}`);
       const segments = url.pathname.split("/").filter(Boolean);
       if(request.method==="GET" && url.pathname==="/api/runtime")return json(runtimeCode.status());
+      if(request.method==="GET"&&url.pathname==="/api/skills")return json(skillsCatalog());
+      if(request.method==="GET"&&url.pathname==="/api/skills/text.handoff.no-overlap/demo/frame"){
+        const image=await skillDemoFrame(Number(url.searchParams.get("frame")??0));response.writeHead(200,{"Content-Type":"image/png","Cache-Control":"no-store"});response.end(image.png);return;
+      }
       const sendFile = async (file: string, mime: string) => {
         const bytes = await readFile(file);
         response.writeHead(200, {
@@ -107,6 +113,7 @@ export async function servePlatform(projectsRoot: string, port = 4173) {
           "/styles.css",
           "/motion.js",
           "/inspector.js",
+          "/skills.js",
           "/motion.css",
           "/easing-runtime.js",
           "/mentions.js",

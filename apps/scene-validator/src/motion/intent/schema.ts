@@ -1,3 +1,4 @@
+import {skillBindingSchema} from "../../motion-library/skills/contracts.js";
 import {coordinateSchema, MAX_FLOAT32} from "../time.js";
 import { textAnimationSchema } from "../schema.js";
 import { z } from "zod";
@@ -214,6 +215,7 @@ export const intentPlanSchema = z
     schemaVersion: z.literal("1.0.0"),
     timelineExtension: z.enum(["safeExtend", "fixed"]).optional(),
     timelineConstraintSource: z.string().min(1).max(2000).optional(),
+    skillBindings:z.array(skillBindingSchema).max(50).optional(),
     sourceClauses: z
       .array(
         z

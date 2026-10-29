@@ -8,7 +8,7 @@ import {
 } from "../../motion-library/techniques/text.js";
 import type { SourceNode } from "../registry.js";
 import { resolveTemporalReference } from "./references.js";
-import { offscreenDistance } from "./entrance.js";
+import { offscreenDistance,transformedOffscreenVector } from "./entrance.js";
 import {
   semanticBindings,
   isCustomEasing,
@@ -820,12 +820,14 @@ export function compileRequirement(
             effect: "rotation",
             parameters: { from: 0, to: r.parameters.distance ?? 15 },
           };
-        else if (effect.startsWith("slide"))
+        else if (effect.startsWith("slide")) {
+          const vector=r.parameters.distance===null&&(r.parameters.entrance==="offscreen"||r.parameters.text?.origin==="outsideViewport")?transformedOffscreenVector(project,r.sceneId!,r.target.sourceNodeId!,effect,r.techniques.includes("fadeOut")?"out":"in"):undefined;
           a = {
             ...common,
             effect: effect as "slideUp",
             parameters: {
-              distance:
+              ...(vector?{vector}:{}),
+              distance:vector?Math.hypot(vector.x,vector.y):
                 r.parameters.distance ??
                 (r.parameters.text?.origin === "outsideViewport" ||
                 r.parameters.entrance === "offscreen" ||
@@ -843,7 +845,7 @@ export function compileRequirement(
               mode: r.techniques.includes("fadeOut") ? "out" : "in",
             },
           };
-        else if (effect === "fadeIn" || effect === "fadeOut")
+        } else if (effect === "fadeIn" || effect === "fadeOut")
           a = {
             ...common,
             effect,
