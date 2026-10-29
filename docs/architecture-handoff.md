@@ -6,9 +6,9 @@
 |---|---|
 | Last Updated | 2026-10-29 (Europe/Moscow) — false temporal coverage, protected compact repair, scoped recovery routing and positional inertia QA; targeted update, not a full audit |
 | Last Full Audit | 2026-10-13; unchanged, this update is not a full renderer/provider audit |
-| Git Commit | Baseline `9beab68`; targeted e62 temporal/repair update is uncommitted at this documentation snapshot. |
+| Git Commit | Implementation `e11fa7b`; baseline `9beab68`. This subsequent documentation-only status update does not change runtime source. |
 | Git Branch | `temporal-recovery-loop`, local only |
-| Working Tree Status | Targeted source/tests/docs changes pending commit; real-project replay uses isolated historical-state copies. Original client files unchanged. |
+| Working Tree Status | Runtime source/tests committed in `e11fa7b`; documentation-only status update pending commit. Real-project replay uses isolated historical-state copies; original client files unchanged. |
 | Documentation Version | 1.1.13 |
 | Scope of Last Update | Temporal evidence and Coverage, scoped compact delta merging/Inspector, source recovery routing/accounting, paired positional inertia QA and nonredundant uncached render comparison. |
 | Code snapshot SHA-256 | NOT RECALCULATED; refer to component digests and final source commit. |
@@ -2535,3 +2535,5 @@ Performance limitation:206.6s excludes live model waiting time; a fresh live req
 Actual repair replay also exposed unchanged repeated `///` context rows. They are now preserved without inventing an occurrence; ambiguous rows cannot authorize new writes. Full historical compact patch is structurally admitted after the source fix, but all5 proposed after-logo edges are rejected by the shared-clock semantic guard. Regression tests cover repeated separators and conflicting duplicate deltas; duplicate writes cannot arbitrarily select the first proposed timing.
 
 Final verification: full `npm run check` exited0 — **456/456** (369 base/integration,2 browser,85 native), TypeScript/build PASSED. Final focused Coverage/repair/causal/native suite **35/35** and final TypeScript PASSED; it includes the additional end-alignment/explicit-offset guard control added after the full-suite snapshot. An earlier full run caught an obsolete render-request count assertion (5 versus the new4); that performance assertion was corrected and strengthened with actual determinism/reuse checks, then the full suite passed. No tolerance or pixel check was loosened. Final guard rejects only provably later child-start edges with zero offsets, never end-aligned or explicitly offset alternatives. Zero new external provider calls.
+
+Final server verification after checking all7 projects for active jobs: runtime CURRENT, loaded code digest `ccd70691d9c63a66b255758d65d6a7349fb4f3a051726afbe6d1a3081118aab6`, no changed executable files. Local source commit `e11fa7b`; no remote/push.
