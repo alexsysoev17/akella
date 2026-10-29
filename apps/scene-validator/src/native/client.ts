@@ -93,6 +93,7 @@ export async function renderNativeFrame(
     scale?: number;
     transparent?: boolean;
     encoding?: "png" | "rgba";
+    diagnostics?: boolean;
     cache?: boolean;
     signal?: AbortSignal;
   } = {},
@@ -121,6 +122,7 @@ export async function renderNativeFrame(
           transparent: options.transparent ?? false,
           encoding: options.encoding ?? "png",
           cache: options.cache ?? true,
+          diagnostics: options.diagnostics ?? false,
         },
       },
       options.signal,
@@ -165,6 +167,7 @@ export async function renderNativeFrame(
           transparent: options.transparent ?? false,
           encoding: options.encoding ?? "png",
           cache: options.cache ?? true,
+          diagnostics: options.diagnostics ?? false,
         },
       },
       options.signal,

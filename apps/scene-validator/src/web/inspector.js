@@ -12,13 +12,14 @@ export function attachInspector(container, url) {
   panel.className = "agent-inspector";
   panel.hidden = true;
   panel.setAttribute("aria-label", "Agent Inspector");
-  panel.innerHTML = `<div class="inspector-resize" role="separator" aria-label="Ширина Inspector" tabindex="0"></div><header><strong>Agent Inspector</strong><button data-close aria-label="Закрыть">Закрыть</button></header><select aria-label="История запусков"></select><div class="inspector-tabs" role="tablist">${["Обзор", "Понимание", "Действия", "QA", "Данные"].map((t, i) => `<button role="tab" data-tab="${i}">${t}</button>`).join("")}</div><div class="inspector-body"></div><footer><button data-copy>Скопировать отчёт</button><button data-zip>Скачать ZIP</button><button data-project-zip>Диагностика проекта</button><span role="status"></span></footer>`;
+  panel.innerHTML = `<div class="inspector-resize" role="separator" aria-label="Ширина Inspector" tabindex="0"></div><header><strong>Agent Inspector</strong><button data-close aria-label="Закрыть">Закрыть</button></header><select aria-label="История запусков"></select><div class="inspector-tabs" role="tablist">${["Обзор", "Понимание", "Действия", "QA", "Данные", "Кадр"].map((t, i) => `<button role="tab" data-tab="${i}">${t}</button>`).join("")}</div><div class="inspector-body"></div><footer><button data-copy>Скопировать отчёт</button><button data-zip>Скачать ZIP</button><button data-project-zip>Диагностика проекта</button><span role="status"></span></footer>`;
   container.append(panel);
   const select = panel.querySelector("select"),
     body = panel.querySelector(".inspector-body"),
     status = panel.querySelector("[role=status]");
   const values = new Map();
   let valueId = 0;
+  let frameData, frameNumber=0;
   let rawData,
     manualSelection = false,
     lastVersion;
@@ -109,6 +110,12 @@ export function attachInspector(container, url) {
       b.classList.toggle("active", active);
       b.setAttribute("aria-selected", String(active));
     });
+    if(tab===5){
+      values.clear();
+      body.innerHTML=`<form data-frame-form><label>Кадр <input name="frame" type="number" min="0" step="1" value="${frameNumber}" required></label><button>Показать и сравнить с предыдущим</button></form><p>Текущее сохранённое состояние проекта, фактический Native Renderer. Исторический запуск не воспроизводится автоматически.</p>${frameData?`<img style="width:100%" alt="Кадр ${frameNumber}" src="${url}/frame?frame=${frameNumber}&scale=0.25&revision=${encodeURIComponent(frameData.revision)}">${tree(frameData,"Вычисленная композиция и соседний кадр")}`:""}`;
+      body.querySelector('form').onsubmit=async event=>{event.preventDefault();frameNumber=Number(new FormData(event.currentTarget).get('frame'));status.textContent='Вычисляем кадр…';try{const r=await fetch(url+'/inspect-frame?frame='+frameNumber+'&compare='+Math.max(0,frameNumber-1));const v=await r.json();if(!r.ok)throw Error(v.error);frameData=v;status.textContent='Кадр вычислен';render();}catch(e){status.textContent=e.message;}};
+      return;
+    }
     if (!data) {
       body.textContent =
         "Нет сохранённых запусков. Выполните запрос с включённой историей Harness.";

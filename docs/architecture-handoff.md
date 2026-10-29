@@ -4,13 +4,13 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-28 (Europe/Moscow) — authorized test42 live follow-through, segmented text entry/exit origin contract; targeted update, not a full audit |
+| Last Updated | 2026-10-29 (Europe/Moscow) — reference-state scene compositing, persistent instances, native Frame Inspector and whole-composition QA; targeted update, not a full audit |
 | Last Full Audit | 2026-10-13; unchanged, this update is not a full renderer/provider audit |
-| Git Commit | Baseline `c3f3a6a` contains v1.1.8; v1.1.9 text entry/exit source/tests/docs are uncommitted at this documentation snapshot. |
+| Git Commit | Baseline `4405d1c`; local checkpoint `89d42e7` before this repair. v1.1.10 source/tests/docs uncommitted at this documentation snapshot. |
 | Git Branch | `temporal-recovery-loop`, local only |
-| Working Tree Status | v1.1.9 reviewed text source/tests/docs pending; clean at start. Original test42 files unchanged (56 hashes checked); live inference, continuation and video operate on an isolated copy. |
-| Documentation Version | 1.1.9 |
-| Scope of Last Update | Authorized exact test42 live planning, real preflight root cause, shared offscreen text direction/exit semantics, strict compositor compatibility and deterministic production continuation. Partial audit only. |
+| Working Tree Status | Clean at start; targeted v1.1.10 rendering/QA/Inspector changes pending. Original test42 unchanged; investigation/export use an isolated copy. |
+| Documentation Version | 1.1.10 |
+| Scope of Last Update | Successful run07eaf6fa rendering failure, first incorrect frame120, source instance persistence and scene layer slots; deterministic/native/UI/video verification. Semantic Planning and Motion State unchanged. |
 | Code snapshot SHA-256 | NOT RECALCULATED; refer to component digests and final source commit. |
 
 Git 2.54.0 (Apple Git-157): локальная история, текущая ветка указана в Document Status, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
@@ -2311,3 +2311,44 @@ Original test42 manifest/source/notes/motion hashes (56 files) are unchanged. Ou
 Architecture Change History: v1.1.9 — canonical text compositor compatibility distinguishes topology from translation policy; shared viewport clearance supports both entry and exit endpoints in native and compatibility rendering; real authorized live contract resumed through existing execution/QA/persistence without another planner. No Motion Engine math, AI planner or project schema change. Full-check and live/continuation evidence stored under ignored `data/harness/reports/provider-time-2026-10-28/test42-live-followthrough/`.
 
 Actual test42 native export verification PASSED:330frames,1920×1080,30FPS,11seconds. Preview RGBA hashes match FFmpeg source frames at0/165/329. Actual text2 is settled/opaque at240, leftward with staggered per-line Fade at251, and alpha0 at263. This tests actual live-plan frame behavior and renderer-input equivalence; H264 lossy pixels and subjective artistic quality are not asserted identical. Video and frame metadata are saved as `test42-live-followthrough/test42-verified-11s.mp4` and `video-verification.json`.
+
+
+## Reference scene composition and persistent instance continuity — 2026-10-29 (v1.1.10)
+
+### Verified root cause and reproduction
+
+Run `07eaf6fa-9777-4f77-82f9-805dfc09181c` is the actual committed test42 state: revision `564d2e01-6d8e-4e43-84b2-4446f0de59d9`,158 operations,35 completed requirements. Investigation copies that state without modifying/replanning the request. Current stored output is360frames/12seconds at30FPS. There were no new model calls.
+
+The first confirmed wrong boundary is **frame120**: nominal scene3 block begins, but explicit scene2→3 reference transitions start150 and handoff171. Native composition selected `presentedTransitions()[0]` globally; the old logo transition60→81 no longer had a nominally visible scene pair, so it failed to control composition. Phone jumped to its unanimated scene3 instance. At150 the newly selected pair became nominally visible and the compositor forced scene2 again until171. At180 nominal scene4 activated early. Detached scene3 instances (including logo and phone) were still evaluated/drawn, but their entire source scene pass was below scene4's opaque background. Hit presence alone was not evidence of visible contribution. `switchProgress:1` was not the defect; ownership was selected globally from an old transition and source-tree passes had incorrect inter-scene paint ordering. `motionPresentationHosts` additionally preferred nominal future instances after completed motion despite its documented hold contract.
+
+### Implemented execution/render boundary
+
+`motion/transition-runtime.ts::compositionSceneWeights` resolves connected components of explicit reference-state scenes. Latest chronological transition epoch determines the component's scene presentation; its layerPolicy switch boundary determines source/target ownership. Before first transition it uses the source reference. Unrelated authored cuts outside the component remain authoritative. `presentedTransitions` independently retains the latest started transition per logical object; finished transitions keep their target pose. Earlier completed objects do not inherit another object's current scene host.
+
+`native/renderer.ts` uses those weights, then resolves per-object transition overrides and `motionPresentationHosts`. The latter holds the most recently actually presented animated instance until a new explicit instance takes over, instead of restoring a future nominal reference. Objects whose host differs from the current full scene are rendered through their own source ancestor tree, with source groups, clip and mask chains retained. Detached trees are merged into top-level layer slots: corresponding unique source names use the active reference's slot, otherwise stable source sibling order is retained. itemReverseZIndex is respected. Scene root backgrounds paint once before layer slots, preventing a foreign opaque background from hiding previously drawn persistent content. No added objects, Fade tracks, motion geometry, IDs, keyframes or source data.
+
+Whole-frame root opacity/blend/effect isolation across interleaved detached scene trees is **REQUIRES REVIEW**. Source styles are retained per layer and `COMPOSITION_ROOT_ISOLATION_REQUIRES_REVIEW` warns for these complex root styles; this is not claimed equivalent to a single isolated root group. Nested source group styles/masks remain within their subtrees. Arbitrary cross-scene parent-ancestry restructuring and every possible z-order overlap are not proven. Primary supported/verified path is native. Browser compatibility still has documented scene-cut presentation and lacks native detached-subtree merging; its transition host is now resolved per object, but it is not claimed equivalent for this multi-scene case.
+
+### Actual Frame Inspector and API
+
+Native render options accept `diagnostics:true`; default Preview/video avoids detailed tracing. Worker frame cache keys include that option. NativeFrame.composition reports active scenes, latest/active transitions and progress/source/target/host IDs, real traversed instances, canonical logical IDs, local/effective/parent opacity, world transform, draw order, animation IDs and reasons for exclusion. Inactive descendants report their exclusion instead of fabricated rendered transforms. Geometry visibility is not a universal proof of final pixel contribution under arbitrary occlusion.
+
+`GET /api/projects/:id/motion/inspect-frame?frame=N&compare=M` renders actual current native frames at diagnostic scale0.25. Comparison is revision-checked and returns actual instance/state changes, not an invented discontinuity verdict. Optional revision protects against stale investigation. Existing Inspector has a **Кадр** tab with frame input, actual image and previous-frame comparison, including projects without any saved AI run. It explicitly inspects current saved state; choosing a historical run does not implicitly replay its historical Motion State. No provider call or project mutation occurs.
+
+### Global composition admission
+
+`native/composition-qa.ts::compositionQA` renders whole-composition boundary samples through the same native worker: output endpoints, organizational markers, transition starts, switch points and endpoints, each with its preceding frame. Default cap128; truncated sampling is WARNING/NOT_TESTED, not full coverage. `compositionFrameChecks` checks premature reference scene activation, missing/duplicated logical transition instances, actual active transition pose, and later foreign opaque axis-aligned rectangle coverage from real native paint order. Explicit destination edits and hidden/transparent reference states are not universally required to stay visible. Procedural offsets are not mistaken for wrong interpolation. General masks/image occlusion and subjective artistic quality remain NOT_TESTED.
+
+After existing task reconciliation and before commit, successful native semantic execution with reference-state transitions runs this pass; FAILED rejects the candidate before persistence. Existing Harness beforeRender checkpoints enforce cancellation/deadline and shared frame budgets. No extra LLM call/retry/MP4 render is added. Reports are stored in existing `motion/qa/<runId>/composition/report.json`, discoverable by Inspector, with compact phase/status trace. This is one final composition pass, not an additional Supervisor or Motion Engine. Existing per-effect QA remains.
+
+### Verification and evidence
+
+Permanent `tests/native-composition.test.ts` uses synthetic four-scene fixtures:300 sequential native frames, one/multiple objects, referenceStates, end switching, logo/phone hold, unchanged pixels across unrequested119→120 and179→180 cuts, random seeks, injected missing/duplicate instance failures, actual frame API, and real Chromium interaction with Inspector without saved runs. Existing engine and renderer tests remain unchanged. Final full-check totals are recorded below after completion.
+
+Real-project verification uses **all360 frames**, including every frame135..195 and225..270, rendered at0.25 diagnostic scale and saved as a complete sequence. Zero reported continuity/pose/duplicate/foreign-cover failures; phone has exactly one visible instance for every frame61..359, logo for45..359. Random-access hashes match sequential hashes at20 tested frames. Actual FullHD MP4:360frames,30FPS,1920×1080,12seconds; all360 frames decode successfully. Preview RGBA inputs match video inputs at0/180/359. These are technical/native rendering results, not a new live semantic test, lossless H264 equality or artistic approval. Original56manifest/source/notes/motion files match the untouched copied originals.
+
+Ignored evidence: `data/harness/reports/composition-2026-10-28/` — before/after named frames and hit traces, full sequence, sequence-checks.json, final-boundary-qa.json, final-source-video-parity.json, contact-sheet.png, corrected-test42-12s.mp4, video/decode metadata, integrity report and check logs. No client media or state is staged in Git.
+
+Architecture Change History: v1.1.10 — authoritative reference-scene epochs, independent logical-object persistent poses, interleaved source layer slots, actual Frame Inspector and final native composition admission. Existing planner/compiler/animation mathematics and stored project contracts reused; no schema migration. Partial architecture update only.
+
+Final v1.1.10 verification: `npm run check` exit0, **415/415** (358 base/integration,2 browser,55 native), TypeScript/build PASSED. Native Frame Inspector Chromium/API tests included. A superseded parallel intermediate run had one existing provider-timeout fixture failure; final full check passed without modifying its test/tolerance. Actual final-source native frame parity and18-frame whole-composition QA PASSED. All360 original-state frames were evaluated and the full12second video decoded. No new provider calls.

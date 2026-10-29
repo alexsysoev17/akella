@@ -11,6 +11,7 @@ export async function renderProjectFrame(
     scale?: number;
     transparent?: boolean;
     encoding?: "png" | "rgba";
+    diagnostics?: boolean;
     signal?: AbortSignal;
     revision?: string;
   } = {},

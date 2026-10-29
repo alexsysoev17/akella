@@ -17,8 +17,7 @@ export function motionPresentationHosts(state:MotionState, frame:number, objects
       return interval?[{instance:i,...interval}]:[];
     }).sort((a,b)=>Number(b.active)-Number(a.active)||b.start-a.start||a.instance.sceneId.localeCompare(b.instance.sceneId));
     if (!candidates.length) continue;
-    const nominal=object.sourceInstances.find(i=>visibleScenes.has(i.sceneId));
-    const chosen=candidates[0].active?candidates[0].instance:nominal??candidates[0].instance;
+    const chosen=candidates[0].instance;
     if (!visibleScenes.has(chosen.sceneId))
       for (const i of object.sourceInstances) result.set(JSON.stringify([i.sceneId,i.sourceNodeId]),chosen);
   }

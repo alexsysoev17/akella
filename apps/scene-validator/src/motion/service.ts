@@ -1,3 +1,4 @@
+import {compositionQA} from "../native/composition-qa.js";
 import {projectTime} from "./project-time.js";
 import {runtimeCode} from "../runtime-code.js";
 import {deferRecovery,drainRecoveries} from "../harness/recovery/jobs.js";
@@ -703,6 +704,11 @@ export async function proposeMotion(
         if(generated.reconciliation.status!=="SUCCESS"&&harness){
           const failure=Object.assign(Error("UNVERIFIED_MOTION_RESULT"),{code:"UNVERIFIED_MOTION_RESULT",report:{failure:JSON.stringify(generated.requirements.filter(r=>r.status!=="PASSED").map(r=>({requirementId:r.requirementId,error:r.error,qaResult:r.qaResult})))}});
           await superviseRunFailure(harness,failure,project,request.settings,onStage,doc.revision);
+        }
+        if(generated.reconciliation.status==="SUCCESS"&&renderingMode()==="native"&&generated.next.objectTransitions?.some(t=>t.timelinePolicy==="referenceStates")){
+          const composition=await compositionQA(project,generated.next,`motion/qa/${id}/composition`,{signal:options.signal,beforeRender:()=>harness?.beforeRender()});
+          await harness?.record("composition-qa",{status:composition.status,frames:composition.frames,failedChecks:composition.checks.filter(c=>c.status==="FAILED")});
+          if(composition.status==="FAILED")throw Object.assign(Error("COMPOSITION_QA_FAILED: candidate not committed"),{code:"COMPOSITION_QA_FAILED",report:composition});
         }
         await atomicJson(path.join(directory, "candidate-commit.json"), {
           runId: id,

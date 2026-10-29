@@ -106,6 +106,29 @@ export function presentedTransitions(state: MotionState, frame: number) {
   return started.filter(t=>t.startFrame===latest.get(t.logicalObjectId));
 }
 
+/** Reference poses form a presentation epoch; organizational block markers do
+ * not activate a future reference pose while an explicit transition owns it.
+ * Resolve each connected scene component independently. Instance transitions
+ * remain per-object and retain their endpoint after an epoch advances. */
+export function compositionSceneWeights(state: MotionState, frame: number, nominal: Record<string,number>) {
+  const weights={...nominal};
+  const refs=(state.objectTransitions??[]).filter(t=>t.timelinePolicy==="referenceStates");
+  const remaining=new Set(refs.flatMap(t=>[t.fromSceneId,t.toSceneId]));
+  while(remaining.size){
+    const component=new Set([remaining.values().next().value!]);
+    let changed=true;
+    while(changed){changed=false;for(const t of refs)if(component.has(t.fromSceneId)||component.has(t.toSceneId))for(const id of [t.fromSceneId,t.toSceneId])if(!component.has(id)){component.add(id);changed=true;}}
+    for(const id of component)remaining.delete(id);
+    const edges=refs.filter(t=>component.has(t.fromSceneId)).sort((a,b)=>a.startFrame-b.startFrame||a.transitionId.localeCompare(b.transitionId));
+    const current=edges.filter(t=>t.startFrame<=frame).at(-1)??edges[0];
+    const visible=presentationBlocks(state).some(b=>component.has(b.sceneId)&&(nominal[b.blockId]??0)>0);
+    if(!visible)continue; // Do not resurrect a component after an unrelated authored cut.
+    const host=frame>=current.startFrame+current.durationFrames*current.layerPolicy.switchProgress?current.toSceneId:current.fromSceneId;
+    for(const b of presentationBlocks(state))if(component.has(b.sceneId))weights[b.blockId]=b.sceneId===host?1:0;
+  }
+  return weights;
+}
+
 /** Keep the selected source/target tree intact. One scene composite owns the entire pair
  * while a transition is active. This explicit cut fallback avoids flattening masks/groups. */
 export function applyObjectTransitions(
@@ -117,31 +140,20 @@ export function applyObjectTransitions(
 ) {
   let active = presentedTransitions(state, frame);
   if (!active.length) return;
-  const latest = Math.max(...active.map((t) => t.startFrame));
-  active = active.filter((t) => t.startFrame === latest);
-  const first = active[0],
-    progress = (frame - first.startFrame) / first.durationFrames;
-  const host =
-    progress >= first.layerPolicy.switchProgress
-      ? first.toSceneId
-      : first.fromSceneId;
-  for (const block of root.querySelectorAll<HTMLElement>(
-    "[data-motion-block]",
-  )) {
-    if (
-      first.timelinePolicy === "referenceStates" ||
-      block.dataset.motionScene === first.fromSceneId ||
-      block.dataset.motionScene === first.toSceneId
-    ) {
-      block.style.display =
-        block.dataset.motionScene === host ? "block" : "none";
-      block.style.opacity = "1";
+  // DOM compatibility has no native detached-subtree compositor. Retain its
+  // documented cut presentation; each transition still resolves its own host.
+  const latest=active.reduce((a,b)=>a.startFrame>b.startFrame?a:b);
+  const host=frame>=latest.startFrame+latest.durationFrames*latest.layerPolicy.switchProgress?latest.toSceneId:latest.fromSceneId;
+  for(const block of root.querySelectorAll<HTMLElement>("[data-motion-block]")){
+    if(latest.timelinePolicy==="referenceStates"||[latest.fromSceneId,latest.toSceneId].includes(block.dataset.motionScene!)){
+      block.style.display=block.dataset.motionScene===host?"block":"none";block.style.opacity="1";
     }
   }
   for (const t of active) {
     const states = presentation[t.logicalObjectId];
     if (!states?.[t.fromSceneId] || !states[t.toSceneId]) continue;
-    const current = states[host],
+    const ownHost=frame>=t.startFrame+t.durationFrames*t.layerPolicy.switchProgress?t.toSceneId:t.fromSceneId;
+    const current = states[ownHost],
       v = interpolateState(
         states[t.fromSceneId],
         states[t.toSceneId],
@@ -153,7 +165,7 @@ export function applyObjectTransitions(
     )) {
       const scene = node.closest<HTMLElement>("[data-motion-scene]")?.dataset
         .motionScene;
-      if (scene !== host || node.dataset.motionTarget !== current.sourceNodeId)
+      if (scene !== ownHost || node.dataset.motionTarget !== current.sourceNodeId)
         continue;
       // Parent * wrapper * local = interpolated canvas transform / geometry dimensions.
       const offset = effects[t.transitionId] ?? {};

@@ -27,7 +27,7 @@ import {
   type Matrix,
 } from "../motion/geometry.js";
 import { statePresentation } from "../motion/transitions.js";
-import { interpolateState, presentedTransitions, presentationBlocks } from "../motion/transition-runtime.js";
+import { interpolateState, presentedTransitions, presentationBlocks, compositionSceneWeights } from "../motion/transition-runtime.js";
 import { staticObjectMembers, staticObjectReference } from "../motion/static-object.js";
 import { within, noSymlinkPath } from "../files.js";
 import { fonts, projectFonts, type FontResources } from "./fonts.js";
@@ -72,6 +72,11 @@ export interface NativeFrame {
     targetId: string;
     points: { x: number; y: number }[];
   }[];
+  composition?: {
+    activeScenes: {sceneId:string;opacity:number}[];
+    transitions: {transitionId:string;logicalObjectId:string;fromSceneId:string;toSceneId:string;hostSceneId:string;progress:number;active:boolean}[];
+    instances: {sceneId:string;targetId:string;logicalObjectId?:string;parentId?:string;transform?:Matrix;opacity?:number;parentOpacity?:number;effectiveOpacity?:number;visible:boolean;zOrder?:number;reason?:string;animationIds:string[];transitionId?:string;opaqueCover?:boolean}[];
+  };
   stats: {
     milliseconds: number;
     drawMs: number;
@@ -474,6 +479,7 @@ export class NativeRenderer {
       scale?: number;
       transparent?: boolean;
       encoding?: "png" | "rgba";
+      diagnostics?: boolean;
     } = {},
   ): NativeFrame {
     if (this.disposed)
@@ -511,22 +517,15 @@ export class NativeRenderer {
       usedFonts = new Set<string>();
     canvas.clear(options.transparent ? k.TRANSPARENT : k.BLACK);
     canvas.scale(scale, scale);
+    const registry=buildRegistry(this.project.inspection.document,this.project.inspection.fingerprint);
+    const identities=new Map(registry.objects.flatMap(o=>o.sourceInstances.map(i=>[JSON.stringify([i.sceneId,i.sourceNodeId]),o.logicalObjectId] as const)));
+    const trace=new Map<string,NonNullable<NativeFrame["composition"]>["instances"][number]>();
+    let sceneOpacity=1,drawOrder=0;
     const overrides = new Map<string, { wrapper: Matrix; opacity: number; composeInstance: boolean }>(),
-      blocks = { ...evaluation.blocks };
+      blocks = compositionSceneWeights(state, frame, evaluation.blocks);
     let transitions = presentedTransitions(state, frame);
     const detachedTransitions=new Set<string>();
     if (transitions.length) {
-      const first = transitions[0],
-        host =
-          (frame - first.startFrame) / first.durationFrames >=
-          first.layerPolicy.switchProgress
-            ? first.toSceneId
-            : first.fromSceneId;
-      const pairVisible=presentationBlocks(state).some(b=>[first.fromSceneId,first.toSceneId].includes(b.sceneId)&&(blocks[b.blockId]??0)>0);
-      if (!pairVisible) for(const t of transitions) detachedTransitions.add(t.transitionId);
-      for (const b of presentationBlocks(state))
-        if (pairVisible && (first.timelinePolicy === "referenceStates" || [first.fromSceneId, first.toSceneId].includes(b.sceneId)))
-          blocks[b.blockId] = b.sceneId === host ? 1 : 0;
       for (const t of transitions) {
         const host=(frame-t.startFrame)/t.durationFrames>=t.layerPolicy.switchProgress?t.toSceneId:t.fromSceneId;
         if(!presentationBlocks(state).some(b=>b.sceneId===host&&(blocks[b.blockId]??0)>0))detachedTransitions.add(t.transitionId);
@@ -607,9 +606,11 @@ export class NativeRenderer {
       maskOnly = false,
     ) => {
       const nodeKey=JSON.stringify([sceneId,n.figmaNodeId]);
-      if (onlyActive && !maskOnly && !activeTree.has(nodeKey)) return;
+      const diagnostic=options.diagnostics ? {sceneId,targetId:n.figmaNodeId,logicalObjectId:identities.get(nodeKey),parentId:(n as NativeNode & {parentId?:string}).parentId,visible:false,animationIds:state.animations.filter(a=>a.enabled&&a.sceneId===sceneId&&a.targetId===n.figmaNodeId).map(a=>a.animationId)} : undefined;
+      const exclude=(reason:string)=>{if(diagnostic&&!trace.get(nodeKey)?.visible)trace.set(nodeKey,{...diagnostic,reason});};
+      if (onlyActive && !maskOnly && !activeTree.has(nodeKey)) {exclude("INACTIVE_REFERENCE_SUBTREE");return;}
       const globalHost=hosts.get(nodeKey);
-      if (!drawingStatic && globalHost && (globalHost.sceneId!==sceneId || globalHost.sourceNodeId!==n.figmaNodeId)) return;
+      if (!drawingStatic && globalHost && (globalHost.sceneId!==sceneId || globalHost.sourceNodeId!==n.figmaNodeId)) {exclude("OTHER_INSTANCE_OWNS_PRESENTATION");return;}
       if (onlyActive && !globalContent.has(nodeKey)) n={...n,properties:{...n.properties,fills:[],strokes:[]}};
       const p = n.properties ?? {},
         key = JSON.stringify([sceneId, n.figmaNodeId]),
@@ -617,8 +618,8 @@ export class NativeRenderer {
           state.visibility.find(
             (v) => v.sceneId === sceneId && v.targetId === n.figmaNodeId,
           )?.visible ?? p.visible !== false;
-      if (!drawingStatic && frozenMembers.has(`${sceneId}/${n.figmaNodeId}`)) return;
-      if (!visible && currentStaticRoot !== key) return;
+      if (!drawingStatic && frozenMembers.has(`${sceneId}/${n.figmaNodeId}`)) {exclude("STATIC_OBJECT_OWNS_PRESENTATION");return;}
+      if (!visible && currentStaticRoot !== key) {exclude("EXPLICIT_OR_SOURCE_VISIBILITY");return;}
       const local = multiply(inverse(parent), matrix(n.sceneTransform)),
         v = evaluation.nodes[key] ?? {},
         override = overrides.get(key),
@@ -627,6 +628,10 @@ export class NativeRenderer {
         combined = multiply(wrapper, local),
         world = multiply(worldParent, combined),
         opacity = (override?.opacity ?? num(p.opacity, 1)) * (v.opacity ?? 1);
+      if(diagnostic&&!maskOnly){
+        const parentOpacity=diagnostic.parentId ? trace.get(JSON.stringify([sceneId,diagnostic.parentId]))?.effectiveOpacity??sceneOpacity : sceneOpacity;
+        trace.set(nodeKey,{...diagnostic,transform:world,opacity,parentOpacity,effectiveOpacity:parentOpacity*opacity,visible:parentOpacity*opacity>0,opaqueCover:parentOpacity*opacity===1&&["RECTANGLE","FRAME"].includes(n.type)&&!p.cornerRadius&&!p.isMask&&!list(p.effects).length&&list(p.fills).some(f=>f.type==="SOLID"&&f.visible!==false&&num(f.opacity,1)===1&&num(record(f.color).a,1)===1),zOrder:drawOrder++,transitionId:transitions.find(t=>overrides.has(nodeKey)&&presentation[t.logicalObjectId]?.[sceneId]?.sourceNodeId===n.figmaNodeId)?.transitionId});
+      }
       if (!maskOnly)
         hits.push({
           sceneId,
@@ -1281,23 +1286,43 @@ export class NativeRenderer {
       for(const scene of this.project.inspection.document.scenes)
         if(!renderBlocks.some(b=>b.sceneId===scene.sceneId)&&globalScenes.has(scene.sceneId))
           renderBlocks.push({blockId:"motion-reference:"+scene.sceneId,sceneId:scene.sceneId,name:scene.name,startFrame:0,durationFrames:0,transition:{type:"cut",durationFrames:0}});
-      for (const block of renderBlocks.sort((a,b)=>a.startFrame-b.startFrame)) {
-        const opacity = blocks[block.blockId] ?? 0;
-        const hasActiveMotion=globalScenes.has(block.sceneId);
-        if (opacity <= 0 && !hasActiveMotion) continue;
-        onlyActive = opacity <= 0;
-        const effectiveOpacity = opacity > 0 ? opacity : 1;
-        const scene = this.project.inspection.document.scenes.find(
-          (s) => s.sceneId === block.sceneId,
-        )!;
-        const fit = canvasMatrix(scene, state.settings);
-        canvas.save();
-        canvas.concat(affine(fit));
-        layer(effectiveOpacity, () =>
-          drawNode(scene as unknown as NativeNode, unit, fit, scene.sceneId),
-        );
-        canvas.restore();
-        onlyActive = false;
+      const orderedBlocks=renderBlocks.sort((a,b)=>a.startFrame-b.startFrame);
+      const paintScene=(block:typeof renderBlocks[number],scene:NativeNode,partial:boolean)=>{
+        const opacity=blocks[block.blockId]??0;
+        onlyActive=partial;sceneOpacity=opacity>0?opacity:1;
+        const fit=canvasMatrix(this.project.inspection.document.scenes.find(s=>s.sceneId===block.sceneId)!,state.settings);
+        canvas.save();canvas.concat(affine(fit));
+        layer(opacity>0?opacity:1,()=>drawNode(scene,unit,fit,block.sceneId));
+        canvas.restore();onlyActive=false;
+      };
+      const detached=orderedBlocks.some(b=>(blocks[b.blockId]??0)<=0&&globalScenes.has(b.sceneId));
+      if(!detached){
+        for(const block of orderedBlocks)if((blocks[block.blockId]??0)>0)
+          paintScene(block,this.project.inspection.document.scenes.find(s=>s.sceneId===block.sceneId)! as unknown as NativeNode,false);
+      }else{
+        // Merge source-tree layer slots instead of painting a foreign scene's
+        // opaque background over an already composed scene. Keep mask chains
+        // together and preserve every group's descendants/ancestor clipping.
+        const layers:{block:typeof renderBlocks[number];scene:NativeNode;partial:boolean;rank:number;order:number}[]=[];
+        const base=orderedBlocks.find(b=>(blocks[b.blockId]??0)>0);
+        const baseScene=this.project.inspection.document.scenes.find(s=>s.sceneId===base?.sceneId);
+        const baseChildren=(baseScene?.children??[]) as NativeNode[];
+        const baseOrder=new Map(baseChildren.map((n,i)=>[n.name,record(baseScene?.properties).itemReverseZIndex===true?baseChildren.length-1-i:i]));
+        for(const [order,block] of orderedBlocks.entries()){
+          const partial=(blocks[block.blockId]??0)<=0;
+          if(partial&&!globalScenes.has(block.sceneId))continue;
+          const source=this.project.inspection.document.scenes.find(s=>s.sceneId===block.sceneId)! as unknown as NativeNode;
+          if(!partial)paintScene(block,{...source,children:[]},false);
+          if(num(source.properties.opacity,1)!==1||list(source.properties.effects).some(e=>e.visible!==false)||![undefined,"NORMAL","PASS_THROUGH"].includes(source.properties.blendMode as string|undefined))
+            warnings.push("COMPOSITION_ROOT_ISOLATION_REQUIRES_REVIEW: "+block.sceneId+"; detached subtree composition retains source styles per layer; whole-frame group blend/effect equivalence is not verified");
+          let mask:NativeNode|undefined;
+          for(const [index,child] of source.children.entries()){
+            if(child.properties?.isMask){if(child.properties.visible!==false)mask=child;continue;}
+            const rank=baseOrder.get(child.name??"")??(source.properties.itemReverseZIndex===true?source.children.length-1-index:index);
+            layers.push({block,partial,rank,order,scene:{...source,properties:{...source.properties,fills:[],strokes:[]},children:mask?[mask,child]:[child]}});
+          }
+        }
+        for(const entry of layers.sort((a,b)=>a.rank-b.rank||a.order-b.order))paintScene(entry.block,entry.scene,entry.partial);
       }
       // Persistent objects have one immutable source presentation across every
       // scene. Original instances are suppressed above, including transitions.
@@ -1360,6 +1385,11 @@ export class NativeRenderer {
         ],
         fallbacks: [...new Map(fallbacks.map((f) => [f.targetId, f])).values()],
         hits,
+        composition:options.diagnostics ? {
+          activeScenes:presentationBlocks(state).filter(b=>(blocks[b.blockId]??0)>0).map(b=>({sceneId:b.sceneId,opacity:blocks[b.blockId]})),
+          transitions:transitions.map(t=>({transitionId:t.transitionId,logicalObjectId:t.logicalObjectId,fromSceneId:t.fromSceneId,toSceneId:t.toSceneId,hostSceneId:frame>=t.startFrame+t.durationFrames*t.layerPolicy.switchProgress?t.toSceneId:t.fromSceneId,progress:Math.max(0,Math.min(1,(frame-t.startFrame)/t.durationFrames)),active:frame<t.startFrame+t.durationFrames})),
+          instances:this.project.inspection.document.scenes.flatMap(scene=>{const visit=(n:NativeNode,parentId?:string):NonNullable<NativeFrame["composition"]>["instances"]=>{const key=JSON.stringify([scene.sceneId,n.figmaNodeId]);return [trace.get(key)??{sceneId:scene.sceneId,targetId:n.figmaNodeId,parentId,logicalObjectId:identities.get(key),visible:false,reason:visibleScenes.has(scene.sceneId)?"PARENT_EXCLUDED":"SCENE_INACTIVE",animationIds:[]},...(n.children??[]).flatMap(c=>visit(c,n.figmaNodeId))];};return visit(scene as unknown as NativeNode);}),
+        }:undefined,
         stats: {
           milliseconds: performance.now() - started,
           drawMs: drawn - started,

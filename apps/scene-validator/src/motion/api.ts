@@ -1,3 +1,4 @@
+import {compareFrameComposition} from "../native/composition-qa.js";
 import {projectTime} from "./project-time.js";
 import {runtimeCode} from "../runtime-code.js";
 import {recoveryJobs,cancelRecovery} from "../harness/recovery/jobs.js";
@@ -87,6 +88,14 @@ export async function motionApi(
     response.end(JSON.stringify(value));
   };
   if (request.method === "GET") {
+    if(action==="inspect-frame"&&request.method==="GET"){
+      const query=new URL(request.url!,"http://local").searchParams;
+      const frame=z.coerce.number().int().nonnegative().parse(query.get("frame")??0);
+      const first=await renderProjectFrame(project,frame,{scale:.25,diagnostics:true,revision:query.get("revision")??undefined});
+      const other=query.has("compare")?await renderProjectFrame(project,z.coerce.number().int().nonnegative().parse(query.get("compare")),{scale:.25,diagnostics:true,revision:first.revision}):undefined;
+      json({frame,revision:first.revision,composition:first.composition,compare:other?{frame:other.frame,composition:other.composition,changes:compareFrameComposition(other,first)}:undefined});return true;
+    }
+
     if (action === "frame") {
       const query = new URL(request.url!, "http://127.0.0.1").searchParams;
       const frame = z.coerce
