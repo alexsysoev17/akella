@@ -6,9 +6,9 @@
 |---|---|
 | Last Updated | 2026-10-29 (Europe/Moscow) — persistent semantic motion rules, incremental overrides and native transform composition; targeted update, not a full audit |
 | Last Full Audit | 2026-10-13; unchanged, this update is not a full renderer/provider audit |
-| Git Commit | Baseline `f82ad22`; local checkpoint `9add7db`. Rule implementation is an uncommitted working-tree update at this documentation snapshot. |
+| Git Commit | Implementation `d5eb50b`; baseline `f82ad22`; local checkpoint `9add7db`. This subsequent documentation-only status update does not change runtime code. |
 | Git Branch | `temporal-recovery-loop`, local only |
-| Working Tree Status | Source/tests/documentation changes for motion rules pending commit. Synthetic temporary project fixtures only; original client state/assets unchanged. |
+| Working Tree Status | Runtime source/tests committed in `d5eb50b`; this documentation-only status update pending commit. Synthetic temporary project fixtures only; original client state/assets unchanged. |
 | Documentation Version | 1.1.12 |
 | Scope of Last Update | SemanticEdit contract, project Motion Rule Registry and materializations; incremental compilation/coverage/scope, inherited rules, native logical rotation/scale composition, selective QA, Skills/Inspector and tests. |
 | Code snapshot SHA-256 | NOT RECALCULATED; refer to component digests and final source commit. |
