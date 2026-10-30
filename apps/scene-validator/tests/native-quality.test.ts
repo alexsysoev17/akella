@@ -155,10 +155,11 @@ test("native preview downsamples only display pixels with high-quality filtering
         deviceScaleFactor: 2,
       });
       await page.route("**/frame?**", (route) => {
+        const query=new URL(route.request().url()).searchParams,scale=Number(query.get('scale')??1),w=Math.max(1,Math.round(1920*scale)),h=Math.max(1,Math.round(1080*scale));
         const metadata = Buffer.from(
             JSON.stringify({
-              width: 1920,
-              height: 1080,
+              width:w,
+              height:h,frame:Number(query.get('frame')),revision:'fixture',
               renderer: "skia-cpu/1",
               warnings: [],
               hits: [],
@@ -170,7 +171,7 @@ test("native preview downsamples only display pixels with high-quality filtering
           body: Buffer.concat([
             header,
             metadata,
-            Buffer.alloc(1920 * 1080 * 4, 255),
+            Buffer.alloc(w * h * 4, 255),
           ]),
           contentType: "application/octet-stream",
         });
@@ -182,7 +183,7 @@ test("native preview downsamples only display pixels with high-quality filtering
         }),
       );
       await page.goto("http://quality.test/");
-      await page.waitForSelector('body[data-rendered-frame="0"]');
+      await page.waitForSelector('body[data-rendered-frame="0"][data-source-size="1920x1080"]');
       const first = await page.locator("canvas").evaluate((el) => {
         const c = el as HTMLCanvasElement,
           ctx = c.getContext("2d")!;

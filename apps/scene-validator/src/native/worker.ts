@@ -20,6 +20,7 @@ function clear() {
   cache.clear();
   bytes = 0;
 }
+const latestPreview=new Map<string,number>();let superseded=0;
 let queue = Promise.resolve();
 parentPort!.on("message", (message) => {
   if (message.kind === "cancel") {
@@ -28,9 +29,12 @@ parentPort!.on("message", (message) => {
       cancelled.delete(cancelled.values().next().value!);
     return;
   }
+  if(message.preview){latestPreview.set(message.preview.session,Math.max(message.preview.sequence,latestPreview.get(message.preview.session)??-1));if(latestPreview.size>64)latestPreview.delete(latestPreview.keys().next().value!);}
   queue = queue.then(async () => {
     const { id, kind } = message;
     try {
+      if(message.preview){await new Promise<void>(resolve=>setImmediate(resolve));if(latestPreview.get(message.preview.session)!==message.preview.sequence){superseded++;parentPort!.postMessage({id,error:{code:'RENDER_SUPERSEDED',message:'Preview request superseded before rasterization'}});return;}}
+      let resourceReused=sessions.has(message.key);
       if (cancelled.delete(id)) return;
       if (kind === "open" || kind === "render-project") {
         validateMotion(message.state, message.project);
@@ -53,6 +57,7 @@ parentPort!.on("message", (message) => {
               old.renderer.dispose();
             clear();
           }
+          resourceReused=Boolean(reusable);
           const renderer =
             reusable ??
             (await NativeRenderer.create(message.project as LoadedProject));
@@ -69,6 +74,7 @@ parentPort!.on("message", (message) => {
       }
       if (kind === "render" || kind === "render-project") {
         if (cancelled.delete(id)) return;
+        if(message.preview&&latestPreview.get(message.preview.session)!==message.preview.sequence){superseded++;parentPort!.postMessage({id,error:{code:'RENDER_SUPERSEDED',message:'Preview request superseded during resource preparation'}});return;}
         const session = sessions.get(message.key);
         if (!session) throw new Error("NATIVE_SESSION_EXPIRED");
         const key =
@@ -116,6 +122,8 @@ parentPort!.on("message", (message) => {
               ...result,
               png,
               cacheHit,
+              resourceReuse:{renderer:resourceReused,decodedImages:resourceReused,fonts:resourceReused,geometry:resourceReused},
+              previewJobs:{superseded},
               cache: { bytes, entries: cache.size, hits, misses },
               memory: process.memoryUsage(),
               nativeMemory: nativeMemory(await skia()),

@@ -98,9 +98,37 @@ test('modifier policy uses actual current values, consumes numeric percentages a
  for(const [text,factor] of [['чуть слабее',.8],['слабее',.5],['гораздо слабее',.25],['сильнее',1.6],['в два раза сильнее',2]] as const){assert.equal(deterministicIncrementalEdit(f.project,'сделай колебания лого '+text,doc)?.amplitudeFactor,factor);}
  assert.ok(Math.abs(deterministicIncrementalEdit(f.project,'уменьши амплитуду лого на 30.5%',doc)!.amplitudeFactor!-.695)<Number.EPSILON);
  assert.equal(deterministicIncrementalEdit(f.project,'уменьши амплитуду лого на -30%',doc),null);
- assert.equal(deterministicIncrementalEdit(f.project,'уменьши амплитуду лого и частоту колебаний',doc),null);
+ assert.equal(deterministicIncrementalEdit(f.project,'уменьши амплитуду лого и частоту колебаний',doc)?.frequencyFactor,.5);
  assert.equal(deterministicIncrementalEdit(f.project,'сделай колебания лого слабее и сильнее',doc),null);
  }finally{await f.cleanup();}
+});
+test('compound relative effect edits use current IDs, preserve all other state, commit atomically with Undo/Redo and no LLM',async()=>{
+ const f=await fixture();let calls=0;
+ const stop=registerProvider('compound-local-block',()=>({id:'compound-local-block',mode:'mock',capabilities:()=>({structuredOutput:true,nativeToolCalling:false,cancellation:true,usage:false,nativeOutputTokenLimit:false}),generate:async()=>{calls++;throw Error('Unexpected LLM');}}));
+ try{
+  let before=await readMotion(f.project);
+  const {deterministicIncrementalEdit}=await import('../src/motion/incremental-edit.js');
+  const prompt='сделай у лого эффект колебаний гораздо слабее - уменьши частоту колебаний и амплитуду';
+  const parsed=deterministicIncrementalEdit(f.project,prompt,before)!;assert.equal(parsed.amplitudeFactor,.25);assert.equal(parsed.frequencyFactor,.5);
+  assert.equal(deterministicIncrementalEdit(f.project,'уменьши амплитуду лого в два раза и частоту на 20%',before)?.frequencyFactor,.8);
+  const shared=deterministicIncrementalEdit(f.project,'уменьши амплитуду лого и частоту на 20%',before);assert.equal(shared?.amplitudeFactor,.8);assert.equal(shared?.frequencyFactor,.8);
+  assert.equal(deterministicIncrementalEdit(f.project,'уменьши амплитуду лого и увеличь частоту колебаний',before)?.frequencyFactor,1.6);
+  for(const text of ['уменьши амплитуду лого и частоту на -20%','уменьши амплитуду лого и частоту и длительность','сделай колебания лого слабее и сильнее уменьши частоту и амплитуду'])assert.equal(deterministicIncrementalEdit(f.project,text,before),null,text);
+  // An unrelated effect must stay byte-for-byte identical; missing former IDs must not be resurrected.
+  before=(await changeMotion(f.project.root,{expectedRevision:before.revision,request:'unrelated',operations:[{type:'setExpression',expression:{...before.state.expressions![0],expressionId:'phone-inertia',targetId:'n04',sourceAnimationId:'phone',startFrame:65}}]})).document;
+  const result=await executeMotion(f.project,{editId:randomUUID(),mode:'edit',request:prompt,expectedRevision:before.revision,settings:{provider:'compound-local-block',model:''}},()=>{},{config:{maxLLMCalls:1,maxRepairAttempts:0}});
+  assert.equal(result.reconciliation?.status,'SUCCESS');assert.equal(calls,0);
+  const after=await readMotion(f.project),expected=structuredClone(before.state);
+  for(const e of expected.expressions!)if(e.expressionId!=='phone-inertia'){e.parameters.amplitude*=.25;if('frequency' in e.parameters)e.parameters.frequency*=.5;}
+  assert.deepEqual(after.state,expected);
+  const metrics=JSON.parse(await readFile(path.join(f.project.root,'motion/ai',result.id,'incremental-edit.json'),'utf8'));
+  assert.equal(metrics.performance.route,'LOCAL_FAST_PATH');assert.equal(metrics.performance.providerCalls,0);assert.deepEqual(metrics.performance.expressions.map((e:{expressionId:string})=>e.expressionId).sort(),['inertia0','inertia1']);
+  await assert.rejects(readFile(path.join(f.project.root,'motion/ai',result.id,'semantic-interpret/request.txt')),/ENOENT/);
+  await assert.rejects(executeMotion(f.project,{mode:'edit',request:prompt,expectedRevision:before.revision,settings:{provider:'compound-local-block',model:''}}),/изменилась/);
+  assert.deepEqual((await changeMotion(f.project.root,{expectedRevision:after.revision,action:'undo',request:'undo'})).document.state,before.state);
+  const redo=(await changeMotion(f.project.root,{expectedRevision:(await readMotion(f.project)).revision,action:'redo',request:'redo'})).document;assert.deepEqual(redo.state,expected);
+  assert.ok((await renderNativeFrame(f.project,redo.state,18,{cache:false})).png.length);
+ }finally{stop();await f.cleanup();}
 });
 test('verified QA reuse requires exact before/after/source; no client bypass flag and no stale proof',async()=>{
  const f=await fixture();try{

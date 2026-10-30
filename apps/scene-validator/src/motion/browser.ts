@@ -9,7 +9,9 @@ import { applyFrame, evaluateMotion } from "./engine.js";
 import type { MotionState } from "./schema.js";
 declare global {
   interface Window {
-    motionFrame: (frame: number) => unknown;
+    motionFrame: (frame: number,options?:{playing?:boolean}) => unknown;
+    motionPreviewQuality?:(quality:string)=>void;
+    nativePreviewMetrics?:Record<string,unknown>;
     motionUpdate: (state: MotionState) => void;
     motionReady: Promise<void>;
     motionTextProbe: typeof textRenderProbe;

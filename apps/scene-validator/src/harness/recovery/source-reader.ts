@@ -13,8 +13,11 @@ export async function readRepairSources(workspace:CodeRepairWorkspace,queries:So
  const files=(await readdir(path.join(workspace.root,'apps/scene-validator'),{recursive:true})).map(p=>'apps/scene-validator/'+p).filter(permitted).sort();
  const results:unknown[]=[];let bytes=0;
  for(const q of queries){
-  if(q.path&&!permitted(q.path))throw Error('CODE_SOURCE_READ_SCOPE');
-  const candidates=q.path?[q.path]:files.filter(p=>q.kind!=='tests'||p.includes('/tests/'));
+  // A directory query is a bounded search over permitted files, never an
+  // expansion of filesystem permissions (or a request to read a directory).
+  const directory=q.path&&q.kind!=='read'&&/^apps\/scene-validator\/(?:src|tests)(?:\/[a-zA-Z0-9_-]+)*\/?$/.test(q.path)?q.path.replace(/\/$/,''):null;
+  if(q.path&&!directory&&!permitted(q.path))throw Error('CODE_SOURCE_READ_SCOPE');
+  const candidates=(directory?files.filter(p=>p.startsWith(directory+'/')):q.path?[q.path]:files).filter(p=>q.kind!=='tests'||p.includes('/tests/'));
   const matches:unknown[]=[];
   for(const rel of candidates){
    const file=within(workspace.root,rel);await noSymlinkPath(workspace.root,file);

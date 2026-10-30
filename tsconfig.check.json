@@ -11,7 +11,8 @@
     "scripts/eval-motion-tools.ts",
     "scripts/recovery.ts",
     "scripts/eval-recovery.ts",
-    "scripts/eval-code-repair.ts"
+    "scripts/eval-code-repair.ts",
+    "scripts/benchmark-preview.ts"
   ],
   "exclude": [],
   "compilerOptions": {

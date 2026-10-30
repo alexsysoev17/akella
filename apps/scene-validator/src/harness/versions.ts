@@ -79,6 +79,7 @@ const components = [
   "native/client",
   "native/service",
   "native/preview",
+  "native/quality",
   "native/qa",
   "native/reconstruct",
 

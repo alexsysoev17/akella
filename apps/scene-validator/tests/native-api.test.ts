@@ -85,8 +85,9 @@ test("native HTTP frames, sequence jobs and cross-browser Preview preserve the p
         const iframe = page
           .frames()
           .find((fr) => fr.url().includes("/motion/preview"))!;
+        await page.locator('#m-preview-quality').selectOption('full');
         await iframe.evaluate(() => window.motionFrame(4));
-        await preview.locator('body[data-rendered-frame="4"]').waitFor();
+        await preview.locator('body[data-rendered-frame="4"][data-preview-scale="1"]').waitFor();
         const pixels = await preview
           .locator("canvas")
           .evaluate((el) => [

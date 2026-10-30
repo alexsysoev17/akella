@@ -29,6 +29,17 @@ process.env.AKELLA_RENDERER='native';
 const caps=()=>({structuredOutput:true,nativeToolCalling:false,cancellation:true,usage:false,nativeOutputTokenLimit:false});
 const answer=(output:unknown)=>({output,usage:null,estimatedCost:null,latencyMs:0,diagnostics:[],toolCalls:[]});
 const hash=(x:string|Uint8Array)=>createHash('sha256').update(x).digest('hex');
+test('Code Repair tests directory queries stay within frozen allowed source and reject traversal/read directories',async()=>{
+ const root=await mkdtemp(path.join(os.tmpdir(),'repair-directory-'));
+ const workspace={id:'directory',root,baseCommit:'fixture',files:[]};
+ try{
+  await mkdir(path.join(root,'apps/scene-validator/tests'),{recursive:true});
+  await writeFile(path.join(root,'apps/scene-validator/tests/provider.test.ts'),"// structured INVALID_OUTPUT\n");
+  const result=await readRepairSources(workspace,[{kind:'tests',path:'apps/scene-validator/tests',query:'INVALID_OUTPUT'}],5000);
+  assert.match(JSON.stringify(result),/provider.test.ts/);
+  for(const query of [{kind:'read' as const,path:'apps/scene-validator/tests'},{kind:'tests' as const,path:'apps/scene-validator/tests/../../projects'},{kind:'tests' as const,path:'projects/test44'}])await assert.rejects(readRepairSources(workspace,[query],5000),/CODE_SOURCE_READ_SCOPE/);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
 test('secondary recovery budget failure retains original causal root through source escalation',async()=>{
  const s=new GlobalFailureSupervisor({request:'лого с инерцией между сценами',revision:'r',maxAttempts:6,maxDurationMs:1000,persist:async()=>{}});
  const original=await s.observe(Error('TECHNICAL_VALIDATION_FAILED: Expression on a state-transition subtree is not yet supported'),'preflight',{objects:['96:1439']});

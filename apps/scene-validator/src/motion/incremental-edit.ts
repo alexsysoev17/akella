@@ -11,6 +11,48 @@ import { ruleSkills } from '../motion-library/skills/rule-skills.js';
 
 // Context routing only; unfamiliar language remains the existing provider's responsibility.
 export const localModifierPolicy = { ...relativeIntensityFactors, slower:.8, faster:1.25 } as const;
+/** Parameter-local relative edits. A qualitative effect preamble supplies strength,
+ * not another multiplication; unqualified frequency reduction keeps the established ×.5 policy. */
+function compoundParameterFactors(text:string): {amplitudeFactor?:number;frequencyFactor?:number}|null {
+  const verbs='сделай|уменьши|увеличь|измени';
+  const clauses=text.split(new RegExp(`\\s+(?:и\\s+)?(?=(?:${verbs})\\s)`,'u'));
+  let inherited:number|undefined;
+  const result:{amplitudeFactor?:number;frequencyFactor?:number}={};
+  const factor=(clause:string):number|undefined=>{
+    const weak=/слабее|послабее|уменьши/u.test(clause),strong=/сильнее|посильнее|увеличь/u.test(clause);
+    if(weak===strong)return undefined;
+    const percent=[...clause.matchAll(/на (\d+(?:\.\d+)?)%/gu)],times=[...clause.matchAll(/в (два|\d+(?:\.\d+)?) раза/gu)];
+    if(percent.length+times.length>1)return undefined;
+    let n:number;
+    if(percent.length)n=1+(strong?1:-1)*Number(percent[0][1])/100;
+    else if(times.length||/вдвое/u.test(clause)){const x=times.length?(times[0][1]==='два'?2:Number(times[0][1])):2;n=weak?1/x:x;}
+    else n=weak?(/гораздо|значительно|намного/u.test(clause)?localModifierPolicy.muchWeaker:/чуть|немного/u.test(clause)?localModifierPolicy.slightlyWeaker:localModifierPolicy.weaker):(/гораздо|значительно|намного/u.test(clause)?localModifierPolicy.muchStronger:/чуть|немного/u.test(clause)?localModifierPolicy.slightlyStronger:localModifierPolicy.stronger);
+    return Number.isFinite(n)&&n>0&&n<=10?n:undefined;
+  };
+  for(const clause of clauses){
+    if(!/амплитуд|частот/u.test(clause)){
+      if(inherited!==undefined||Object.keys(result).length)return null;
+      inherited=factor(clause);if(inherited===undefined)return null;continue;
+    }
+    const prefix=clause.slice(0,clause.search(/амплитуд|частот/u));
+    const parts=[...clause.matchAll(/(амплитуд[уы]|частот[уы])([^]*?)(?=амплитуд[уы]|частот[уы]|$)/gu)];
+    // «Уменьши амплитуду и частоту на20%» shares one modifier;
+    // «амплитуду вдвое и частоту на20%» has two separate modifiers.
+    const shared=parts.length>1&&parts.slice(0,-1).every(p=>p[2].trim().split(/\s+/u).every(w=>!w||['и','колебаний'].includes(w)))?parts.at(-1)![2]:'';
+    for(const part of parts){
+      const key=part[1].startsWith('амплитуд')?'amplitudeFactor':'frequencyFactor';
+      if(result[key]!==undefined)return null;
+      const tail=part[2]+(part!==parts.at(-1)?shared:''),local=prefix+part[1]+tail,ownModifier=/\d|вдвое|слабее|послабее|сильнее|посильнее|чуть|немного|гораздо|значительно|намного/u.test(tail);
+      let value=factor(local);
+      if(key==='amplitudeFactor'&&inherited!==undefined&&!ownModifier){
+        if(value===undefined||(value<1)!==(inherited<1))return null;
+        value=inherited;
+      }
+      if(value===undefined)return null;result[key]=value;
+    }
+  }
+  return Object.keys(result).length?result:null;
+}
 export function incrementalEditProfile(project: LoadedProject, request: string, doc?:MotionDocument) {
   if (request.length > 1600 || /сцен|scene|появ|уход|перемест|trim|фейд|fade|после|затем|кадр|frame/iu.test(request)) return null;
   if (/wiggle|покач/iu.test(request) && /инерц|колеб/iu.test(request)) return null;
@@ -71,15 +113,20 @@ export function deterministicIncrementalEdit(project: LoadedProject, request: st
   for (const o of profile.objects) for (const range of objectMentionRanges(o.name, request)) chars.fill(' ', range.start, range.end);
   if(/-\s*\d/u.test(request))return null;
   const rest = chars.join('').toLowerCase().replace(/(\d)[.,](?=\d)/gu,'$1§').replace(/[,.!—–-]/g,' ').replace(/§/g,'.').replace(/ё/g,'е').replace(/\s+/g,' ').trim();
-  if((rest.match(/(?:сделай|уменьши|увеличь|измени|добавь|добавить|убери|удали|включи|отключи)/gu)?.length??0)>1)return null;
-  if(/амплитуд/u.test(rest)&&/частот/u.test(rest))return null;
+  const compound=/амплитуд/u.test(rest)&&/частот/u.test(rest);
+  if(!compound&&(rest.match(/(?:сделай|уменьши|увеличь|измени|добавь|добавить|убери|удали|включи|отключи)/gu)?.length??0)>1)return null;
   let operation: SemanticEdit['operation'];
   const parameters:SemanticEdit['parameters']={};
   let amplitudeFactor:number|undefined,frequencyFactor:number|undefined,durationFactor:number|undefined;
   // Every word must be consumed: unknown modifiers/negations require compact semantic interpretation.
   const known=/^(?:сделай|уменьши|увеличь|измени|добавь|добавить|убери|удали|включи|отключи|у|на|к|и|в|два|раза|раз|эффект|эффекта|колебаний|колебания|колебание|инерцию|инерции|покачивание|покачивания|постоянного|постоянное|постоянный|wiggle|амплитуду|амплитуды|частоту|частоты|движения|движений|все|только|еще|чуть|немного|значительно|гораздо|намного|слабее|послабее|сильнее|посильнее|вдвое|медленнее|быстрее|объекты|объектам|правило|правила|исключение|исключения|из|для|линейный|линейное|изинг|easing|linear|easeInOutCubic|easeInCubic|easeOutCubic|\d+(?:\.\d+)?%?)$/iu;
   if(!rest.split(' ').every(word=>known.test(word)))return null;
-  if(referencedRule&&/исключени/u.test(rest)&&/^(?:добавь|убери|удали)/u.test(rest))operation=/^добавь/u.test(rest)?'ADD_EXCEPTION':'REMOVE_EXCEPTION';
+  if(compound){
+    if(!['wiggle','inertialOvershoot'].includes(profile.effect)||/добав|убери|удали|включи|отключи|быстрее|медленнее|правил|исключени/u.test(rest))return null;
+    const factors=compoundParameterFactors(rest);if(!factors)return null;
+    operation='MODIFY_PARAMETER';({amplitudeFactor,frequencyFactor}=factors);
+  }
+  else if(referencedRule&&/исключени/u.test(rest)&&/^(?:добавь|убери|удали)/u.test(rest))operation=/^добавь/u.test(rest)?'ADD_EXCEPTION':'REMOVE_EXCEPTION';
   else if(referencedRule&&/правил/u.test(rest)&&/^(?:убери|удали)/u.test(rest))operation='REMOVE_RULE';
   else if(/^добавь/u.test(rest)&&/правило/u.test(rest))operation='ADD_RULE';
   else if (/^(?:добавь|добавить)/u.test(rest)&&profile.effect==='wiggle'&&/постоянн/u.test(rest)) operation='ADD_EFFECT';

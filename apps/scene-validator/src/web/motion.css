@@ -727,3 +727,13 @@
 .director .timeline-bar.peak { opacity: 1; }
 .director #m-timeline:focus-visible { outline-color: var(--text); }
 .director #m-ai, .director #m-ai::placeholder { color: var(--text); }
+/* Presentation controls never change project settings. */
+.viewer-toolbar select{font:inherit;font-weight:300;color:inherit;background:transparent;border:0;max-width:150px;cursor:pointer}
+.viewer-toolbar select:hover,.viewer-toolbar summary:hover{font-weight:500}
+.viewer-toolbar details{position:relative}
+.viewer-toolbar summary{cursor:pointer;list-style:none}
+.viewer-toolbar details pre{position:absolute;right:0;top:100%;z-index:30;width:min(480px,75vw);max-height:45vh;overflow:auto;padding:12px;background:#1a1a1a;color:#f2f2f2;font-size:11px;line-height:1.35;white-space:pre-wrap}
+.viewer-toolbar .toolbar-actions{justify-content:flex-end;flex-wrap:wrap;gap:12px}
+.viewer-toolbar .toolbar-actions label{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;margin:0}
+.viewer-toolbar .toolbar-actions select{display:inline-block;width:auto;min-width:0}
+.viewer-toolbar .toolbar-actions button{flex:0 0 auto;white-space:nowrap;width:auto}

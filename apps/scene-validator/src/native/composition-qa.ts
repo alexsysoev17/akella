@@ -43,11 +43,11 @@ export function compositionFrameChecks(project:LoadedProject,state:MotionState,f
 }
 /** Bounded whole-composition boundary pass. No LLM/video export. Intentional
  * layer switches and explicit instance edits are not universal jump failures. */
-export async function compositionQA(project:LoadedProject,state:MotionState,directory:string,options:{beforeRender?:()=>void;signal?:AbortSignal;frames?:number[];maxFrames?:number}={}){
+export async function compositionQA(project:LoadedProject,state:MotionState,directory:string,options:{beforeRender?:()=>void;signal?:AbortSignal;frames?:number[];maxFrames?:number;scale?:number}={}){
  const edges=[...state.blocks.map(b=>b.startFrame),...(state.objectTransitions??[]).flatMap(t=>[t.startFrame,t.startFrame+t.durationFrames*t.layerPolicy.switchProgress,t.startFrame+t.durationFrames])];
  const all=[...new Set(options.frames??[0,state.settings.durationFrames-1,...edges.flatMap(f=>[Math.ceil(f)-1,Math.ceil(f)])])].filter(f=>f>=0&&f<state.settings.durationFrames).sort((a,b)=>a-b);
  const selected=all.slice(0,options.maxFrames??128),checks:Check[]=[],samples=[];
- for(const f of selected){options.signal?.throwIfAborted();options.beforeRender?.();const rendered=await renderNativeFrame(project,state,f,{scale:.25,diagnostics:true,signal:options.signal});checks.push(...compositionFrameChecks(project,state,rendered));samples.push({frame:f,composition:rendered.composition});}
+ for(const f of selected){options.signal?.throwIfAborted();options.beforeRender?.();const rendered=await renderNativeFrame(project,state,f,{scale:options.scale??.25,diagnostics:true,signal:options.signal});checks.push(...compositionFrameChecks(project,state,rendered));samples.push({frame:f,composition:rendered.composition});}
  if(selected.length<all.length)checks.push({name:'compositionCoverage',category:'render',status:'NOT_TESTED',reason:`Only ${selected.length}/${all.length} requested frames rendered`});
  const report={status:checks.some(c=>c.status==='FAILED')?'FAILED':selected.length<all.length||checks.some(c=>c.status==='WARNING')?'WARNING':'PASSED',scope:'native full-composition boundary samples; arbitrary occlusion/artistic quality NOT_TESTED',frames:selected,checks,samples};
  await atomicJson(path.join(await safeDirectory(project.root,directory),'report.json'),report);return report;

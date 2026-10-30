@@ -806,15 +806,18 @@ export async function proposeMotion(
               ? op.starts.map((s) => s.startFrame)
               : [],
         );
+        let incrementalPerformance: {route:string;elapsedMs:number;providerCalls:number;expressions:{expressionId:string;oldValues:unknown;newValues:unknown}[]}|undefined;
         if(incrementalProfile){
           const entities=(state:typeof doc.state)=>[...(state.expressions??[]).map(e=>({id:e.expressionId,kind:'expression',value:e})),...state.animations.map(a=>({id:a.animationId,kind:'animation',value:a})),...(state.objectTransitions??[]).map(t=>({id:t.transitionId,kind:'transition',value:t})),...(state.motionRules??[]).map(r=>({id:r.ruleId,kind:'rule',value:r}))];
           const before=entities(doc.state),after=entities(committed.state);
           const changes=[...new Set([...before,...after].map(e=>e.kind+':'+e.id))].flatMap(key=>{const a=before.find(e=>e.kind+':'+e.id===key),b=after.find(e=>e.kind+':'+e.id===key);return JSON.stringify(a?.value)===JSON.stringify(b?.value)?[]:[{id:key,expectedPrevious:a?.value??null,newValue:b?.value??null}];});
+          incrementalPerformance={route:localMetrics.route,elapsedMs:performance.now()-localResolveStart,providerCalls:harness?.calls.length??0,expressions:changes.filter(c=>c.id.startsWith('expression:')).map(c=>({expressionId:c.id.slice('expression:'.length),oldValues:c.expectedPrevious&&'parameters' in c.expectedPrevious?c.expectedPrevious.parameters:null,newValues:c.newValue&&'parameters' in c.newValue?c.newValue.parameters:null}))};
           const patch={editId:id,projectRevision:doc.revision,newRevision:committed.revision,logicalObjectIds:incrementalProfile.objects.map(o=>o.logicalObjectId),...localMetrics,llmCalls:harness?.calls.length??0,affectedObjectCount:incrementalProfile.objects.length,affectedOperationCount:generated.plan.operations.length,targetOperationIds:changes.map(c=>c.id),affectedFrameRanges:changes.flatMap(c=>{const values=[c.expectedPrevious,c.newValue].filter(v=>v&&typeof v==='object'&&'startFrame' in v) as {startFrame:number;durationFrames:number}[];return values.map(v=>({startFrame:v.startFrame,endFrame:v.startFrame+v.durationFrames}));}),dependencies:committed.state.timingDependencies?.filter(d=>changes.some(c=>c.id.endsWith(':'+d.animationId)||c.id.endsWith(':'+d.anchorAnimationId))),changes,validation:generated.reconciliation,cacheInvalidation:{policy:'new canonical state digest; no global cache clear; decoded source resources retain existing ownership',frameCache:'state-scoped; not per-object reuse'}};
-          await atomicJson(path.join(directory,'incremental-edit.json'),patch);await harness?.diagnostic('incremental-edit',patch);
+          await atomicJson(path.join(directory,'incremental-edit.json'),{...patch,performance:incrementalPerformance});await harness?.diagnostic('incremental-edit',{...patch,performance:incrementalPerformance});
         }
         const result = {
           ...basis,
+          incrementalPerformance,
           plan: generated.plan,
           tasks: generated.tasks,
           requirements: generated.requirements,

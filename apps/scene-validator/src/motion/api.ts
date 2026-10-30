@@ -131,10 +131,14 @@ export async function motionApi(
         .positive()
         .max(4)
         .parse(query.get("scale") ?? 1);
+      const viewport=query.get('viewport')??undefined,sequence=query.has('sequence')?z.coerce.number().int().nonnegative().parse(query.get('sequence')):undefined;
+      if(viewport&&(!/^[a-zA-Z0-9-]{1,100}$/.test(viewport)||sequence===undefined))throw Error('INVALID_PREVIEW_SESSION');
+      if(query.get('fingerprint')&&query.get('fingerprint')!==project.inspection.fingerprint)throw Error('STALE_SOURCE_FINGERPRINT');
       const controller = new AbortController();
       response.on("close", () => controller.abort());
       const result = await renderProjectFrame(project, frame, {
         scale,
+        previewSession:viewport?project.config.projectId+':'+viewport:undefined,previewRequest:sequence,
         encoding: query.get("transport") === "packet" ? "rgba" : "png",
         revision: query.get("revision") ?? undefined,
         signal: controller.signal,
@@ -410,6 +414,7 @@ export async function motionApi(
               doc.state.settings.width,
               doc.state.settings.height,
               doc.revision,
+              {quality:z.enum(['auto','full','half','third','quarter']).parse(new URL(request.url!,'http://localhost').searchParams.get('quality')??'auto'),fps:doc.state.settings.fps,durationFrames:doc.state.settings.durationFrames,sourceFingerprint:project.inspection.fingerprint},
             ),
           }
         : await motionHtml(project, doc.state);
@@ -428,7 +433,7 @@ export async function motionApi(
         try {
           await noSymlinkPath(project.root, path.join(project.root, "renders"));
           files = (await readdir(path.join(project.root, "renders")))
-            .filter((n) => /^motion-[a-f0-9-]+\.mp4$/.test(n))
+            .filter((n) => /^(?:motion|draft-(?:full|half|third|quarter))-[a-f0-9-]+\.mp4$/.test(n))
             .sort()
             .reverse();
         } catch (e) {
@@ -438,7 +443,7 @@ export async function motionApi(
         return true;
       }
       const name = segments[5];
-      if (!/^motion-[a-f0-9-]+\.mp4$/.test(name))
+      if (!/^(?:motion|draft-(?:full|half|third|quarter))-[a-f0-9-]+\.mp4$/.test(name))
         throw new Error("Некорректное имя видео");
       const file = within(project.root, `renders/${name}`);
       await noSymlinkPath(project.root, file);
@@ -637,6 +642,7 @@ export async function motionApi(
           json({ error: error.message, errorCode: error.code }, 400);
           return true;
         }
+      const draftInput=action==='render'?z.object({mode:z.enum(['final','draft']).default('final'),quality:z.enum(['full','half','third','quarter']).default('quarter')}).strict().parse(input):undefined;
       const key =
         project.config.projectId +
         ":" +
@@ -671,7 +677,7 @@ export async function motionApi(
                     progress,
                     total,
                   }),
-                { signal: controller.signal },
+                { signal: controller.signal,...(draftInput?.mode==='draft'?{draftQuality:draftInput.quality}:{}) },
               );
       void work()
         .then((result) =>

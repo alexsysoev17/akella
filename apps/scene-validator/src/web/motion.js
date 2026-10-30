@@ -25,6 +25,10 @@ export async function mountMotion(
   projectName = "Проект",
   onUpdate = () => {},
 ) {
+  const previewPreferenceKey='akella-preview-quality:'+projectId;
+  let previewQuality='auto';try{const saved=localStorage.getItem(previewPreferenceKey);if(['auto','full','half','third','quarter'].includes(saved))previewQuality=saved;}catch{}
+  let previewMetrics=null,incrementalPerformance=null;
+  function performanceView(){const el=$('m-preview-performance');if(el)el.textContent=JSON.stringify({motionEdit:incrementalPerformance,preview:previewMetrics},null,2);}
   let alive = true,
     raf = 0,
     playing = false,
@@ -84,7 +88,7 @@ export async function mountMotion(
     )
       return;
     if (event.data?.type === "motion-ready") {
-      send({ type: "motion-state", state: data.document.state, revision:data.document.revision });
+      send({ type: "motion-state", state: data.document.state, revision:data.document.revision,sourceFingerprint:data.document.sourceFingerprint });
       seek(frame);
       if (pendingPlayback) {
         pendingPlayback = false;
@@ -92,6 +96,9 @@ export async function mountMotion(
         $("m-job").textContent =
           executionMessage || "Анимация обновлена. Воспроизводим preview.";
       }
+    }
+    if(event.data?.type === 'motion-preview-metrics'){
+      previewMetrics=event.data.metrics;performanceView();
     }
     if(event.data?.type === "motion-render-error")error(event.data.error);
     if (event.data?.type === "motion-select") {
@@ -125,7 +132,7 @@ export async function mountMotion(
     drawTimeline();
     $("m-time").textContent =
       `${(frame / data.document.state.settings.fps).toFixed(2)} / ${(data.document.state.settings.durationFrames / data.document.state.settings.fps).toFixed(2)} с`;
-    send({ type: "motion-frame", frame });
+    send({ type: "motion-frame", frame,playing });
   }
   let timelineBars = [];
   function drawTimeline() {
@@ -164,6 +171,7 @@ export async function mountMotion(
   }
   function pause() {
     playing = false;
+    send({type:'motion-playback',playing:false});
     cancelAnimationFrame(raf);
     $("m-play").textContent = "Воспроизвести";
   }
@@ -279,14 +287,15 @@ export async function mountMotion(
     if (reload) {
       $("m-preview").style.aspectRatio = `${s.width}/${s.height}`;
       $("m-preview").src =
-        url + "/preview?revision=" + encodeURIComponent(doc.revision);
-    } else send({ type: "motion-state", state: doc.state, revision:doc.revision });
+        url + "/preview?revision=" + encodeURIComponent(doc.revision)+'&quality='+encodeURIComponent(previewQuality);
+    } else send({ type: "motion-state", state: doc.state, revision:doc.revision,sourceFingerprint:doc.sourceFingerprint });
     objects();
     seek(frame);
   }
   function play() {
     if (playing) return;
     playing = true;
+    send({type:'motion-playback',playing:true});
     $("m-play").textContent = "Пауза";
     if (frame >= data.document.state.settings.durationFrames - 1) seek(0);
     let start = performance.now(),
@@ -454,7 +463,9 @@ export async function mountMotion(
       });
       activeJobId = job.jobId;
       $("m-cancel").hidden = false;
-      showExecution(await poll(job.jobId));
+      const result=await poll(job.jobId);
+      incrementalPerformance=result.incrementalPerformance??null;
+      showExecution(result);performanceView();
     } finally {
       busy = false;
       activeJobId = null;
@@ -473,7 +484,7 @@ export async function mountMotion(
       <select id="m-scenes" hidden aria-hidden="true" tabindex="-1">${data.scenes.map((s) => `<option value="${esc(s.sceneId)}">${esc(s.name)}</option>`).join("")}</select>
       <div id="m-objects" class="scene-tree">${data.scenes.map((s, i) => `<div class="scene-row" data-scene-row="${esc(s.sceneId)}"><button data-scene-button="${esc(s.sceneId)}" aria-expanded="false" title="${esc(s.name)}"><span class="scene-title">Сцена ${i + 1}</span><span class="scene-name">${esc(s.name)}</span></button><iframe class="scene-thumb" title="Миниатюра сцены ${i + 1}" tabindex="-1" aria-hidden="true" loading="lazy" src="${url}/thumbnail/${encodeURIComponent(s.sceneId)}"></iframe></div><div class="scene-objects" data-scene-objects="${esc(s.sceneId)}" hidden></div>`).join("")}</div>
       <button id="m-open-settings" class="settings-launch">Настройки</button></aside>
-      <div class="motion-workspace"><div class="viewer-toolbar"><div class="toolbar-actions"><button id="m-render" class="secondary">Экспорт MP4</button></div></div>
+      <div class="motion-workspace"><div class="viewer-toolbar"><div class="toolbar-actions"><label>Preview <select id="m-preview-quality" aria-label="Качество предпросмотра"><option value="auto">Auto</option><option value="full">Full · 100%</option><option value="half">Half · 50%</option><option value="third">Third · 33.33%</option><option value="quarter">Quarter · 25%</option></select></label><details><summary>Производительность</summary><pre id="m-preview-performance">Ожидаем первый кадр…</pre></details><button id="m-render" class="secondary">Экспорт MP4</button><select id="m-draft-quality" aria-label="Разрешение чернового видео"><option value="full">Full</option><option value="half">Half</option><option value="third">Third</option><option value="quarter" selected>Quarter</option></select><button id="m-draft" class="secondary">Черновой MP4</button></div></div>
       <div class="video-stage"><iframe id="m-preview" title="Покадровый preview анимации"></iframe></div>
       <div class="transport"><button id="m-play" class="quiet">Воспроизвести</button><div id="m-timeline" role="slider" tabindex="0" aria-label="Позиция на таймлайне" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div><input type="range" min="0" value="0" id="m-scrub" hidden aria-hidden="true" tabindex="-1"><span id="m-time"></span></div>
       <div class="prompt-composer"><label class="sr-only" for="m-ai">Опишите анимацию</label><textarea id="m-ai" placeholder="Опишите, как должна двигаться сцена…"></textarea><div class="composer-footer"><button id="m-inspector" class="secondary">Inspector</button><button id="m-cancel" hidden>Отменить</button><button id="m-generate">Сделать</button></div></div>
@@ -766,6 +777,9 @@ export async function mountMotion(
           )
           .join("");
     }
+    $('m-preview-quality').value=previewQuality;
+    $('m-preview-quality').onchange=()=>{previewQuality=$('m-preview-quality').value;try{localStorage.setItem(previewPreferenceKey,previewQuality);}catch{}send({type:'motion-preview-quality',quality:previewQuality});};
+    $('m-draft').onclick=guarded(async()=>{pause();$('m-draft').disabled=true;try{const job=await api('render',{mode:'draft',quality:$('m-draft-quality').value});await poll(job.jobId);$('m-job').textContent='Черновой MP4 готов.';await videos();}finally{if(alive)$('m-draft').disabled=false;}});
     $("m-render").onclick = guarded(async () => {
       pause();
       $("m-render").disabled = true;

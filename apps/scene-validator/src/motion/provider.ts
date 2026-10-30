@@ -83,6 +83,16 @@ export function normalizeProviderOutput(
     });
     const tagged = resolved.filter(b => Object.entries((b?.properties ?? {}) as Record<string, {const?:unknown}>).some(([key,p]) => "const" in p && value && typeof value === "object" && (value as Record<string,unknown>)[key] === p.const));
     if (tagged.length === 1) return normalizeProviderOutput(value, tagged[0], root);
+    // Compact edits have no schemaVersion discriminator. Select a branch only
+    // when its object keys uniquely identify it, then reverse the wire's null
+    // adaptation. Final Zod validation still checks every value and refinement.
+    if(value && typeof value==='object' && !Array.isArray(value)){
+      const keys=Object.keys(value);
+      const matching=resolved.filter(b=>b?.type==='object'&&b.properties&&
+        keys.every(k=>k in (b.properties as object))&&
+        (Array.isArray(b.required)?b.required:[]).every(k=>Object.hasOwn(value,k as string)));
+      if(matching.length===1)return normalizeProviderOutput(value,matching[0],root);
+    }
   }
   if (Array.isArray(value) && shape.type === "object" && !shape.properties && shape.additionalProperties && typeof shape.additionalProperties === "object") {
     const entries = value as {key?:unknown;value?:unknown}[];

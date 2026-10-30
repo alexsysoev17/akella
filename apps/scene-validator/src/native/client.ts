@@ -4,6 +4,8 @@ import type { MotionState } from "../motion/schema.js";
 import { nativeDigest, type NativeFrame } from "./renderer.js";
 export type RenderedFrame = NativeFrame & {
   cacheHit: boolean;
+  resourceReuse?:{renderer:boolean;decodedImages:boolean;fonts:boolean;geometry:boolean};
+  previewJobs?:{superseded:number};
   cache: { bytes: number; entries: number; hits: number; misses: number };
   memory: NodeJS.MemoryUsage;
   nativeMemory: {
@@ -91,6 +93,9 @@ export async function renderNativeFrame(
   frame: number,
   options: {
     scale?: number;
+    cacheNamespace?:string;
+    previewSession?:string;
+    previewRequest?:number;
     transparent?: boolean;
     encoding?: "png" | "rgba";
     diagnostics?: boolean;
@@ -115,10 +120,12 @@ export async function renderNativeFrame(
       {
         kind: "render-project",
         key,
+        preview:options.previewSession?{session:options.previewSession,sequence:options.previewRequest}:undefined,
         project,
         state,
         frame,
         options: {
+          cacheNamespace:options.cacheNamespace,
           scale: options.scale ?? 1,
           transparent: options.transparent ?? false,
           encoding: options.encoding ?? "png",
@@ -163,8 +170,10 @@ export async function renderNativeFrame(
       {
         kind: "render",
         key,
+        preview:options.previewSession?{session:options.previewSession,sequence:options.previewRequest}:undefined,
         frame,
         options: {
+          cacheNamespace:options.cacheNamespace,
           scale: options.scale ?? 1,
           transparent: options.transparent ?? false,
           encoding: options.encoding ?? "png",

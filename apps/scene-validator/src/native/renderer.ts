@@ -491,8 +491,8 @@ export class NativeRenderer {
     const started = performance.now(),
       k = this.kit,
       scale = options.scale ?? 1,
-      width = Math.round(state.settings.width * scale),
-      height = Math.round(state.settings.height * scale);
+      width = Math.max(1,Math.round(state.settings.width * scale)),
+      height = Math.max(1,Math.round(state.settings.height * scale));
     if (
       !(scale > 0 && scale <= 4) ||
       width < 1 ||

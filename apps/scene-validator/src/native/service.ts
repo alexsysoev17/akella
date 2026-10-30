@@ -1,3 +1,4 @@
+import {previewProtocolVersion,renderDimensions} from "./quality.js";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import type { LoadedProject } from "../types.js";
@@ -9,6 +10,8 @@ export async function renderProjectFrame(
   frame: number,
   options: {
     scale?: number;
+    previewSession?:string;
+    previewRequest?:number;
     transparent?: boolean;
     encoding?: "png" | "rgba";
     diagnostics?: boolean;
@@ -37,10 +40,14 @@ export async function renderProjectFrame(
     project,
     saved.doc.state,
     frame,
-    options,
+    {...options,cacheNamespace:previewProtocolVersion+':'+saved.doc.revision},
   );
   return {
     ...rendered,
+    projectWidth:saved.doc.state.settings.width,projectHeight:saved.doc.state.settings.height,
+    previewScale:options.scale??1,
+    requestedRenderResolution:renderDimensions(saved.doc.state.settings.width,saved.doc.state.settings.height,options.scale??1),
+    rendererVersion:previewProtocolVersion,
     revision: saved.doc.revision,
     sourceFingerprint: project.inspection.fingerprint,
   };
