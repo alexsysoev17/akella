@@ -1,3 +1,5 @@
+import {requestContextCategories} from "../../harness/providers/budget.js";
+import { incrementalEditSchema, incrementalEditInstructions, incrementalPlan, incrementalGraphContext } from "../incremental-edit.js";
 import {semanticEditSchema} from "../rule-contract.js";
 import {skillPlanningInstructions} from "./graph.js";
 import {patchSequentialDependencies} from "./semantic-patch.js";
@@ -145,6 +147,13 @@ export class SemanticProvider implements IntentProvider {
       return normalizeSemanticGraph(graph, context, request);
     }
 
+    if ((context as {incrementalEditHint?:boolean})?.incrementalEditHint) {
+      const local = (context as {deterministicEdit?:unknown}).deterministicEdit;
+      const response = local ? {edits:[semanticEditSchema.parse(local)],assumptions:["Однозначная typed-команда применена без LLM"]} : await (await this.provider("interpret")).structured(semanticContext(context),request,incrementalEditInstructions,z.union([incrementalEditSchema,semanticGraphSchema,intentPlanSchema]),"semantic-planning",incrementalEditSchema);
+      if ('edits' in response) return incrementalPlan(request,response.edits,context,response.assumptions);
+      // Historical saved responses remain readable; new providers receive only the compact delta schema.
+      return normalizeSemanticGraph(response,incrementalGraphContext(context),request);
+    }
     if ((context as { contextualEditHint?: boolean })?.contextualEditHint) {
       const output = await (
         await this.provider("interpret")
@@ -962,10 +971,13 @@ export async function semanticPlan(
   const validate = (draft: unknown) =>
     validateIntentPlan(project, request, draft, fps, resolutionContext);
   const projectedContext = semanticContext(context) as Record<string, unknown>;
+  const incrementalTier = (context as {incrementalEditHint?:boolean})?.incrementalEditHint === true;
   const compactTier =
     (context as { contextualEditHint?: boolean })?.contextualEditHint === true;
   await trace("reference-context", {
-    payloadTier: compactTier ? "contextual-effect-edit" : "standard",
+    contextCategories: requestContextCategories({messages:[{role:"system",content:incrementalTier?incrementalEditInstructions:compactTier?selectorEditInstructions:graphInstructions+"\n"+skillPlanningInstructions},{role:"user",content:JSON.stringify({userRequest:request,context:projectedContext})}],responseSchema:compatibleSchema(z.toJSONSchema(incrementalTier?incrementalEditSchema:compactTier?selectorEditSchema:semanticGraphSchema,{io:"output",reused:"ref"}))}),
+    contextAccounting: incrementalTier && (context as {deterministicEdit?:unknown}).deterministicEdit ? "LOCAL_ONLY_NO_PROVIDER_REQUEST" : "PROJECTED_BEFORE_PROVIDER_GUIDANCE_AND_ENVELOPE",
+    payloadTier: incrementalTier ? "incremental-effect-edit" : compactTier ? "contextual-effect-edit" : "standard",
     projectRevision: options.projectRevision,
     recentSuccessfulActions: options.recentActions ?? [],
     selectedObjectIds:
@@ -974,13 +986,13 @@ export async function semanticPlan(
     providerConversation: projectedContext.recentConversation ?? [],
     contextProjectionBytes: Buffer.byteLength(JSON.stringify(projectedContext)),
     instructionBytes: Buffer.byteLength(
-      compactTier ? selectorEditInstructions : graphInstructions+"\n"+skillPlanningInstructions,
+      incrementalTier ? incrementalEditInstructions : compactTier ? selectorEditInstructions : graphInstructions+"\n"+skillPlanningInstructions,
     ),
     outputSchemaBytes: Buffer.byteLength(
       JSON.stringify(
         compatibleSchema(
           z.toJSONSchema(
-            compactTier ? selectorEditSchema : semanticGraphSchema,
+            incrementalTier ? incrementalEditSchema : compactTier ? selectorEditSchema : semanticGraphSchema,
             {
               io: "output",
               reused: "ref",

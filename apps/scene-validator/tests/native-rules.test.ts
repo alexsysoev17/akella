@@ -125,7 +125,7 @@ test('production semantic graph → resolution → preflight → native QA → a
             assert.equal(doc.state.expressions!.length, turn ? 2 : 3);
             assert.equal(doc.state.animations.length, 1);
         }
-        assert.equal(calls, 3);
+        assert.equal(calls, 1, "initial semantics uses provider; exact named remove/halve execute locally");
         assert.equal(doc.state.motionRules!.length, 3);
         assert.equal(doc.state.expressions!.find(e => e.targetId === 'n02')!.parameters.amplitude, 2);
         assert.ok(!doc.state.expressions!.some(e => e.targetId === 'n01'));

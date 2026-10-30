@@ -235,7 +235,7 @@ export class AIClient implements AIProvider {
     mode = "semantic",
     nativeSchema?: z.ZodType,
   ): Promise<T> {
-    if (this.runtime?.includeCapabilityGuidance !== false) instructions += "\n" + capabilityGuidance();
+    if (this.runtime?.includeCapabilityGuidance !== false && !(context as {incrementalEditHint?:boolean})?.incrementalEditHint) instructions += "\n" + capabilityGuidance();
     const compact = JSON.stringify({ mode, context, userRequest: request });
     const prompt = instructions + "\nCONTEXT JSON:\n" + compact;
     const runtimeSchema = z.toJSONSchema(schema, {

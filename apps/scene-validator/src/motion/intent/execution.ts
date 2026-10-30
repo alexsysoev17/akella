@@ -1,4 +1,4 @@
-import {materializeRules,compileSemanticEdit} from "../rules.js";
+import {materializeRules,compileSemanticEdit,resolveRuleTargets,ruleObjects} from "../rules.js";
 import {refreshTimingOrigins} from "../project-time.js";
 import { requiredProjectFrames, TimelineConstraintError } from "../constraints.js";
 import { MotionToolError, motionStateDigest } from "../tools.js";
@@ -1023,16 +1023,17 @@ export async function runIntentTasks(
           r.semanticActionId ?? r.selectionRequirementId ?? r.requirementId,
       ),
     ).size,
-    selectedObjectCount: new Set(
-      plan.requirements
-        .filter((r) => r.target.sourceNodeId)
-        .map((r) => r.sceneId + "/" + r.target.sourceNodeId),
-    ).size,
+    selectedObjectCount: new Set(plan.requirements.flatMap(r=>r.semanticEdit ? resolveRuleTargets(project,r.semanticEdit.targets.length?r.semanticEdit.targets:r.semanticEdit.scope.logicalObjectIds) : r.target.sourceNodeId?[r.sceneId+"/"+r.target.sourceNodeId]:[])).size,
     selectedAnimationCount: new Set(
       plan.requirements.flatMap((r) => r.animationIds ?? []),
     ).size,
     selectedExpressionCount: new Set(
-      plan.requirements.flatMap((r) => r.expressionIds ?? []),
+      plan.requirements.flatMap((r) => {
+        if(!r.semanticEdit)return r.expressionIds??[];
+        const ids=resolveRuleTargets(project,r.semanticEdit.targets.length?r.semanticEdit.targets:r.semanticEdit.scope.logicalObjectIds);
+        const objects=ruleObjects(project).filter(o=>r.semanticEdit!.scope.selector==='project'||ids.includes(o.logicalObjectId));
+        return [...(initial.expressions??[]),...(current.expressions??[])].filter(e=>e.type===r.semanticEdit!.effect && objects.some(o=>e.ownership?.logicalObjectId===o.logicalObjectId||o.sourceInstances.some(i=>i.sceneId===e.sceneId&&i.sourceNodeId===e.targetId))).map(e=>e.expressionId);
+      }),
     ).size,
     validationLevels: {
       semantic: {

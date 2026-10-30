@@ -12,6 +12,21 @@ export function serializedRequestBytes(request: ProviderRequest) {
     const { signal, ...payload } = request;
     return Buffer.byteLength(JSON.stringify({ ...payload, tools: request.tools ?? [] }));
 }
+/** Byte accounting only; no token counts are fabricated from characters. */
+export function requestContextCategories(request: Pick<ProviderRequest,"messages"|"responseSchema">) {
+    const categories = {userIntent:0,projectSnapshot:0,objectContext:0,motionGraph:0,conversationHistory:0,skills:0,schema:Buffer.byteLength(JSON.stringify(request.responseSchema)??"null"),systemInstructions:0,other:0};
+    const bytes=(v:unknown)=>Buffer.byteLength(JSON.stringify(v)??"null");
+    for(const m of request.messages) {
+        if(m.role==="system"){categories.systemInstructions+=Buffer.byteLength(m.content);continue;}
+        let p;try{p=JSON.parse(m.content);}catch{categories.other+=Buffer.byteLength(m.content);continue;}
+        if(p.userRequest)categories.userIntent+=bytes(p.userRequest);
+        for(const [key,value] of Object.entries(p.context??{})) {
+            const category=key==="userRequest"?"userIntent":/objectIndex|logicalObjects|selectedObject|mentions/.test(key)?"objectContext":/motion$|effectState|Inventory|motionRules/.test(key)?"motionGraph":/Conversation|History|SuccessfulActions/.test(key)?"conversationHistory":/Knowledge|skill|capabilit/i.test(key)?"skills":/project|sceneIndex|timing/i.test(key)?"projectSnapshot":"other";
+            categories[category]+=bytes(value);
+        }
+    }
+    return categories;
+}
 export function providerBudget(adapter: ProviderAdapter, request: ProviderRequest, maxBytes: number, profiles: ModelProfile[] = []) {
     const components = {
         system: 0,
@@ -49,7 +64,7 @@ export function providerBudget(adapter: ProviderAdapter, request: ProviderReques
 export function prepareProviderRequest(adapter: ProviderAdapter, request: ProviderRequest, maxBytes: number, profiles: ModelProfile[] = []) {
     const beforeBytes = serializedRequestBytes(request);
     const mandatoryBytes=request.messages.reduce((sum,m)=>{if(m.role!=="user")return sum+Buffer.byteLength(m.content);try{const p=JSON.parse(m.content);return sum+Buffer.byteLength(typeof p.userRequest==="string"?p.userRequest:m.content);}catch{return sum+Buffer.byteLength(m.content);}},0)+Buffer.byteLength(JSON.stringify(request.responseSchema))+Buffer.byteLength(JSON.stringify(request.tools??[]));
-    const report = { mandatoryBytes,version: "context-admission/1", beforeBytes, afterBytes: beforeBytes, budgetBytes: maxBytes, compactedCategories: [] as string[], lossless: true, promptPreserved: true, instructionsPreserved: true, schemaPreserved: true, requirementCount: null as number | null, requirementCountStatus: "NOT_PLANNED", llmCalls: 0, status: "ADMITTED", reason: null as string | null };
+    const report = { categories:requestContextCategories(request), mandatoryBytes,version: "context-admission/1", beforeBytes, afterBytes: beforeBytes, budgetBytes: maxBytes, compactedCategories: [] as string[], lossless: true, promptPreserved: true, instructionsPreserved: true, schemaPreserved: true, requirementCount: null as number | null, requirementCountStatus: "NOT_PLANNED", llmCalls: 0, status: "ADMITTED", reason: null as string | null };
     let initial: unknown;
     try {
         return { request, budget: providerBudget(adapter, request, maxBytes, profiles), report };
@@ -96,6 +111,7 @@ export function prepareProviderRequest(adapter: ProviderAdapter, request: Provid
         }
     }
     report.afterBytes = serializedRequestBytes(candidate);
+    report.categories=requestContextCategories(candidate);
     try {
         return { request: candidate, budget: providerBudget(adapter, candidate, maxBytes, profiles), report };
     }

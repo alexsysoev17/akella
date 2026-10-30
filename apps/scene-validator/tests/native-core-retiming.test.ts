@@ -12,11 +12,11 @@ test("sequential existing effect edits, start/end retiming, dependent inertia an
  const f=await identityFixture(2,scenes=>{scenes[0].children=[node("plate","тарелка",20,25),node("parsley","петрушка 2",55,45),node("basil","базилик",100,30)];scenes[1].children=[1,2].map(i=>{const n=node(`r${i}`,`лента ${i}`,10,30+i*20,150,15);n.type="VECTOR";n.properties={...n.properties,fills:[],strokes:[{type:"SOLID",color:{r:1,g:0,b:0}}],strokeWeight:2,strokeAlign:"CENTER",vectorPaths:[{data:"M0 0 C50 20 100 -20 150 0",windingRule:"NONZERO"}]};return n;});});
  let output:unknown,calls=0;
  const stop=registerProvider("core-retime-fixture",()=>({id:"core-retime-fixture",mode:"mock",capabilities:()=>({structuredOutput:true,nativeToolCalling:false,cancellation:true,usage:false,nativeOutputTokenLimit:false}),generate:async()=>{calls++;return{output,usage:null,estimatedCost:null,latencyMs:0,diagnostics:["prepared intent, real state/tools/native QA"],toolCalls:[]};}}));
- const turn=async(prompt:string,target:string,techniques:string[],parameters:{key:string;value:string|number}[]=[],extra:object={})=>{
+ const turn=async(prompt:string,target:string,techniques:string[],parameters:{key:string;value:string|number}[]=[],extra:object={},expectedCalls=1)=>{
   output={schemaVersion:"semantic-graph/1.0",clauses:[{clauseId:"c",text:prompt}],actions:[{actionId:"a",clauseId:"c",kind:"editAnimation",scene:null,targets:[target],techniques,parameters,constraints:[],unresolvedReason:null,...extra}],assumptions:[]};
   const before=await readMotion(f.project),n=calls;
   const result=await executeMotion(f.project,{mode:"edit",request:prompt,expectedRevision:before.revision,settings:{provider:"core-retime-fixture",model:""}},()=>{},{config:{maxLLMCalls:1,maxRepairAttempts:0}});
-  assert.equal(result.reconciliation?.status,"SUCCESS",JSON.stringify(result));assert.equal(calls,n+1);return(await readMotion(f.project)).state;
+  assert.equal(result.reconciliation?.status,"SUCCESS",JSON.stringify(result));assert.equal(calls,n+expectedCalls);return(await readMotion(f.project)).state;
  };
  try{
   const doc=await readMotion(f.project);f.state.settings.durationFrames=120;f.state.blocks.forEach((b,i)=>{b.startFrame=i*60;b.durationFrames=60;});
@@ -42,7 +42,7 @@ test("sequential existing effect edits, start/end retiming, dependent inertia an
   const wiggles=structuredClone(s.expressions!.filter(e=>e.type==="wiggle"));
   s=await turn("сделай wiggle у тарелка чуть быстрее","тарелка",["wiggle"],[{key:"frequencyFactor",value:1.25}],{effectOperation:{storage:"expression",action:"update"}});
   for(const old of wiggles){const next=s.expressions!.find(e=>e.expressionId===old.expressionId)!;assert.ok(next.type==="wiggle");assert.equal(next.parameters.frequency,old.parameters.frequency*1.25);assert.equal(next.parameters.amplitude,old.parameters.amplitude);}
-  s=await turn("убери wiggle у тарелка","тарелка",["wiggle"],[],{effectOperation:{storage:"expression",action:"remove"}});assert.equal(s.expressions!.some(e=>e.type==="wiggle"),false);assert.deepEqual(s.animations.find(a=>a.targetId==="plate"),plateBase);
+  s=await turn("убери wiggle у тарелка","тарелка",["wiggle"],[],{effectOperation:{storage:"expression",action:"remove"}},0);assert.equal(s.expressions!.some(e=>e.type==="wiggle"),false);assert.deepEqual(s.animations.find(a=>a.targetId==="plate"),plateBase);
   s=await turn("пусть анимация петрушка 2 начинается чуть позже анимации базилик","петрушка 2",[],[],{effectOperation:{storage:"animation",action:"updateTiming"},delayPolicy:"slightlyLater",temporalReference:{kind:"existingAnimation",target:{name:"базилик"},endpoint:"start"}});
   assert.equal(s.animations.find(a=>a.animationId===p.animationId)!.startFrame,6);assert.equal(s.animations.find(a=>a.animationId==="parsley-fade")!.startFrame,6);assert.equal(s.expressions!.find(e=>e.expressionId==="parsley-inertia")!.startFrame,18);assert.deepEqual(s.animations.find(a=>a.animationId===b.animationId),b);
   s=await turn("пусть анимация петрушка 2 начинается когда заканчивается анимация базилик","петрушка 2",[],[],{effectOperation:{storage:"animation",action:"updateTiming"},temporalReference:{kind:"existingAnimation",target:{name:"базилик"},endpoint:"end"}});

@@ -1,3 +1,5 @@
+import { codeVersions } from "../harness/versions.js";
+import { incrementalEditProfile, incrementalContext, deterministicIncrementalEdit } from "./incremental-edit.js";
 import {ruleQA} from "./rule-qa.js";
 import {preparePlanSkills} from "../motion-library/skills/runtime.js";
 import {compositionQA} from "../native/composition-qa.js";
@@ -330,6 +332,7 @@ export async function proposeMotion(
       !/создай|добав|появ|зааним|анимируй|animate|прорис/iu.test(
         request.request,
       );
+    const incrementalProfile = harness ? incrementalEditProfile(project, request.request) : null;
     const contextualEditHint =
       !sceneTimingHint &&
       (timingEditHint ||
@@ -343,7 +346,9 @@ export async function proposeMotion(
           )));
     if (harness) harness.phase = "context-construction";
     const selectedContext = harness
-      ? contextualEditHint
+      ? incrementalProfile
+        ? await (async () => { const value = incrementalContext(project, doc, request.request, incrementalProfile); return {value, bytes:Buffer.byteLength(JSON.stringify(value)), cacheHit:false, references:await codeVersions(), contextDigest:digest(value)}; })()
+        : contextualEditHint
         ? await selectorContext(project, doc, request, recent, harness.config)
         : await duringStage("context-construction", () =>
             agentContext(project, doc.state, request, recent, harness.config),
@@ -388,6 +393,10 @@ export async function proposeMotion(
       request.selectedObjectIds ??
       (request.selectedObjectId ? [request.selectedObjectId] : []);
     enrichedContext.contextualEditHint = contextualEditHint;
+    if (incrementalProfile) {
+      enrichedContext.incrementalEditHint = true;
+      enrichedContext.deterministicEdit = deterministicIncrementalEdit(project, request.request);
+    }
     if (harness && selectedContext) {
       harness.references = [
         ...selectedContext.references,

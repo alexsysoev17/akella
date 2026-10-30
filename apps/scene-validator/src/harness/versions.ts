@@ -44,6 +44,7 @@ const components = [
   "harness/recovery/source-context",
   "motion/tool-runtime",
   "motion/effect-edit",
+  "motion/incremental-edit",
   "motion/rules",
   "motion/rule-contract",
   "motion/rule-qa",

@@ -298,6 +298,7 @@ export async function inspectorRun(root: string, id: string, raw = false) {
           requirementCountStatus:Array.isArray(plannedRequirements)?"PLANNED":"NOT_PLANNED",
         }))
       : "NOT_AVAILABLE",
+    contextComposition: Array.isArray(trace) ? trace.filter(e=>e.stage==="semantic-diagnostic" && e.data?.phase==="reference-context").map(e=>e.data.report) : "NOT_AVAILABLE",
     semanticDiagnostics: Array.isArray(trace)
       ? trace.filter((e) =>
           [
@@ -828,7 +829,7 @@ export async function projectDiagnosticBundle(root: string, id: string) {
       selectedObjectIds: context?.selectedObjectIds ?? [],
       projectRevision: context?.projectRevision ?? "NOT_AVAILABLE",
       payloadTier:
-        context?.contextualEditHint === true
+        context?.incrementalEditHint === true ? "incremental-effect-edit" : context?.contextualEditHint === true
           ? "contextual-effect-edit"
           : "standard",
     },
