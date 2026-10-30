@@ -1,5 +1,6 @@
+import { inspectSemanticCoverage, SemanticCoverageError } from "./intent/coverage.js";
 import { codeVersions } from "../harness/versions.js";
-import { incrementalEditProfile, incrementalContext, deterministicIncrementalEdit } from "./incremental-edit.js";
+import { incrementalEditProfile, incrementalContext, deterministicIncrementalEdit, incrementalPlan } from "./incremental-edit.js";
 import {ruleQA} from "./rule-qa.js";
 import {preparePlanSkills} from "../motion-library/skills/runtime.js";
 import {compositionQA} from "../native/composition-qa.js";
@@ -72,6 +73,7 @@ const atomicJson = (file: string, value: unknown) =>
   originalAtomicJson(file, redact(value));
 export const requestSchema = z
   .object({
+    editId:z.string().uuid().optional(),
     mode: z.enum(["create", "edit"]),
     request: z.string().min(1).max(20000),
     mentions: z.array(mentionSchema).max(100).default([]),
@@ -332,7 +334,10 @@ export async function proposeMotion(
       !/создай|добав|появ|зааним|анимируй|animate|прорис/iu.test(
         request.request,
       );
-    const incrementalProfile = harness ? incrementalEditProfile(project, request.request) : null;
+    const localResolveStart=performance.now();
+    const incrementalProfile = harness ? incrementalEditProfile(project, request.request,doc) : null;
+    const localEdit = incrementalProfile ? deterministicIncrementalEdit(project,request.request,doc) : null;
+    const localMetrics={route:localEdit?'LOCAL_FAST_PATH':'AI_FALLBACK',objectResolutionMs:performance.now()-localResolveStart,patchConstructionMs:0,applyMs:0,qaMs:0,ruleQAReused:false};
     const contextualEditHint =
       !sceneTimingHint &&
       (timingEditHint ||
@@ -395,7 +400,7 @@ export async function proposeMotion(
     enrichedContext.contextualEditHint = contextualEditHint;
     if (incrementalProfile) {
       enrichedContext.incrementalEditHint = true;
-      enrichedContext.deterministicEdit = deterministicIncrementalEdit(project, request.request);
+      enrichedContext.deterministicEdit = localEdit;
     }
     if (harness && selectedContext) {
       harness.references = [
@@ -468,7 +473,7 @@ export async function proposeMotion(
         let semanticRecoverySignal:AbortSignal|undefined;
         let semanticRecoveryStart:number|undefined;
         const recoverSemantic=async(error:unknown,stage:string,replay:()=>Promise<ReturnType<typeof validateIntentPlan>>)=>{
-          if(!harness)throw error;
+          if(!harness||!harness.config.recovery.enabled||harness.config.recovery.semanticRecoveryCalls===0)throw error;
           semanticRecoveryStart??=harness.calls.length;
           const event=await harness.supervisor.observe(error,stage,{evidence:[{code:(error as {code?:string}).code}]});
           const outcome=await harness.supervisor.attempt(event,{strategy:"project",procedure:stage==="semantic-repair"?"compact-semantic-field-patch/1":"grouped-semantic-output/1",reason:stage==="semantic-repair"?"Repair only affected fields while retaining the valid plan":"No complete initial plan is available; retry compact grouped output in the reserved recovery lane",run:async(signal)=>{
@@ -480,7 +485,7 @@ export async function proposeMotion(
             return {status:"PASSED",requirementCount:checked.requirements.length,completeSemanticValidation:true,projectChanged:false};
           }});
           if(outcome.ok)return outcome.value;
-          throw outcome.error;
+          throw error; // child failure is already recorded; preserve the initiating provider/semantic cause.
         };
         const semanticProvider = new SemanticCodexProvider(
           async (phase) =>
@@ -495,7 +500,16 @@ export async function proposeMotion(
             ),
           {recover:recoverSemantic,diagnostic:async value=>{if(value){await atomicJson(path.join(directory,"intent-repair-scope.json"),value);await harness?.diagnostic("semantic-repair-scope",value);}}},
         );
-        const contract = options.resumeContract?validateIntentPlan(project,request.request,options.resumeContract,doc.state.settings.fps,{state:doc.state,projectRevision:doc.revision,mentions:request.mentions}):await semanticPlan(
+        const localContract = localEdit ? (()=>{
+          const start=performance.now();
+          const plan=validateIntentPlan(project,request.request,incrementalPlan(request.request,[localEdit],enrichedContext),doc.state.settings.fps,{state:doc.state,projectRevision:doc.revision});
+          const coverage=inspectSemanticCoverage(project,request.request,plan,doc.state.settings.fps);
+          if(coverage.status!=='PASSED')throw new SemanticCoverageError(coverage);
+          localMetrics.patchConstructionMs+=performance.now()-start;
+          return plan;
+        })() : undefined;
+        if(localContract){if(harness)harness.phase='local-fast-path';onStage('local-edit');await harness?.diagnostic('incremental-edit-route',{...localMetrics,llmCalls:0});await atomicJson(path.join(directory,'intent-contract.json'),localContract);}
+        const contract = localContract ?? (options.resumeContract?validateIntentPlan(project,request.request,options.resumeContract,doc.state.settings.fps,{state:doc.state,projectRevision:doc.revision,mentions:request.mentions}):await semanticPlan(
           project,
           request.request,
           enrichedContext,
@@ -536,7 +550,7 @@ export async function proposeMotion(
             activeSceneId: request.activeSceneId,
             selectedObjectId: request.selectedObjectId,
           },
-        );
+        ));
         if (harness) {
           await harness.record("intent-plan", {
             requirements: contract.requirements,
@@ -553,7 +567,9 @@ export async function proposeMotion(
           )
         ) {
           try {
+            const compileStart=performance.now();
             const preflight = preflightIntentPlan(project, doc.state, contract);
+            localMetrics.patchConstructionMs+=performance.now()-compileStart;
             preparedPlans = preflight.preparedPlans;
             const { preparedPlans: runtimeOnlyPlans, ...preflightReport } = preflight;
             const report = { ...preflightReport, preparedPlanCount: runtimeOnlyPlans.size };
@@ -647,7 +663,7 @@ export async function proposeMotion(
           verify: async (task, next, before, attempt) => {
             onStage("checking");
             const ruleRequirement=contract.requirements.find(r=>task.requirementIds.includes(r.requirementId)&&r.semanticEdit);
-            if(ruleRequirement){const started=performance.now();const report=await ruleQA(project,next,before,options.signal,()=>harness?.beforeRender());if(harness)harness.qaDurationMs+=performance.now()-started;await atomicJson(path.join(directory,task.taskId+"-rules-qa.json"),report);await atomicJson(path.join(directory,"rules.json"),{taskId:task.taskId,rules:harness&&harness.config.privacy!=="full"?"REDACTED":next.motionRules,materializations:next.ruleMaterializations,qa:report});return report;}
+            if(ruleRequirement){const started=performance.now();const report=await ruleQA(project,next,before,options.signal,()=>harness?.beforeRender(),localEdit?{scale:.25}:{});localMetrics.qaMs+=performance.now()-started;if(harness)harness.qaDurationMs+=performance.now()-started;await atomicJson(path.join(directory,task.taskId+"-rules-qa.json"),report);await atomicJson(path.join(directory,"rules.json"),{taskId:task.taskId,rules:harness&&harness.config.privacy!=="full"?"REDACTED":next.motionRules,materializations:next.ruleMaterializations,qa:report});return report;}
             const qa = runQA
               ? await runQA.verify(task, next, before, attempt)
               : await motionQA(
@@ -732,7 +748,11 @@ export async function proposeMotion(
           await atomicJson(path.join(directory,"skills.json"),prepared.reports);await harness?.record("motion-skills",prepared.reports.map(r=>({skill:r.skill,application:r.application,strategy:r.strategy,status:r.after.status})));
         }
         if(generated.reconciliation.status==="SUCCESS"&&renderingMode()==="native"&&generated.next.objectTransitions?.some(t=>t.timelinePolicy==="referenceStates")){
-          const composition=await compositionQA(project,generated.next,`motion/qa/${id}/composition`,{signal:options.signal,beforeRender:()=>harness?.beforeRender()});
+          const changed=localEdit?generated.next.expressions?.filter(e=>JSON.stringify(e)!==JSON.stringify(doc.state.expressions?.find(p=>p.expressionId===e.expressionId))):undefined;
+          const affectedFrames=changed?.flatMap(e=>[e.startFrame-1,e.startFrame,e.startFrame+Math.floor(e.durationFrames/2),e.startFrame+e.durationFrames-1]);
+          const compositionStart=performance.now();
+          const composition=await compositionQA(project,generated.next,`motion/qa/${id}/composition`,{signal:options.signal,beforeRender:()=>harness?.beforeRender(),...(affectedFrames?.length?{frames:affectedFrames}:{} )});
+          localMetrics.qaMs+=performance.now()-compositionStart;if(harness)harness.qaDurationMs+=performance.now()-compositionStart;
           await harness?.record("composition-qa",{status:composition.status,frames:composition.frames,failedChecks:composition.checks.filter(c=>c.status==="FAILED")});
           if(composition.status==="FAILED")throw Object.assign(Error("COMPOSITION_QA_FAILED: candidate not committed"),{code:"COMPOSITION_QA_FAILED",report:composition});
         }
@@ -748,6 +768,7 @@ export async function proposeMotion(
         if (generated.reconciliation.completed) {
           harness?.checkpoint();
           onStage("applying");
+          const applyStart=performance.now();
           const publication = await commitChanges(project.root, {
             signal:harness?.signal??options.signal,checkpoint:()=>harness?.checkpoint(),
             expectedRevision: doc.revision,
@@ -755,6 +776,7 @@ export async function proposeMotion(
             operationBatches: generated.operationBatches,
             expectedCandidate: generated.next,
             transactionId: id,
+            requestFingerprint:editRequestFingerprint(request),
             request:
               harness && harness.config.privacy !== "full"
                 ? `[${id}/run] request redacted`
@@ -769,6 +791,8 @@ export async function proposeMotion(
                 ? []
                 : redact(generated.plan.warnings),
           });
+          localMetrics.applyMs=performance.now()-applyStart;
+          localMetrics.ruleQAReused="ruleQAReused" in publication&&publication.ruleQAReused===true;if(localMetrics.ruleQAReused&&harness)harness.cacheHits++;
           committed = publication.document;
           durabilityWarning = publication.durabilityWarning;
           if (harness)
@@ -782,6 +806,13 @@ export async function proposeMotion(
               ? op.starts.map((s) => s.startFrame)
               : [],
         );
+        if(incrementalProfile){
+          const entities=(state:typeof doc.state)=>[...(state.expressions??[]).map(e=>({id:e.expressionId,kind:'expression',value:e})),...state.animations.map(a=>({id:a.animationId,kind:'animation',value:a})),...(state.objectTransitions??[]).map(t=>({id:t.transitionId,kind:'transition',value:t})),...(state.motionRules??[]).map(r=>({id:r.ruleId,kind:'rule',value:r}))];
+          const before=entities(doc.state),after=entities(committed.state);
+          const changes=[...new Set([...before,...after].map(e=>e.kind+':'+e.id))].flatMap(key=>{const a=before.find(e=>e.kind+':'+e.id===key),b=after.find(e=>e.kind+':'+e.id===key);return JSON.stringify(a?.value)===JSON.stringify(b?.value)?[]:[{id:key,expectedPrevious:a?.value??null,newValue:b?.value??null}];});
+          const patch={editId:id,projectRevision:doc.revision,newRevision:committed.revision,logicalObjectIds:incrementalProfile.objects.map(o=>o.logicalObjectId),...localMetrics,llmCalls:harness?.calls.length??0,affectedObjectCount:incrementalProfile.objects.length,affectedOperationCount:generated.plan.operations.length,targetOperationIds:changes.map(c=>c.id),affectedFrameRanges:changes.flatMap(c=>{const values=[c.expectedPrevious,c.newValue].filter(v=>v&&typeof v==='object'&&'startFrame' in v) as {startFrame:number;durationFrames:number}[];return values.map(v=>({startFrame:v.startFrame,endFrame:v.startFrame+v.durationFrames}));}),dependencies:committed.state.timingDependencies?.filter(d=>changes.some(c=>c.id.endsWith(':'+d.animationId)||c.id.endsWith(':'+d.anchorAnimationId))),changes,validation:generated.reconciliation,cacheInvalidation:{policy:'new canonical state digest; no global cache clear; decoded source resources retain existing ownership',frameCache:'state-scoped; not per-object reuse'}};
+          await atomicJson(path.join(directory,'incremental-edit.json'),patch);await harness?.diagnostic('incremental-edit',patch);
+        }
         const result = {
           ...basis,
           plan: generated.plan,
@@ -1102,6 +1133,10 @@ async function recentConversation(project: LoadedProject) {
   }
   return recent;
 }
+function editRequestFingerprint(input:unknown){
+ const r=input as Record<string,unknown>;
+ return digest(Object.fromEntries(['request','expectedRevision','selectedObjectId','selectedObjectIds','selectedSceneId','activeSceneId','mentions'].map(k=>[k,r[k]??null])));
+}
 export async function executeMotion(
   project: LoadedProject,
   input: unknown,
@@ -1114,8 +1149,42 @@ export async function executeMotion(
   } = {},
 ) {
   runtimeCode.assertCurrent();
+  const delivery=(input as {editId?:string}).editId;
+  if(delivery){
+    z.uuid().parse(delivery);
+    const doc=await readMotion(project),index=doc.history.findIndex(e=>e.transactionId===delivery);
+    const recordedRequest=path.join(project.root,'motion/ai',delivery,'request.json');
+    try{
+      await noSymlinkPath(project.root,recordedRequest);
+      const saved=JSON.parse(await readFile(recordedRequest,'utf8'));
+      if(editRequestFingerprint(saved.request)!==editRequestFingerprint(await prepareMotionRequest(project,input)))throw Error('EDIT_ID_REUSED_WITH_DIFFERENT_REQUEST');
+      if(index<0){try{await readFile(path.join(project.root,'motion/ai',delivery,'commit-verified.json'));if(doc.lastCommit?.transactionId===delivery&&doc.lastCommit.revision===doc.revision){const saved=JSON.parse(await readFile(path.join(project.root,'motion/ai',delivery,'proposal.json'),'utf8'));return {...saved,document:doc,time:projectTime(doc.state,doc.revision),replayed:true} as Awaited<ReturnType<typeof proposeMotion>>;}throw Error('TRANSACTION_NO_LONGER_EFFECTIVE');}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}}
+    }catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
+    if(index>=0){
+      const entry=doc.history[index];
+      const prepared=await prepareMotionRequest(project,input);
+      if(entry.requestFingerprint!==editRequestFingerprint(prepared))throw Error('EDIT_ID_REUSED_WITH_DIFFERENT_REQUEST');
+      if(index>=doc.cursor)throw Error('TRANSACTION_ALREADY_UNDONE');
+      const file=path.join(project.root,'motion/ai',delivery,'proposal.json');await noSymlinkPath(project.root,file);
+      const saved=JSON.parse(await readFile(file,'utf8'));
+      return {...saved,document:doc,time:projectTime(doc.state,doc.revision),replayed:true} as Awaited<ReturnType<typeof proposeMotion>>;
+    }
+  }
+  if(/^(?:верни предыдущее значение|верни последнее изменение|отмени последнее изменение)[.!]?$/iu.test((input as {request?:string}).request?.trim()??'')){
+    const request=await prepareMotionRequest(project,input),doc=await readMotion(project);
+    const id=delivery??randomUUID();
+    const run=await HarnessRun.start(project,id,request.request,request.settings.provider,request.settings.model,options.signal,options.config);
+    try{
+      await atomicJson(path.join(run.directory,'request.json'),{id,request,revision:doc.revision});
+      const changed=await changeMotion(project.root,{expectedRevision:request.expectedRevision,transactionId:id,requestFingerprint:editRequestFingerprint(request),request:request.request,action:'undo',signal:options.signal});
+      await run.diagnostic('incremental-edit',{route:'LOCAL_FAST_PATH',operation:'UNDO',llmCalls:0,projectRevision:doc.revision,newRevision:changed.document.revision});
+      await run.finish('SUCCESS');
+      const result={id,request,revision:doc.revision,sourceFingerprint:project.inspection.fingerprint,status:'applied',document:changed.document,time:projectTime(changed.document.state,changed.document.revision),taskExecution:true,playbackStart:0,plan:{status:'ready',summary:'Последнее изменение отменено',operations:[],warnings:[],assumptions:[]},reconciliation:{status:'SUCCESS',requested:1,completed:1},requirements:[],tasks:[],persistence:{status:'CONFIRMED'}} as unknown as Awaited<ReturnType<typeof proposeMotion>>;
+      await atomicJson(path.join(run.directory,'proposal.json'),result);await atomicJson(path.join(run.directory,'commit-verified.json'),{revision:changed.document.revision,receipt:changed.document.lastCommit});return result;
+    }catch(error){await run.captureFailure(error);await run.finish('FAILED');throw error;}
+  }
   onStage("generating");
-  const result = await proposeMotion(project, input, onStage, true, options);
+  const result = await proposeMotion(project, input, onStage, true, {...options,...(delivery?{runId:delivery}:{})});
   if ("manual" in result || "taskExecution" in result) return result;
   return completeExecution(project, result.id, onStage);
 }

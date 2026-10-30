@@ -1,3 +1,4 @@
+import { lowerMotionTool } from "./tools.js";
 import { createHash } from 'node:crypto';
 import type { LoadedProject } from '../types.js';
 import { buildRegistry } from './registry.js';
@@ -158,6 +159,36 @@ export function compileSemanticEdit(project: LoadedProject, state: MotionState, 
     const targetIds = edit.targets.length ? resolveRuleTargets(project, edit.targets) : edit.scope.logicalObjectIds.length ? resolveRuleTargets(project, edit.scope.logicalObjectIds) : edit.scope.selector === 'project' ? [] : fallbackLogicalId ? [fallbackLogicalId] : [];
     if (edit.scope.selector !== 'project' && !targetIds.length && !edit.ruleId)
         throw Error('RULE_EXPLICIT_SCOPE_REQUIRED');
+    const objects = ruleObjects(project).filter(o=>targetIds.includes(o.logicalObjectId));
+    const own=(scene:string,target:string)=>objects.some(o=>o.sourceInstances.some(i=>i.sceneId===scene&&i.sourceNodeId===target))&&(!edit.scope.sceneId||edit.scope.sceneId===scene);
+    if(edit.operation==='MODIFY_DURATION'||edit.operation==='MODIFY_EASING') {
+        const commands:Plan['operations']=[];
+        for(const a of state.animations.filter(a=>own(a.sceneId,a.targetId))) {
+            const patch=edit.operation==='MODIFY_EASING'?{easing:edit.parameters.easing}:{durationFrames:Math.max(1,Math.round(edit.parameters.durationSeconds!==undefined?edit.parameters.durationSeconds*state.settings.fps:a.durationFrames*(edit.durationFactor??1)))};
+            if(edit.operation==='MODIFY_EASING'&&!patch.easing)throw Error('EASING_REQUIRED');
+            commands.push(...lowerMotionTool(project,state,{tool:'updateAnimation',animationId:a.animationId,patch}));
+        }
+        for(const t of (state.objectTransitions??[]).filter(t=>targetIds.includes(t.logicalObjectId))) {
+            const patch=edit.operation==='MODIFY_EASING'?{easing:edit.parameters.easing}:{durationFrames:Math.max(1,Math.round(edit.parameters.durationSeconds!==undefined?edit.parameters.durationSeconds*state.settings.fps:t.durationFrames*(edit.durationFactor??1)))};
+            commands.push(...lowerMotionTool(project,state,{tool:'updateAnimation',animationId:t.transitionId,patch}));
+        }
+        if(!commands.length)throw Error('NO_MATCHING_EXISTING_ANIMATIONS');
+        return commands;
+    }
+    if(edit.effect==='motion')throw Error('UNSUPPORTED_MOTION_EDIT');
+    if(edit.operation==='ENABLE_EFFECT'||edit.operation==='DISABLE_EFFECT') {
+        const enabled=edit.operation==='ENABLE_EFFECT';
+        const owned=new Set(state.ruleMaterializations?.filter(m=>m.entity==='expression').map(m=>m.id));
+        const ops:Plan['operations']=(state.expressions??[]).filter(e=>e.type===edit.effect&&own(e.sceneId,e.targetId)&&!owned.has(e.expressionId)).map(e=>({type:'setExpression',expression:{...e,enabled}}));
+        for(const id of targetIds) {
+            const applicable=(state.motionRules??[]).filter(r=>r.effect===edit.effect&&r.enabled&&!r.exceptions.includes(id)&&(!r.scope.logicalObjectIds.length||r.scope.logicalObjectIds.includes(id)));
+            const r=winner(applicable);if(!r)continue;
+            const scope={...r.scope,selector:'objects' as const,logicalObjectIds:[id]};
+            const parameters=enabled?(r.disabledParameters??r.parameters):{...r.parameters,amplitude:0};
+            ops.push({type:'setMotionRule',rule:{...r,ruleId:stable([edit.effect,scope,'apply']),scope,parameters,disabledParameters:enabled?undefined:(r.disabledParameters??r.parameters),priority:Math.max(0,...(state.motionRules??[]).map(r=>r.priority))+1,exceptions:[],sourceText}});
+        }
+        if(!ops.length)throw Error('NO_MATCHING_EXISTING_EFFECTS');return ops;
+    }
     const excluded = resolveRuleTargets(project, edit.excludedTargets);
     const scope = { ...edit.scope, logicalObjectIds: targetIds };
     const rules = state.motionRules ?? [], existing = edit.ruleId ? rules.find(r => r.ruleId === edit.ruleId) : undefined;
@@ -175,14 +206,14 @@ export function compileSemanticEdit(project: LoadedProject, state: MotionState, 
             throw Error('RULE_EXCEPTION_TARGET_REQUIRED');
         return [{ type: 'setMotionRule', rule: { ...existing, exceptions: edit.operation === 'ADD_EXCEPTION' ? [...new Set([...existing.exceptions, ...targetIds])] : existing.exceptions.filter(id => !targetIds.includes(id)) } }];
     }
-    const modify = edit.operation === 'MODIFY_EFFECT' || edit.operation === 'MODIFY_RULE';
+    const modify = edit.operation === 'MODIFY_EFFECT' || edit.operation === 'MODIFY_RULE' || edit.operation === 'MODIFY_PARAMETER';
     const applicable = existing ? [existing] : rules.filter(r => r.effect === edit.effect && r.enabled && (!targetIds.length || targetIds.every(id => (!r.scope.logicalObjectIds.length || r.scope.logicalObjectIds.includes(id)) && !r.exceptions.includes(id)))).sort((a, b) => { const w = winner([a, b]); return w === a ? -1 : 1; });
     if (modify && !applicable.length) {
         // Existing direct effects are edited in place, preserving all other parameters/IDs.
         const selected = state.expressions?.filter(e => e.type === edit.effect && (!scope.sceneId || e.sceneId === scope.sceneId) && (scope.startSeconds === undefined || e.startFrame / state.settings.fps >= scope.startSeconds) && (scope.endSeconds === undefined || e.startFrame / state.settings.fps < scope.endSeconds) && (!targetIds.length || ruleObjects(project).some(o => targetIds.includes(o.logicalObjectId) && o.sourceInstances.some(i => i.sceneId === e.sceneId && i.sourceNodeId === e.targetId)))) ?? [];
         if (!selected.length)
             throw Error('NO_MATCHING_EXISTING_EFFECTS');
-        return selected.map(e => ({ type: 'setExpression' as const, expression: { ...e, parameters: { ...e.parameters, ...edit.parameters, ...(edit.amplitudeFactor !== undefined ? { amplitude: e.parameters.amplitude * edit.amplitudeFactor } : {}) } } as typeof e }));
+        return selected.map(e => ({ type: 'setExpression' as const, expression: { ...e, parameters: { ...e.parameters, ...edit.parameters, ...(edit.amplitudeFactor !== undefined ? { amplitude: e.parameters.amplitude * edit.amplitudeFactor } : {}),...(edit.frequencyFactor!==undefined&&'frequency' in e.parameters?{frequency:e.parameters.frequency*edit.frequencyFactor}:{}) } } as typeof e }));
     }
     if (modify && edit.amplitudeFactor !== undefined && !existing && !targetIds.length) {
         const ids = ruleObjects(project).filter(o => applicable.some(r => !r.exceptions.includes(o.logicalObjectId) && (!r.scope.logicalObjectIds.length || r.scope.logicalObjectIds.includes(o.logicalObjectId)))).map(o => o.logicalObjectId);
@@ -190,13 +221,14 @@ export function compileSemanticEdit(project: LoadedProject, state: MotionState, 
             throw Error('NO_MATCHING_EXISTING_EFFECTS');
         return ids.flatMap(id => compileSemanticEdit(project, state, { ...edit, targets: [id], scope: { ...scope, selector: 'objects', logicalObjectIds: [id] } }, sourceText, id));
     }
-    if (modify && edit.amplitudeFactor !== undefined && targetIds.length > 1 && !existing)
+    if (modify && (edit.amplitudeFactor !== undefined || edit.frequencyFactor !== undefined) && targetIds.length > 1 && !existing)
         return targetIds.flatMap(id => compileSemanticEdit(project, state, { ...edit, targets: [id], scope: { ...scope, logicalObjectIds: [id] } }, sourceText, id));
     const priority = Math.max(0, ...rules.map(r => r.priority)) + 1;
     const parameters = { ...(modify ? applicable[0]?.parameters : {}), ...edit.parameters };
     if (edit.amplitudeFactor !== undefined) {
         parameters.amplitude = (applicable[0]?.parameters.amplitude ?? (edit.effect === 'wiggle' ? 3 : .25)) * edit.amplitudeFactor;
     }
+    if(edit.frequencyFactor!==undefined) parameters.frequency=(applicable[0]?.parameters.frequency??(edit.effect==='wiggle'?.8:2.5))*edit.frequencyFactor;
     if (edit.operation === 'REMOVE_EFFECT')
         parameters.amplitude = 0;
     const rule = motionRuleSchema.parse({ ruleId: existing?.ruleId ?? stable([edit.effect, scope, edit.operation === 'REMOVE_EFFECT' ? 'exclude' : 'apply']), effect: edit.effect, scope: existing && edit.operation !== "MODIFY_RULE" ? existing.scope : scope, parameters, priority, sourceText, enabled: true, exceptions: excluded.length ? excluded : existing?.exceptions ?? [] });

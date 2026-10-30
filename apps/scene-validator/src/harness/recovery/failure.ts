@@ -1,3 +1,4 @@
+import {providerAbortCode} from "../providers/types.js";
 import { createHash } from "node:crypto";
 import type { IntentRequirement } from "../../motion/intent/schema.js";
 import { redactSecrets } from "../security.js";
@@ -38,9 +39,9 @@ export function recoveryFailure(error: unknown, stage: string, revision: string,
     };
     const report = e?.report;
     const message = error instanceof Error ? error.message : String(error);
-    const rawCode = report?.code ?? report?.toolIssue?.code ?? e?.code ?? message.replace(/^Error: /, "").match(/[A-Z][A-Z_0-9]{3,}/)?.[0] ?? "UNCLASSIFIED_FAILURE";
+    const rawCode = report?.code ?? report?.toolIssue?.code ?? providerAbortCode(error) ?? e?.code ?? message.replace(/^Error: /, "").match(/[A-Z][A-Z_0-9]{3,}/)?.[0] ?? "UNCLASSIFIED_FAILURE";
     const code = /^[A-Z][A-Z_0-9]+$/.test(rawCode) ? rawCode : requirement?.kind === "unsupported" ? "UNSUPPORTED_OPERATION" : "TECHNICAL_VALIDATION_FAILED";
-    const category: RecoveryCategory = code === "CONTEXT_EXHAUSTED" ? "CONTEXT_ADMISSION" : code === "OUTPUT_TRUNCATED" ? "PROVIDER_OUTPUT_LIMIT" : /PROVIDER_TRANSPORT|PROVIDER_EVENT_PARSE|PROVIDER_JSON_INVALID|PROVIDER_AUTH|RATE_LIMIT|UNAVAILABLE/.test(code) ? "PROVIDER_FAILURE" : /STALE|REVISION/.test(code)
+    const category: RecoveryCategory = code === "CONTEXT_EXHAUSTED" ? "CONTEXT_ADMISSION" : code === "OUTPUT_TRUNCATED" ? "PROVIDER_OUTPUT_LIMIT" : /PROVIDER_TIMEOUT|PROVIDER_TRANSPORT|PROVIDER_EVENT_PARSE|PROVIDER_JSON_INVALID|PROVIDER_AUTH|RATE_LIMIT|UNAVAILABLE/.test(code) ? "PROVIDER_FAILURE" : /STALE|REVISION/.test(code)
         ? "STALE_REFERENCE"
         : /AMBIGUOUS|UNRESOLVED/.test(code)
           ? "AMBIGUITY"

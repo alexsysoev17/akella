@@ -1,3 +1,4 @@
+import {providerAbortCode} from "./providers/types.js";
 import { redactSecrets } from "./security.js";
 import os from "node:os";
 export class HarnessStageError extends Error {
@@ -54,10 +55,10 @@ export function failureDiagnostic(
   return {
     failureStage: tagged?.failureStage ?? stage,
     errorCode:
-      typeof code === "string"
+      providerAbortCode(root) ?? (typeof code === "string"
         ? code
         : (message.match(/^([A-Z][A-Z_0-9]+)(?=:|\b)/)?.[1] ??
-          "HARNESS_STARTUP_FAILED"),
+          "HARNESS_STARTUP_FAILED")),
     errorMessage: full ? safe(message) : "Details redacted by privacy policy",
     rootCause: full
       ? safe(root instanceof Error ? root.message : String(root))

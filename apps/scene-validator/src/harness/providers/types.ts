@@ -124,3 +124,9 @@ export function transportErrorCode(error: unknown): ProviderError["code"] {
   if (status === 408 || status === 504) return "TIMEOUT";
   return "TRANSPORT";
 }
+
+/** DOM AbortSignal deadlines have numeric .code; do not mistake that for validation. */
+export function providerAbortCode(error:unknown): 'PROVIDER_TIMEOUT'|'CANCELLED'|undefined {
+ const e=error as {name?:string;message?:string};
+ return e?.name==='TimeoutError'?'PROVIDER_TIMEOUT':e?.name==='AbortError'?'CANCELLED':undefined;
+}

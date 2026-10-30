@@ -130,7 +130,7 @@ test("Harness infrastructure: one mock call, genuine selective Chromium QA, pers
       await input(f, "Сделай колебания куар вдвое слабее"),
     );
     assert.equal(second.reconciliation?.status, "SUCCESS");
-    assert.equal(calls, 2);
+    assert.equal(calls, 1, "existing amplitude edit must execute locally");
     const doc = await readMotion(f.project);
     assert.deepEqual(doc.state.animations, before.animations);
     assert.equal(
@@ -142,7 +142,7 @@ test("Harness infrastructure: one mock call, genuine selective Chromium QA, pers
     for (const r of runs) {
       assert.equal(r.status, "SUCCESS");
       const m = r.metrics as { llmCalls: number; renderedQAFrames: number };
-      assert.equal(m.llmCalls, 1);
+      assert.equal(m.llmCalls, r.runId===second.id?0:1);
       assert.ok(m.renderedQAFrames < 50);
       assert.ok((r.knowledgeReferences as unknown[]).length > 4);
       assert.equal(

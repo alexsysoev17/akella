@@ -19,6 +19,9 @@ import { applyOperations, motionDiff, validateMotion } from "./operations.js";
 const entry = z
   .object({
     editId: z.string(),
+    transactionId:z.string().uuid().optional(),
+    operationsDigest:z.string().optional(),
+    requestFingerprint:z.string().optional(),
     createdAt: z.string(),
     request: z.string(),
     origin: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
@@ -150,6 +153,7 @@ export async function changeMotion(
     operationBatches?: unknown[];
     expectedCandidate?: MotionState;
     transactionId?: string;
+    requestFingerprint?:string;
     action?: "undo" | "redo";
     request: string;
     origin?: z.infer<typeof entry>["origin"];
@@ -175,11 +179,18 @@ export async function changeMotion(
       .digest("hex");
     if (
       input.transactionId &&
-      doc.lastCommit?.transactionId === input.transactionId
+      doc.lastCommit?.transactionId === input.transactionId && !doc.history.some(e=>e.transactionId===input.transactionId)
     ) {
       if (doc.lastCommit.operationsDigest !== operationsDigest)
         throw new Error("TRANSACTION_ID_REUSED_WITH_DIFFERENT_OPERATIONS");
       return { document: doc, diff: [], replayed: true };
+    }
+    const previousTransaction=input.transactionId?doc.history.findIndex(e=>e.transactionId===input.transactionId):-1;
+    if(previousTransaction>=0){
+      const entry=doc.history[previousTransaction];
+      if(entry.operationsDigest!==operationsDigest || entry.requestFingerprint!==input.requestFingerprint)throw Error('TRANSACTION_ID_REUSED_WITH_DIFFERENT_OPERATIONS');
+      if(previousTransaction>=doc.cursor)throw Error('TRANSACTION_ALREADY_UNDONE');
+      return {document:doc,diff:[],replayed:true};
     }
     if (input.expectedRevision !== doc.revision)
       throw Object.assign(
@@ -189,6 +200,7 @@ export async function changeMotion(
         { code: "STALE_PROJECT_REVISION" },
       );
     const before = structuredClone(doc.state);
+    let ruleQAReused=false;
     if (input.action) {
       if (input.action === "undo") {
         if (!doc.cursor) throw new Error("Нет изменений для отмены");
@@ -213,6 +225,7 @@ export async function changeMotion(
       doc.history = doc.history.slice(0, doc.cursor);
       doc.history.push({
         editId: randomUUID(),
+        ...(input.transactionId?{transactionId:input.transactionId,operationsDigest,requestFingerprint:input.requestFingerprint}:{}),
         createdAt: new Date().toISOString(),
         request: input.request.slice(0, 20000),
         origin: input.origin ?? "manual",
@@ -229,7 +242,7 @@ export async function changeMotion(
       const {prepareSkill}=await import("../motion-library/skills/runtime.js");
       for(const app of doc.state.skillApplications.filter(a=>a.enabled))await prepareSkill(project,doc.state,app,{repair:false,signal:input.signal,beforeRender:input.checkpoint});
     }
-    if(doc.state.motionRules?.length||before.motionRules?.length){const {ruleQA}=await import("./rule-qa.js");const qa=await ruleQA(project,doc.state,before,input.signal,input.checkpoint);if(qa.status!=="PASSED")throw Object.assign(Error("MOTION_RULE_QA_FAILED"),{report:qa});}
+    if(doc.state.motionRules?.length||before.motionRules?.length){const {ruleQA,hasVerifiedRuleQA}=await import("./rule-qa.js");ruleQAReused=hasVerifiedRuleQA(project,doc.state,before);if(!ruleQAReused){const qa=await ruleQA(project,doc.state,before,input.signal,input.checkpoint);if(qa.status!=="PASSED")throw Object.assign(Error("MOTION_RULE_QA_FAILED"),{report:qa});}}
     const previousRevision = doc.revision;
     doc.revision = randomUUID();
     if (input.transactionId)
@@ -268,7 +281,7 @@ export async function changeMotion(
         durabilityWarning: String(error),
       };
     }
-    return { document: doc, diff: motionDiff(before, doc.state) };
+    return { document: doc, diff: motionDiff(before, doc.state),ruleQAReused };
   } finally {
     await unlock();
   }

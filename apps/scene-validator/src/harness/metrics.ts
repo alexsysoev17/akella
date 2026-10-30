@@ -30,7 +30,7 @@ export function harnessMetrics(input: MetricRun[], includeMocks = false) {
     ),
     first = ok.filter(
       (r) =>
-        (r.metrics?.llmCalls ?? 0) === 1 && !(r.metrics?.repairAttempts ?? 0),
+        typeof r.metrics?.llmCalls === "number" && r.metrics.llmCalls <= 1 && !(r.metrics?.repairAttempts ?? 0),
     );
   const latency = rows
     .map((r) => r.metrics?.latencyMs)

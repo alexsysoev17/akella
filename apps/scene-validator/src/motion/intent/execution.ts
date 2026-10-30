@@ -206,8 +206,12 @@ export function requirementChecks(
   plan: IntentPlan,
   previous?: MotionState,
   committed: MotionState | undefined = previous,
+  project?:LoadedProject,
 ) {
-  if(r.semanticEdit){const edit=r.semanticEdit;const changed=!isDeepStrictEqual(state.motionRules,previous?.motionRules)||!isDeepStrictEqual(state.expressions,previous?.expressions);const applied=edit.operation==="REMOVE_RULE"?!state.motionRules?.some(rule=>rule.ruleId===edit.ruleId):changed||state.motionRules?.some(rule=>rule.sourceText===r.sourceText);return [{name:"semanticEditApplied",requirementId:r.requirementId,status:applied?"PASSED":"FAILED"}];}
+  if(r.semanticEdit){
+    if(!previous||!project)return [{name:'semanticEditApplied',requirementId:r.requirementId,status:'FAILED'}];
+    try{const expected=applyOperations(previous,compileSemanticEdit(project,previous,r.semanticEdit,r.sourceText,r.target.logicalObjectId??undefined),project);return [{name:'semanticEditApplied',requirementId:r.requirementId,status:isDeepStrictEqual(expected,state)?'PASSED':'FAILED'}];}catch{return [{name:'semanticEditApplied',requirementId:r.requirementId,status:'FAILED'}];}
+  }
   if (r.techniques.includes("objectStateTransition")) {
     const matches = (state.objectTransitions ?? []).filter(t => t.logicalObjectId === r.target.logicalObjectId && (r.parameters.fromSceneId?t.fromSceneId===r.parameters.fromSceneId:[t.fromSceneId, t.toSceneId].includes(r.sceneId!)) && (!r.parameters.toSceneId || t.toSceneId === r.parameters.toSceneId));
     if (r.effectOperation?.action === "remove") return [{ name: "stateTransitionRemoved", requirementId: r.requirementId, status: matches.length === 0 ? "PASSED" : "FAILED" }];
@@ -979,6 +983,7 @@ export async function runIntentTasks(
       plan,
       taskBefore.get(task.taskId),
       initial,
+      project,
     );
     const persisted =
       task.status === "PASSED" && checks.every((c) => c.status === "PASSED");
@@ -1118,7 +1123,7 @@ export async function runIntentTasks(
 export function admitCompiledTask(project: LoadedProject, before: MotionState, plan: IntentPlan, task: IntentTask, compiled: Plan, committed: MotionState = before) {
   const next = applyOperations(before, compiled.operations, project);
   assertIntentScope(project, before, next, plan, task);
-  const checks = plan.requirements.filter(r => task.requirementIds.includes(r.requirementId)).flatMap(r => requirementChecks(next, r, plan, before, committed));
+  const checks = plan.requirements.filter(r => task.requirementIds.includes(r.requirementId)).flatMap(r => requirementChecks(next, r, plan, before, committed, project));
   return { next, checks };
 }
 /** Full deterministic candidate preflight; no persistence, renderer or provider call. */

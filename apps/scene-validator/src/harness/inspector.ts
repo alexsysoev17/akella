@@ -298,6 +298,7 @@ export async function inspectorRun(root: string, id: string, raw = false) {
           requirementCountStatus:Array.isArray(plannedRequirements)?"PLANNED":"NOT_PLANNED",
         }))
       : "NOT_AVAILABLE",
+    incrementalEdit: full ? await saved(root,`motion/ai/${id}/incremental-edit.json`) : Array.isArray(trace)?trace.filter(e=>e.stage==='incremental-edit').map(e=>({route:e.data?.route,llmCalls:e.data?.llmCalls,objectResolutionMs:e.data?.objectResolutionMs,patchConstructionMs:e.data?.patchConstructionMs,applyMs:e.data?.applyMs,qaMs:e.data?.qaMs})):"NOT_AVAILABLE",
     contextComposition: Array.isArray(trace) ? trace.filter(e=>e.stage==="semantic-diagnostic" && e.data?.phase==="reference-context").map(e=>e.data.report) : "NOT_AVAILABLE",
     semanticDiagnostics: Array.isArray(trace)
       ? trace.filter((e) =>

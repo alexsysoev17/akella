@@ -1,3 +1,4 @@
+import {createHash} from "node:crypto";
 import type { LoadedProject } from '../types.js';
 import type { MotionState } from './schema.js';
 import { expressionValue } from './expressions.js';
@@ -5,7 +6,13 @@ import { evaluateAnimation } from './evaluation.js';
 import { scopedExpressionValue } from './transition-effects.js';
 import { statePresentation } from './transitions.js';
 import { renderNativeFrame } from '../native/client.js';
-export async function ruleQA(project: LoadedProject, state: MotionState, previous?: MotionState, signal?: AbortSignal, beforeRender?: () => void) {
+const verified = new Map<string,number>();
+const proofKey=(project:LoadedProject,state:MotionState,before?:MotionState)=>createHash('sha256').update(JSON.stringify([project.root,project.inspection.fingerprint,before,state])).digest('hex');
+/** A bounded in-process proof of an actually checked candidate, not a client-supplied bypass flag. */
+export function hasVerifiedRuleQA(project:LoadedProject,state:MotionState,before:MotionState){
+ const at=verified.get(proofKey(project,state,before));return at!==undefined&&Date.now()-at<60000;
+}
+export async function ruleQA(project: LoadedProject, state: MotionState, previous?: MotionState, signal?: AbortSignal, beforeRender?: () => void, renderOptions:{scale?:number}={}) {
     const owned = new Set(state.ruleMaterializations?.filter(m => m.entity === 'expression').map(m => m.id));
     const changed = (state.expressions ?? []).filter(e => JSON.stringify(e) !== JSON.stringify(previous?.expressions?.find(p => p.expressionId === e.expressionId)));
     const previousOwned = new Set(previous?.ruleMaterializations?.filter(m => m.entity === 'expression').map(m => m.id));
@@ -45,10 +52,12 @@ export async function ruleQA(project: LoadedProject, state: MotionState, previou
     for (const frame of sampled) {
         signal?.throwIfAborted();
         beforeRender?.();
-        const rendered = await renderNativeFrame(project, state, frame, { signal });
+        const rendered = await renderNativeFrame(project, state, frame, { signal,scale:renderOptions.scale??1 });
         checks.push({ name: `rule-native-frame:${frame}`, status: rendered.png.length ? 'PASSED' : 'FAILED' });
     }
     if (sampled.length)
         checks.push({ name: 'renderedFrames', status: 'PASSED' });
-    return { status: checks.some(c => c.status === 'FAILED') ? 'FAILED' : 'PASSED', checks, numericEffects: changed.length, removedEffects: removed.length, renderedFrames: sampled, renderValidation: sampled.length ? 'PASSED' : 'NOT_TESTED', visualArtisticAssessment: 'NOT_TESTED', baseAnimationPreservation: 'verified by typed delta scope; no creative-quality claim' };
+    const status=checks.some(c=>c.status==='FAILED')?'FAILED':'PASSED';
+    if(status==='PASSED'){if(verified.size>=32)verified.delete(verified.keys().next().value!);verified.set(proofKey(project,state,previous),Date.now());}
+    return { status, checks, renderScale:renderOptions.scale??1, numericEffects: changed.length, removedEffects: removed.length, renderedFrames: sampled, renderValidation: sampled.length ? 'PASSED' : 'NOT_TESTED', visualArtisticAssessment: 'NOT_TESTED', baseAnimationPreservation: 'verified by typed delta scope; no creative-quality claim' };
 }

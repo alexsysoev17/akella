@@ -29,18 +29,18 @@ test("sequential existing effect edits, start/end retiming, dependent inertia an
   const effect=structuredClone(s.expressions!.find(e=>e.targetId==="plate")!);
   const y=(state:typeof s)=>evaluateMotion(state,plateBase.startFrame+plateBase.durationFrames+1,statePresentation(f.project,state)).nodes[JSON.stringify(["s0","plate"])]?.y??0;
   const oldY=Math.abs(y(s));
-  s=await turn("сделай сильнее колебания у тарелка","тарелка",["inertialOvershoot"],[{key:"amplitudeFactor",value:1.5}],{effectOperation:{storage:"expression",action:"update"}});
-  assert.equal(s.expressions!.find(e=>e.expressionId===effect.expressionId)!.parameters.amplitude,effect.parameters.amplitude!*1.5);assert.ok(Math.abs(y(s))>oldY);assert.deepEqual(s.animations.find(a=>a.targetId==="plate"),plateBase);
+  s=await turn("сделай сильнее колебания у тарелка","тарелка",["inertialOvershoot"],[{key:"amplitudeFactor",value:1.6}],{effectOperation:{storage:"expression",action:"update"}},0);
+  assert.equal(s.expressions!.find(e=>e.expressionId===effect.expressionId)!.parameters.amplitude,effect.parameters.amplitude!*1.6);assert.ok(Math.abs(y(s))>oldY);assert.deepEqual(s.animations.find(a=>a.targetId==="plate"),plateBase);
   // Implicit follow-up resolves the actual recent committed effect, not all objects.
   output={schemaVersion:"1.0.0",requirements:[{requirementId:"followup",kind:"editAnimation",sourceText:"сделай колебания послабее",target:{name:null,sourceNodeId:null,logicalObjectId:null},sceneId:null,techniques:["inertialOvershoot"],selector:{type:"recentSuccessfulTargets",effect:"inertialOvershoot"},parameters:{amplitudeFactor:.5},effectOperation:{storage:"expression",action:"update"}}],coverage:[{sourceText:"сделай колебания послабее",requirementIds:["followup"],classification:"executable",explanation:"recent committed inertia"}],assumptions:[]};
   const before=await readMotion(f.project);
   const weakened=await executeMotion(f.project,{mode:"edit",request:"сделай колебания послабее",expectedRevision:before.revision,settings:{provider:"core-retime-fixture",model:""}},()=>{},{config:{maxLLMCalls:1,maxRepairAttempts:0}});
-  assert.equal(weakened.reconciliation?.status,"SUCCESS");s=(await readMotion(f.project)).state;assert.equal(s.expressions!.find(e=>e.expressionId===effect.expressionId)!.parameters.amplitude,effect.parameters.amplitude!*.75);
+  assert.equal(weakened.reconciliation?.status,"SUCCESS");s=(await readMotion(f.project)).state;assert.equal(s.expressions!.find(e=>e.expressionId===effect.expressionId)!.parameters.amplitude,effect.parameters.amplitude!*1.6*.5);
   s=await turn("пусть колебания тарелка затухают медленнее","тарелка",["inertialOvershoot"],[{key:"decayFactor",value:.8}],{effectOperation:{storage:"expression",action:"update"}});
   assert.equal((s.expressions!.find(e=>e.expressionId===effect.expressionId)!.parameters as {decay:number}).decay,(effect.parameters as {decay:number}).decay*.8);
-  s=await turn("добавь постоянный wiggle у тарелка","тарелка",["wiggle"],[{key:"lifetime",value:"project"}],{kind:"objectAnimation",targetScope:"logicalObject"});
+  s=await turn("добавь постоянный wiggle у тарелка","тарелка",["wiggle"],[{key:"lifetime",value:"project"}],{kind:"objectAnimation",targetScope:"logicalObject"},0);
   const wiggles=structuredClone(s.expressions!.filter(e=>e.type==="wiggle"));
-  s=await turn("сделай wiggle у тарелка чуть быстрее","тарелка",["wiggle"],[{key:"frequencyFactor",value:1.25}],{effectOperation:{storage:"expression",action:"update"}});
+  s=await turn("сделай wiggle у тарелка чуть быстрее","тарелка",["wiggle"],[{key:"frequencyFactor",value:1.25}],{effectOperation:{storage:"expression",action:"update"}},0);
   for(const old of wiggles){const next=s.expressions!.find(e=>e.expressionId===old.expressionId)!;assert.ok(next.type==="wiggle");assert.equal(next.parameters.frequency,old.parameters.frequency*1.25);assert.equal(next.parameters.amplitude,old.parameters.amplitude);}
   s=await turn("убери wiggle у тарелка","тарелка",["wiggle"],[],{effectOperation:{storage:"expression",action:"remove"}},0);assert.equal(s.expressions!.some(e=>e.type==="wiggle"),false);assert.deepEqual(s.animations.find(a=>a.targetId==="plate"),plateBase);
   s=await turn("пусть анимация петрушка 2 начинается чуть позже анимации базилик","петрушка 2",[],[],{effectOperation:{storage:"animation",action:"updateTiming"},delayPolicy:"slightlyLater",temporalReference:{kind:"existingAnimation",target:{name:"базилик"},endpoint:"start"}});
@@ -53,7 +53,7 @@ test("sequential existing effect edits, start/end retiming, dependent inertia an
   assert.equal(s.animations.find(a=>a.animationId==="ribbon-2")!.startFrame,72);assert.equal(s.animations.filter(a=>a.effect==="trimPath").length,2);
   s=await turn("движение тарелка с 1 до 3 секунд","тарелка",["slideUp"],[{key:"durationSeconds",value:2}],{start:{unit:"seconds",value:1},effectOperation:{storage:"animation",action:"updateTiming"}});
   assert.equal(s.animations.find(a=>a.animationId===plateBase.animationId)!.startFrame,12);assert.equal(s.expressions!.find(e=>e.expressionId===effect.expressionId)!.startFrame,36);
-  s=await turn("убери колебания у тарелка","тарелка",["inertialOvershoot"],[],{effectOperation:{storage:"expression",action:"remove"}});assert.ok(s.animations.some(a=>a.animationId===plateBase.animationId));assert.equal(s.expressions!.filter(e=>e.targetId==="plate").length,0);
+  s=await turn("убери колебания у тарелка","тарелка",["inertialOvershoot"],[],{effectOperation:{storage:"expression",action:"remove"}},0);assert.ok(s.animations.some(a=>a.animationId===plateBase.animationId));assert.equal(s.expressions!.filter(e=>e.targetId==="plate").length,0);
   s=await turn("тарелка статична с самого начала весь ролик без анимации","тарелка",[],[],{motionAction:"freezeProject"});assert.equal(s.animations.some(a=>a.targetId==="plate"),false);assert.equal(s.staticObjects?.length,1);
  }finally{stop();await closeNativeRenderer();await f.cleanup();}
 });

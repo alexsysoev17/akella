@@ -87,7 +87,7 @@ export function recentSuccessfulActions(
           ? [op.expression.expressionId]
           : op.type === "scaleExpressionParameter"
             ? [op.expressionId]
-            : [];
+            : op.type==='setMotionRule' ? (entry.after.expressions??[]).filter(e=>entry.after.ruleMaterializations?.some(m=>m.ruleId===op.rule.ruleId&&m.id===e.expressionId)).map(e=>e.expressionId) : [];
       for (const id of ids) {
         const e = entry.after.expressions?.find((e) => e.expressionId === id);
         if (!e) continue;

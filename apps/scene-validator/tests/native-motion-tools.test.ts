@@ -40,11 +40,11 @@ test("AI semantic graph → typed motion tools → atomic state → native Previ
   const f = await circleFixture();
   let response: unknown, calls = 0;
   const stop = registerProvider("circle-tools-fixture", () => ({ id: "circle-tools-fixture", mode: "mock", capabilities: () => ({ structuredOutput: true, nativeToolCalling: false, cancellation: true, usage: false, nativeOutputTokenLimit: false }), generate: async () => { calls++; return { output: response, usage: null, estimatedCost: null, latencyMs: 0, diagnostics: ["mock semantics; real native execution/QA/render/FFmpeg"], toolCalls: [] }; } }));
-  const turn = async (prompt: string, output: unknown) => {
+  const turn = async (prompt: string, output: unknown, expectedCalls=1) => {
     response = output; const before = await readMotion(f.project), previousCalls = calls;
     const result = await executeMotion(f.project, { mode: "edit", request: prompt, selectedObjectId: "c0", activeSceneId: "s0", expectedRevision: before.revision, settings: { provider: "circle-tools-fixture", model: "" } }, () => {}, { config: { maxLLMCalls: 1, maxRepairAttempts: 0 } });
     assert.equal(result.reconciliation?.status, "SUCCESS", JSON.stringify(result.reconciliation));
-    assert.equal(calls - previousCalls, 1);
+    assert.equal(calls - previousCalls, expectedCalls);
     const tasks = JSON.parse(await readFile(path.join(f.project.root, "motion/ai", result.id, "tasks.json"), "utf8"));
     assert.ok(tasks.tasks.every((t: { compilationSource: string }) => t.compilationSource === "validated-preflight"));
     const after = await readMotion(f.project);
@@ -95,7 +95,7 @@ test("AI semantic graph → typed motion tools → atomic state → native Previ
     edit.selector = { type: "explicitObject", effect: "wiggle" };
     edit.effectOperation = { storage: "expression", action: "update" }; edit.parameters.amplitudeFactor = .5;
     edit.timing.relation = "unchanged";
-    doc = await turn(weaker, { schemaVersion: "1.0.0", requirements: [edit], coverage: [{ sourceText: weaker, requirementIds: ["r"], classification: "executable", explanation: "live-provider selector shape" }], assumptions: [] });
+    doc = await turn(weaker, { schemaVersion: "1.0.0", requirements: [edit], coverage: [{ sourceText: weaker, requirementIds: ["r"], classification: "executable", explanation: "live-provider selector shape" }], assumptions: [] },0);
     assert.deepEqual(doc.state.objectTransitions, base);
     assert.deepEqual(doc.state.expressions, old!.map(e => ({ ...e, parameters: { ...e.parameters, amplitude: 1.5 } })));
     const remove = "Удали только Wiggle Circle, сохрани переход.";

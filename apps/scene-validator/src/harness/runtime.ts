@@ -1,3 +1,4 @@
+import {providerAbortCode,ProviderError as NormalizedProviderError} from "./providers/types.js";
 import {supervisorExperience,rememberSupervisor} from "./recovery/supervisor-memory.js";
 import {GlobalFailureSupervisor} from "./recovery/supervisor.js";
 import { collectImprovements } from "./improvements.js";
@@ -336,7 +337,7 @@ export class HarnessRun {
         timeoutMs,
         signal: limit,
       });
-      const result = await abortable(pending, limit);
+      const result = await abortable(pending, limit).catch(error=>{const code=providerAbortCode(error);if(code)throw new NormalizedProviderError(code,code==='PROVIDER_TIMEOUT'?'Provider deadline elapsed':'User or run cancelled');throw error;});
       if (result.toolCalls.length)
         throw new BudgetError("UNSUPPORTED_TOOL_CALL");
       call.usage = result.usage;

@@ -324,7 +324,7 @@ test("adapter/parser/compiler/executor adds five Fades in one call after context
       5,
     );
     assert.deepEqual(final.state.expressions, weakState.state.expressions);
-    assert.equal(calls, 3);
+    assert.equal(calls, 2, "two Fade interpretations; intervening amplitude edit is local");
     console.log(
       JSON.stringify({
         fixture: "fade wire E2E",

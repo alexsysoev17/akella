@@ -1,3 +1,7 @@
+import {validateMotion} from "./operations.js";
+import {numericQA} from "./qa/numeric.js";
+import {statePresentation} from "./transitions.js";
+import {compositionQA} from "../native/composition-qa.js";
 import { spawn } from "node:child_process";
 import { renderNativeFrame, renderingMode } from "../native/client.js";
 import { exportBrowserVideo } from "./video-browser.js";
@@ -34,6 +38,11 @@ export async function exportVideo(
     const project = await loadProject(projectRoot),
       doc = await readMotion(project),
       state = doc.state;
+    validateMotion(state,project);
+    const numeric=numericQA(state,'',statePresentation(project,state));
+    const fullComposition=await compositionQA(project,state,'motion/qa/export-'+randomUUID(),{signal:options.signal});
+    const exportQA={numeric:numeric.checks,composition:fullComposition,status:[...numeric.checks,...fullComposition.checks].some(c=>c.status==='FAILED')?'FAILED':'PASSED',artistic:'NOT_TESTED'};
+    if(exportQA.status==='FAILED')throw Object.assign(Error('EXPORT_QA_FAILED'),{code:'EXPORT_QA_FAILED',report:exportQA});
     const binary = process.env.MOTION_FFMPEG_BIN ?? ffmpegPath;
     if (typeof binary !== "string")
       throw new Error(
@@ -155,6 +164,7 @@ export async function exportVideo(
       },
       inputEncoding: "rgba",
       frameDigests,
+      qa:exportQA,
       renderedAt: new Date().toISOString(),
     });
     return {

@@ -20,6 +20,7 @@ const hash=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('h
 export function diagnoseFailure(event:FailureEvent){
  const f=event.failure,code=f.code;
  if(code==="TEXT_HANDOFF_CONSTRAINT_CONFLICT")return {kind:"external" as const,reason:"Native text handoff cannot satisfy the current visible-collision/final-state/timing constraints after bounded deterministic correction. Preserve user locks; changing application source or repeating semantic planning is not a valid artistic repair."};
+ if(code==='PROVIDER_TIMEOUT')return {kind:'external' as const,reason:'Provider deadline elapsed; no candidate validation occurred. A retry requires an available bounded provider budget; credentials, disk space and consent are not diagnosed by a timeout.'};
  const external=/CANCEL|AUTH|CREDENTIAL|RATE_LIMIT|OVERLOADED|UNAVAILABLE|PROVIDER_TIMEOUT|PROVIDER_TRANSPORT_ERROR|EXECUTION_TIMEOUT|ECONN|ENOTFOUND|ENOSPC|EACCES|EPERM|OS_SANDBOX_UNAVAILABLE|STALE_PROJECT_REVISION|RECOVERY_DEPENDENT_DELETE_NOT_AUTHORIZED/.test(code)||/not logged in|unauthorized|authentication required|operation.*aborted.*timeout|operation.*timed out/i.test(f.invariant);
  if(code==='CONTEXT_EXHAUSTED')return {kind:'external' as const,reason:'Context capacity exceeded before execution; narrow the admitted edit context or disclose additional state selectively. Source repair is not a context-admission strategy.'};
  const identityAmbiguity=/AMBIGUOUS_TARGET|AMBIGUOUS_CONTEXTUAL_REFERENCE|AMBIGUOUS_STRUCTURED_MENTION/.test(code);
