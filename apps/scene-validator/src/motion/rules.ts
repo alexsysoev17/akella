@@ -1,3 +1,5 @@
+import {compileWiggle} from './effect-edit.js';
+import {compileTrackEdit,entranceTrack} from './track-edit.js';
 import { lowerMotionTool } from "./tools.js";
 import { createHash } from 'node:crypto';
 import type { LoadedProject } from '../types.js';
@@ -161,14 +163,21 @@ export function compileSemanticEdit(project: LoadedProject, state: MotionState, 
         throw Error('RULE_EXPLICIT_SCOPE_REQUIRED');
     const objects = ruleObjects(project).filter(o=>targetIds.includes(o.logicalObjectId));
     const own=(scene:string,target:string)=>objects.some(o=>o.sourceInstances.some(i=>i.sceneId===scene&&i.sourceNodeId===target))&&(!edit.scope.sceneId||edit.scope.sceneId===scene);
+    if(edit.expressionIds?.some(id=>!state.expressions?.some(e=>e.expressionId===id&&e.type===edit.effect&&own(e.sceneId,e.targetId))))throw Error('EDIT_TARGET_OUTSIDE_SCOPE');
+    if(edit.expressionIds?.some(id=>state.ruleMaterializations?.some(m=>m.entity==='expression'&&m.id===id)))throw Error('RULE_OWNED_EFFECT: edit the scoped motion rule instead');
+    const trackEdit=compileTrackEdit(state,edit,own);if(trackEdit)return trackEdit;
+    if(edit.effectStorage==='expression'&&edit.operation==='ADD_EFFECT'){
+      if(edit.effect!=='wiggle')throw Error('UNSUPPORTED_EFFECT_STORAGE: use the supported creation contract');
+      return objects.flatMap(o=>{const ref=o.sourceInstances.find(i=>!edit.scope.sceneId||i.sceneId===edit.scope.sceneId);if(!ref)throw Error('EDIT_TARGET_OUTSIDE_SCOPE');return compileWiggle(project,state,{sceneId:ref.sceneId,kind:'objectAnimation',targetScope:edit.scope.sceneId?'instance':'logicalObject',target:{sourceNodeId:ref.sourceNodeId,logicalObjectId:o.logicalObjectId},timing:{startSeconds:null,anchorRequirementId:null,delaySeconds:0},parameters:{...edit.parameters,lifetime:edit.scope.sceneId?'scene':'project'}},0,state.settings.durationFrames);});
+    }
     if(edit.operation==='MODIFY_DURATION'||edit.operation==='MODIFY_EASING') {
         const commands:Plan['operations']=[];
-        for(const a of state.animations.filter(a=>own(a.sceneId,a.targetId))) {
+        for(const a of state.animations.filter(a=>own(a.sceneId,a.targetId)&&(!edit.animationIds||edit.animationIds.includes(a.animationId))&&(edit.scope.startSeconds===undefined||a.startFrame>=edit.scope.startSeconds*state.settings.fps)&&(edit.scope.endSeconds===undefined||a.startFrame<edit.scope.endSeconds*state.settings.fps)&&(edit.scope.phase!=='entrance'||entranceTrack(a)))) {
             const patch=edit.operation==='MODIFY_EASING'?{easing:edit.parameters.easing}:{durationFrames:Math.max(1,Math.round(edit.parameters.durationSeconds!==undefined?edit.parameters.durationSeconds*state.settings.fps:a.durationFrames*(edit.durationFactor??1)))};
             if(edit.operation==='MODIFY_EASING'&&!patch.easing)throw Error('EASING_REQUIRED');
             commands.push(...lowerMotionTool(project,state,{tool:'updateAnimation',animationId:a.animationId,patch}));
         }
-        for(const t of (state.objectTransitions??[]).filter(t=>targetIds.includes(t.logicalObjectId))) {
+        for(const t of (state.objectTransitions??[]).filter(t=>targetIds.includes(t.logicalObjectId)&&edit.scope.phase!=='entrance')) {
             const patch=edit.operation==='MODIFY_EASING'?{easing:edit.parameters.easing}:{durationFrames:Math.max(1,Math.round(edit.parameters.durationSeconds!==undefined?edit.parameters.durationSeconds*state.settings.fps:t.durationFrames*(edit.durationFactor??1)))};
             commands.push(...lowerMotionTool(project,state,{tool:'updateAnimation',animationId:t.transitionId,patch}));
         }
@@ -210,10 +219,10 @@ export function compileSemanticEdit(project: LoadedProject, state: MotionState, 
     const applicable = existing ? [existing] : rules.filter(r => r.effect === edit.effect && r.enabled && (!targetIds.length || targetIds.every(id => (!r.scope.logicalObjectIds.length || r.scope.logicalObjectIds.includes(id)) && !r.exceptions.includes(id)))).sort((a, b) => { const w = winner([a, b]); return w === a ? -1 : 1; });
     if (modify && !applicable.length) {
         // Existing direct effects are edited in place, preserving all other parameters/IDs.
-        const selected = state.expressions?.filter(e => e.type === edit.effect && (!scope.sceneId || e.sceneId === scope.sceneId) && (scope.startSeconds === undefined || e.startFrame / state.settings.fps >= scope.startSeconds) && (scope.endSeconds === undefined || e.startFrame / state.settings.fps < scope.endSeconds) && (!targetIds.length || ruleObjects(project).some(o => targetIds.includes(o.logicalObjectId) && o.sourceInstances.some(i => i.sceneId === e.sceneId && i.sourceNodeId === e.targetId)))) ?? [];
+        const selected = state.expressions?.filter(e => e.type === edit.effect && (!edit.expressionIds||edit.expressionIds.includes(e.expressionId)) && (!scope.sceneId || e.sceneId === scope.sceneId) && (scope.startSeconds === undefined || e.startFrame / state.settings.fps >= scope.startSeconds) && (scope.endSeconds === undefined || e.startFrame / state.settings.fps < scope.endSeconds) && (!targetIds.length || ruleObjects(project).some(o => targetIds.includes(o.logicalObjectId) && o.sourceInstances.some(i => i.sceneId === e.sceneId && i.sourceNodeId === e.targetId)))) ?? [];
         if (!selected.length)
             throw Error('NO_MATCHING_EXISTING_EFFECTS');
-        return selected.map(e => ({ type: 'setExpression' as const, expression: { ...e, parameters: { ...e.parameters, ...edit.parameters, ...(edit.amplitudeFactor !== undefined ? { amplitude: e.parameters.amplitude * edit.amplitudeFactor } : {}),...(edit.frequencyFactor!==undefined&&'frequency' in e.parameters?{frequency:e.parameters.frequency*edit.frequencyFactor}:{}) } } as typeof e }));
+        return selected.map(e => ({ type: 'setExpression' as const, expression: { ...e, parameters: { ...e.parameters, ...edit.parameters, ...(edit.amplitudeFactor !== undefined ? { amplitude: e.parameters.amplitude * edit.amplitudeFactor } : {}),...(edit.frequencyFactor!==undefined&&'frequency' in e.parameters?{frequency:e.parameters.frequency*edit.frequencyFactor}:{}),...(edit.decayFactor!==undefined&&'decay' in e.parameters?{decay:e.parameters.decay*edit.decayFactor}:{}) } } as typeof e }));
     }
     if (modify && edit.amplitudeFactor !== undefined && !existing && !targetIds.length) {
         const ids = ruleObjects(project).filter(o => applicable.some(r => !r.exceptions.includes(o.logicalObjectId) && (!r.scope.logicalObjectIds.length || r.scope.logicalObjectIds.includes(o.logicalObjectId)))).map(o => o.logicalObjectId);
@@ -229,6 +238,7 @@ export function compileSemanticEdit(project: LoadedProject, state: MotionState, 
         parameters.amplitude = (applicable[0]?.parameters.amplitude ?? (edit.effect === 'wiggle' ? 3 : .25)) * edit.amplitudeFactor;
     }
     if(edit.frequencyFactor!==undefined) parameters.frequency=(applicable[0]?.parameters.frequency??(edit.effect==='wiggle'?.8:2.5))*edit.frequencyFactor;
+    if(edit.decayFactor!==undefined){if(edit.effect!=='inertialOvershoot')throw Error('EFFECT_PARAMETER_UNSUPPORTED: decay');parameters.decay=(applicable[0]?.parameters.decay??3)*edit.decayFactor;}
     if (edit.operation === 'REMOVE_EFFECT')
         parameters.amplitude = 0;
     const rule = motionRuleSchema.parse({ ruleId: existing?.ruleId ?? stable([edit.effect, scope, edit.operation === 'REMOVE_EFFECT' ? 'exclude' : 'apply']), effect: edit.effect, scope: existing && edit.operation !== "MODIFY_RULE" ? existing.scope : scope, parameters, priority, sourceText, enabled: true, exceptions: excluded.length ? excluded : existing?.exceptions ?? [] });

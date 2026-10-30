@@ -1,4 +1,4 @@
-import { packContext, contextEncodingInstructions } from "../context-packing.js";
+import { packContext, unpackContext, contextEncodingInstructions } from "../context-packing.js";
 import { ProviderError, type ProviderAdapter, type ProviderRequest, } from "./types.js";
 export interface ModelProfile {
     provider: string;
@@ -6,6 +6,8 @@ export interface ModelProfile {
     contextWindowTokens: number;
     maxOutputTokens: number;
     transportOverheadTokens: number;
+    reasoningReserveTokens?:number;
+    source?:string;
 }
 /** Runtime signals are process objects; every serialized provider field is charged. */
 export function serializedRequestBytes(request: ProviderRequest) {
@@ -15,17 +17,18 @@ export function serializedRequestBytes(request: ProviderRequest) {
 /** Byte accounting only; no token counts are fabricated from characters. */
 export function requestContextCategories(request: Pick<ProviderRequest,"messages"|"responseSchema">) {
     const categories = {userIntent:0,projectSnapshot:0,objectContext:0,motionGraph:0,conversationHistory:0,skills:0,schema:Buffer.byteLength(JSON.stringify(request.responseSchema)??"null"),systemInstructions:0,other:0};
+    const fieldBytes:Record<string,number>={};
     const bytes=(v:unknown)=>Buffer.byteLength(JSON.stringify(v)??"null");
     for(const m of request.messages) {
         if(m.role==="system"){categories.systemInstructions+=Buffer.byteLength(m.content);continue;}
         let p;try{p=JSON.parse(m.content);}catch{categories.other+=Buffer.byteLength(m.content);continue;}
         if(p.userRequest)categories.userIntent+=bytes(p.userRequest);
-        for(const [key,value] of Object.entries(p.context??{})) {
+        for(const [key,value] of Object.entries(unpackContext(p.context) as object??{})) {
             const category=key==="userRequest"?"userIntent":/objectIndex|logicalObjects|selectedObject|mentions/.test(key)?"objectContext":/motion$|effectState|Inventory|motionRules/.test(key)?"motionGraph":/Conversation|History|SuccessfulActions/.test(key)?"conversationHistory":/Knowledge|skill|capabilit/i.test(key)?"skills":/project|sceneIndex|timing/i.test(key)?"projectSnapshot":"other";
-            categories[category]+=bytes(value);
+            categories[category]+=bytes(value);if(category==='other')fieldBytes[key]=(fieldBytes[key]??0)+bytes(value);
         }
     }
-    return categories;
+    return {...categories,otherFields:fieldBytes,accounting:"semantic values after lossless decoding; serialized totalBytes and message components are actual wire bytes"};
 }
 export function providerBudget(adapter: ProviderAdapter, request: ProviderRequest, maxBytes: number, profiles: ModelProfile[] = []) {
     const components = {
@@ -40,22 +43,29 @@ export function providerBudget(adapter: ProviderAdapter, request: ProviderReques
     const totalBytes = serializedRequestBytes(request);
     if (totalBytes > maxBytes)
         throw new ProviderError("CONTEXT_EXHAUSTED", `Full request ${totalBytes} bytes exceeds ${maxBytes}; no content truncated`);
-    const profile = profiles.find((p) => p.provider === adapter.id && p.model === (request.model ?? ""));
+    const configured = profiles.find((p) => p.provider === adapter.id && p.model === (request.model ?? ""));
+    const profile:ModelProfile = configured??{provider:adapter.id,model:request.model??"",contextWindowTokens:128000,maxOutputTokens:16000,transportOverheadTokens:8192,reasoningReserveTokens:8192,source:"UNKNOWN_MODEL_CONSERVATIVE_PROFILE: configure an exact model profile or adapter discovery"};
     const measured = adapter.estimateInputTokens?.(request);
     if (measured !== undefined &&
         (!Number.isSafeInteger(measured) || measured < 0))
         throw new ProviderError("INVALID_OUTPUT", "Invalid adapter token estimate");
-    const inputTokens = measured ?? totalBytes;
+    const estimate=(text:string)=>{const ascii=(text.match(/[\x00-\x7f]/g)??[]).length;return Math.ceil((ascii/2+Buffer.byteLength(text.replace(/[\x00-\x7f]/g,'')))*1.25);};
+    const inputTokens = measured ?? estimate(JSON.stringify({...request,signal:undefined}))+request.messages.length*8;
     const outputTokens = Math.min(request.maxOutputTokens, profile?.maxOutputTokens ?? request.maxOutputTokens);
     if (profile &&
-        inputTokens + profile.transportOverheadTokens + outputTokens >
+        inputTokens + profile.transportOverheadTokens + (profile.reasoningReserveTokens??0) + outputTokens >
             profile.contextWindowTokens)
         throw new ProviderError("CONTEXT_EXHAUSTED", `Model window ${profile.contextWindowTokens} cannot fit input ${inputTokens}, transport reserve ${profile.transportOverheadTokens} and output ${outputTokens}; no content truncated`);
     return {
         components,
         totalBytes,
         inputTokens,
-        estimateMethod: measured === undefined ? "conservative-byte-bound" : "adapter-tokenizer",
+        estimateMethod: measured === undefined ? "unicode-aware-estimate-25pct-margin-NOT_MEASURED" : "adapter-tokenizer",
+        tokenCountIsExact:false,
+        componentTokenEstimates:Object.fromEntries(Object.entries(components).map(([key,n])=>[key,Math.ceil(n*.625)])),
+        profileStatus:configured?"RESOLVED":"UNKNOWN_MODEL_CONSERVATIVE",
+        reasoningReserveTokens:profile.reasoningReserveTokens??0,
+        actualUsage:"AVAILABLE_ONLY_AFTER_PROVIDER_RESPONSE",
         profile: profile ?? null,
         outputTokens,
     };
@@ -64,10 +74,10 @@ export function providerBudget(adapter: ProviderAdapter, request: ProviderReques
 export function prepareProviderRequest(adapter: ProviderAdapter, request: ProviderRequest, maxBytes: number, profiles: ModelProfile[] = []) {
     const beforeBytes = serializedRequestBytes(request);
     const mandatoryBytes=request.messages.reduce((sum,m)=>{if(m.role!=="user")return sum+Buffer.byteLength(m.content);try{const p=JSON.parse(m.content);return sum+Buffer.byteLength(typeof p.userRequest==="string"?p.userRequest:m.content);}catch{return sum+Buffer.byteLength(m.content);}},0)+Buffer.byteLength(JSON.stringify(request.responseSchema))+Buffer.byteLength(JSON.stringify(request.tools??[]));
-    const report = { categories:requestContextCategories(request), mandatoryBytes,version: "context-admission/1", beforeBytes, afterBytes: beforeBytes, budgetBytes: maxBytes, compactedCategories: [] as string[], lossless: true, promptPreserved: true, instructionsPreserved: true, schemaPreserved: true, requirementCount: null as number | null, requirementCountStatus: "NOT_PLANNED", llmCalls: 0, status: "ADMITTED", reason: null as string | null };
+    const report = { modelBudget:null as ReturnType<typeof providerBudget>|null, categories:requestContextCategories(request), mandatoryBytes,version: "context-admission/1", beforeBytes, afterBytes: beforeBytes, budgetBytes: maxBytes, compactedCategories: [] as string[], lossless: true, promptPreserved: true, instructionsPreserved: true, schemaPreserved: true, requirementCount: null as number | null, requirementCountStatus: "NOT_PLANNED", llmCalls: 0, status: "ADMITTED", reason: null as string | null };
     let initial: unknown;
     try {
-        return { request, budget: providerBudget(adapter, request, maxBytes, profiles), report };
+        const budget=providerBudget(adapter, request, maxBytes, profiles);report.modelBudget=budget;return { request, budget, report };
     }
     catch (error) {
         if (!(error instanceof ProviderError) || error.code !== "CONTEXT_EXHAUSTED")
@@ -113,7 +123,7 @@ export function prepareProviderRequest(adapter: ProviderAdapter, request: Provid
     report.afterBytes = serializedRequestBytes(candidate);
     report.categories=requestContextCategories(candidate);
     try {
-        return { request: candidate, budget: providerBudget(adapter, candidate, maxBytes, profiles), report };
+        const budget=providerBudget(adapter,candidate,maxBytes,profiles);report.modelBudget=budget;return {request:candidate,budget,report};
     }
     catch (error) {
         if (!(error instanceof ProviderError) || error.code !== "CONTEXT_EXHAUSTED")

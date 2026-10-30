@@ -45,6 +45,7 @@ export interface ProviderAdapter {
   capabilities(): ProviderCapabilities;
   health?(): Promise<ProviderHealth>;
   estimateInputTokens?(request: ProviderRequest): number;
+  contextProfile?(model?:string):Promise<{provider:string;model:string;contextWindowTokens:number;maxOutputTokens:number;transportOverheadTokens:number;reasoningReserveTokens?:number;source?:string}|undefined>;
   generate(request: ProviderRequest): Promise<ProviderResponse>;
 }
 export class ProviderError extends Error {

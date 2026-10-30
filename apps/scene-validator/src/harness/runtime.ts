@@ -229,9 +229,14 @@ export class HarnessRun {
       this.config.maxLLMCalls + (this.config.recovery?.maxAttempts ?? 3) + 2
     )
       throw new BudgetError("LLM_CALL_BUDGET");
+    let profiles=this.config.modelProfiles;
+    if(!profiles.some(p=>p.provider===adapter.id&&p.model===(request.model??''))&&adapter.contextProfile){
+      const discovered=await adapter.contextProfile(request.model);
+      if(discovered){request={...request,model:discovered.model};profiles=[...profiles,discovered];}
+    }
     let admission: ReturnType<typeof prepareProviderRequest>;
     try {
-      admission=prepareProviderRequest(adapter,request,this.config.maxContextBytes,this.config.modelProfiles);
+      admission=prepareProviderRequest(adapter,request,this.config.maxContextBytes,profiles);
     }catch(error){
       const report=(error as {contextAdmission?:unknown}).contextAdmission;
       if(report){await this.diagnostic("context-admission",{purpose,...report as object,llmCalls:this.calls.length});await this.supervisor.observe(error,"context-admission",{evidence:[report]});}

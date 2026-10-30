@@ -91,6 +91,7 @@ export class SemanticProvider implements IntentProvider {
     return this.providerFor(count === 1 ? phase : `${phase}-${count}`);
   }
   constructor(private providerFor: (phase: string) => Promise<CodexProvider>,private recovery?:{
+    readContext?:(queries:import('../incremental-edit.js').incrementalQuery[])=>Promise<unknown>;
     recover:(error:unknown,stage:string,replay:()=>Promise<IntentPlan>)=>Promise<IntentPlan>;
     diagnostic?:(value:unknown)=>Promise<void>;
   }) {}
@@ -149,7 +150,13 @@ export class SemanticProvider implements IntentProvider {
 
     if ((context as {incrementalEditHint?:boolean})?.incrementalEditHint) {
       const local = (context as {deterministicEdit?:unknown}).deterministicEdit;
-      const response = local ? {edits:[semanticEditSchema.parse(local)],assumptions:["Однозначная typed-команда применена без LLM"]} : await (await this.provider("interpret")).structured(semanticContext(context),request,incrementalEditInstructions,z.union([incrementalEditSchema,semanticGraphSchema,intentPlanSchema]),"semantic-planning",incrementalEditSchema);
+      let response = local ? {edits:[semanticEditSchema.parse(local)],assumptions:["Однозначная typed-команда применена без LLM"]} : await (await this.provider("interpret")).structured(semanticContext(context),request,incrementalEditInstructions,z.union([incrementalEditSchema,semanticGraphSchema,intentPlanSchema]),"semantic-planning",incrementalEditSchema);
+      if('queries'in response&&response.queries?.length){
+        if(response.edits.length||!this.recovery?.readContext)throw Error('INVALID_CONTEXT_DISCLOSURE_REQUEST');
+        const disclosures=await this.recovery.readContext(response.queries);
+        response=await (await this.provider('patch-disclosure')).structured({...semanticContext(context) as object,disclosures},request,incrementalEditInstructions+' Context disclosure is complete. Return edits only; no further queries.',incrementalEditSchema,'semantic-planning',incrementalEditSchema);
+        if('queries'in response&&response.queries?.length)throw Error('CONTEXT_DISCLOSURE_LIMIT');
+      }
       if ('edits' in response) return incrementalPlan(request,response.edits,context,response.assumptions);
       // Historical saved responses remain readable; new providers receive only the compact delta schema.
       return normalizeSemanticGraph(response,incrementalGraphContext(context),request);

@@ -192,9 +192,11 @@ test("cross-scene identity and additive transition inertia persist through nine 
     }
     const { scopedExpressionValue } = await import("../src/motion/transition-effects.js");
     for (const e of doc.state.expressions!) assert.ok(Math.abs(scopedExpressionValue(doc.state, e, 24 - 1e-5, presentation) - scopedExpressionValue(doc.state, e, 24 + 1e-5, presentation)) < .001);
+    const originalWiggles=structuredClone(wiggles);
     text = "сделай wiggle медленнее и слабее";
     doc = await turn(text, action(text, "wiggle", "editAnimation", [{ key: "frequencyFactor", value: .5 }, { key: "amplitudeFactor", value: .5 }], { effectOperation: { storage: "expression", action: "update" }, relation: "unchanged" }));
     assert.deepEqual(doc.state.expressions!.filter(e => e.type === "inertialOvershoot"), inertia);
+    for(const e of doc.state.expressions!.filter(e=>e.type==="wiggle")){const old=originalWiggles.find(x=>x.expressionId===e.expressionId)!;assert.equal(e.parameters.amplitude,old.parameters.amplitude*.5);if(e.type==="wiggle"&&old.type==="wiggle")assert.equal(e.parameters.frequency,old.parameters.frequency*.5);}
     text = "убери wiggle, но сохрани всю остальную анимацию";
     doc = await turn(text, action(text, "wiggle", "editAnimation", [], { effectOperation: { storage: "expression", action: "remove" }, relation: "unchanged" }));
     assert.deepEqual(doc.state.expressions, inertia); assert.deepEqual(doc.state.objectTransitions, [base]);

@@ -8,6 +8,7 @@ import { access, readFile, writeFile, chmod } from "node:fs/promises";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {StringDecoder} from "node:string_decoder";
+import {homedir} from 'node:os';
 import {
   ProviderError,
   transportErrorCode,
@@ -58,6 +59,20 @@ export class CodexAdapter implements ProviderAdapter {
       usage: true,
       nativeOutputTokenLimit: false,
     };
+  }
+  async contextProfile(model?:string){
+    // Metadata only: never read auth.json or transmit local configuration.
+    try{
+      const home=process.env.CODEX_HOME||path.join(homedir(),'.codex');
+      const requested=model||((await readFile(path.join(home,'config.toml'),'utf8')).split(/^\[/m)[0].match(/^model\s*=\s*"([a-zA-Z0-9_.:/-]+)"/m)?.[1]);
+      if(!requested)return undefined;
+      const cache=JSON.parse(await readFile(path.join(home,'models_cache.json'),'utf8'));
+      const age=Date.now()-Date.parse(cache.fetched_at);if(!Number.isFinite(age)||age>7*86400000||age< -86400000)return undefined;
+      const entry=cache.models?.find((e:{slug:string})=>e.slug===requested);
+      const window=entry?.context_window;
+      if(!Number.isSafeInteger(window)||window<4000||window>4000000)return undefined;
+      return {provider:this.id,model:requested,contextWindowTokens:window,maxOutputTokens:16000,transportOverheadTokens:32768,reasoningReserveTokens:8192,source:'local Codex model metadata, window as configured (not max_context_window); output reserve is AKELLA policy, native cap unsupported'};
+    }catch{return undefined;}
   }
   async health() {
     try {

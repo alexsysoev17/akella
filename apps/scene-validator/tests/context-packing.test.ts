@@ -102,7 +102,7 @@ test('production semantic provider/runtime keeps complete multi-scene compound c
     // Repeated relevant capability contracts simulate the archived >68KB request.
     const context = { ...full, motionKnowledge: { ...full.motionKnowledge, techniques: largeContext().motionKnowledge.techniques } };
     const stop = registerProvider(adapter.id, () => ({ ...adapter, generate: async (req) => { calls++; assert.ok(serializedRequestBytes(req) <= 60000); const wire = JSON.parse(req.messages.find(m => m.role === 'user')!.content); assert.equal(wire.userRequest, request); const original = unpackContext(wire.context) as typeof context; assert.deepEqual(original.objectIndex, context.objectIndex); assert.deepEqual(original.logicalObjects, JSON.parse(JSON.stringify(semanticContext(context))).logicalObjects); return { output: graph, usage: null, estimatedCost: null, latencyMs: 0, diagnostics: ['mock semantic output, real production planning/admission/compiler'], toolCalls: [] }; } }));
-    const run = await HarnessRun.start(f.project, randomUUID(), request, adapter.id, '');
+    const run = await HarnessRun.start(f.project, randomUUID(), request, adapter.id, '',undefined,{maxContextBytes:60000});
     try {
         const provider = new SemanticProvider(async () => { const dir = path.join(run.directory, 'provider'); await mkdir(dir, { recursive: true }); return new CodexProvider({ provider: adapter.id, model: '' }, dir, run.providerRuntime()); });
         const plan = await semanticPlan(f.project, request, context, provider, async () => { }, { auditAlways: false, maxAttempts: 2, motionState: f.state });

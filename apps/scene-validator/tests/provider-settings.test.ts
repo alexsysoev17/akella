@@ -185,7 +185,7 @@ test("API rejects empty/invalid/unknown provider immediately with friendly error
     await x.cleanup();
   }
 });
-test("actual API create/follow-up reach Semantic Planner with canonical settings using mock SDK; mock execution cannot overwrite persisted live selection", async () => {
+test("actual API create uses semantic provider, clear follow-up edits locally; canonical settings cannot overwrite persisted live selection", async () => {
   const x = await serverFixture();
   let calls = 0;
   const stop = registerProvider("codex-sdk", () => ({
@@ -261,7 +261,7 @@ test("actual API create/follow-up reach Semantic Planner with canonical settings
         "codex-cli",
       );
     }
-    assert.equal(calls, 2);
+    assert.equal(calls, 1); // Existing-effect follow-up is now LOCAL_DETERMINISTIC_EDIT.
   } finally {
     stop();
     assert.equal(createProvider("codex-sdk", "/tmp").mode, "live");

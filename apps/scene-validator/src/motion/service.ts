@@ -1,6 +1,7 @@
+import {buildMotionPatch,validatePatchRevision} from './motion-patch.js';
 import { inspectSemanticCoverage, SemanticCoverageError } from "./intent/coverage.js";
 import { codeVersions } from "../harness/versions.js";
-import { incrementalEditProfile, incrementalContext, deterministicIncrementalEdit, incrementalPlan } from "./incremental-edit.js";
+import { semanticEditRoute, incrementalContext, incrementalPlan,incrementalDisclosure } from "./incremental-edit.js";
 import {ruleQA} from "./rule-qa.js";
 import {preparePlanSkills} from "../motion-library/skills/runtime.js";
 import {compositionQA} from "../native/composition-qa.js";
@@ -335,9 +336,10 @@ export async function proposeMotion(
         request.request,
       );
     const localResolveStart=performance.now();
-    const incrementalProfile = harness ? incrementalEditProfile(project, request.request,doc) : null;
-    const localEdit = incrementalProfile ? deterministicIncrementalEdit(project,request.request,doc) : null;
-    const localMetrics={route:localEdit?'LOCAL_FAST_PATH':'AI_FALLBACK',objectResolutionMs:performance.now()-localResolveStart,patchConstructionMs:0,applyMs:0,qaMs:0,ruleQAReused:false};
+    const editRoute=harness?semanticEditRoute(project,request.request,doc,request):null;
+    const incrementalProfile=editRoute?.profile??null;
+    const localEdit=editRoute?.edit??null;
+    const localMetrics={route:localEdit?'LOCAL_FAST_PATH':'AI_FALLBACK',executionMode:editRoute?.mode??'FULL_SEMANTIC_PLANNING',objectResolutionMs:performance.now()-localResolveStart,patchConstructionMs:0,applyMs:0,qaMs:0,ruleQAReused:false};
     const contextualEditHint =
       !sceneTimingHint &&
       (timingEditHint ||
@@ -498,7 +500,7 @@ export async function proposeMotion(
                   return recoveryProviderRuntime(harness,semanticRecoveryStart??harness.calls.length).invoke(adapter,{...input,purpose:"semantic-recovery"});
                 }}:harness?.providerRuntime(),
             ),
-          {recover:recoverSemantic,diagnostic:async value=>{if(value){await atomicJson(path.join(directory,"intent-repair-scope.json"),value);await harness?.diagnostic("semantic-repair-scope",value);}}},
+          {readContext:async queries=>{if(!incrementalProfile)throw Error('INCREMENTAL_CONTEXT_REQUIRED');const data=incrementalDisclosure(project,doc,incrementalProfile,queries);await harness?.diagnostic('context-disclosure',{queries,bytes:Buffer.byteLength(JSON.stringify(data)),projectRevision:doc.revision});return data;},recover:recoverSemantic,diagnostic:async value=>{if(value){await atomicJson(path.join(directory,"intent-repair-scope.json"),value);await harness?.diagnostic("semantic-repair-scope",value);}}},
         );
         const localContract = localEdit ? (()=>{
           const start=performance.now();
@@ -756,6 +758,11 @@ export async function proposeMotion(
           await harness?.record("composition-qa",{status:composition.status,frames:composition.frames,failedChecks:composition.checks.filter(c=>c.status==="FAILED")});
           if(composition.status==="FAILED")throw Object.assign(Error("COMPOSITION_QA_FAILED: candidate not committed"),{code:"COMPOSITION_QA_FAILED",report:composition});
         }
+        if(incrementalProfile){
+          const patch=buildMotionPatch(doc.state,generated.next,{transactionId:id,projectRevision:doc.revision,sourceInstruction:request.request,operations:generated.plan.operations,operationBatches:generated.operationBatches,targetIds:incrementalProfile.objects.map(o=>o.logicalObjectId),action:contract.requirements[0]?.semanticEdit?.operation,dependencyPolicy:contract.requirements[0]?.semanticEdit?.dependencyPolicy});
+          validatePatchRevision(patch,doc.revision,doc.state);
+          await atomicJson(path.join(directory,'motion-patch.json'),harness&&harness.config.privacy!=='full'?{schemaVersion:patch.schemaVersion,transactionId:id,projectRevision:patch.projectRevision,actions:patch.actions,beforeDigest:patch.beforeDigest,afterDigest:patch.afterDigest,status:'PREPARED_CONTENT_REDACTED'}:patch);
+        }
         await atomicJson(path.join(directory, "candidate-commit.json"), {
           runId: id,
           expectedRevision: doc.revision,
@@ -806,12 +813,12 @@ export async function proposeMotion(
               ? op.starts.map((s) => s.startFrame)
               : [],
         );
-        let incrementalPerformance: {route:string;elapsedMs:number;providerCalls:number;expressions:{expressionId:string;oldValues:unknown;newValues:unknown}[]}|undefined;
+        let incrementalPerformance: {executionMode:string;route:string;elapsedMs:number;providerCalls:number;expressions:{expressionId:string;oldValues:unknown;newValues:unknown}[]}|undefined;
         if(incrementalProfile){
           const entities=(state:typeof doc.state)=>[...(state.expressions??[]).map(e=>({id:e.expressionId,kind:'expression',value:e})),...state.animations.map(a=>({id:a.animationId,kind:'animation',value:a})),...(state.objectTransitions??[]).map(t=>({id:t.transitionId,kind:'transition',value:t})),...(state.motionRules??[]).map(r=>({id:r.ruleId,kind:'rule',value:r}))];
           const before=entities(doc.state),after=entities(committed.state);
           const changes=[...new Set([...before,...after].map(e=>e.kind+':'+e.id))].flatMap(key=>{const a=before.find(e=>e.kind+':'+e.id===key),b=after.find(e=>e.kind+':'+e.id===key);return JSON.stringify(a?.value)===JSON.stringify(b?.value)?[]:[{id:key,expectedPrevious:a?.value??null,newValue:b?.value??null}];});
-          incrementalPerformance={route:localMetrics.route,elapsedMs:performance.now()-localResolveStart,providerCalls:harness?.calls.length??0,expressions:changes.filter(c=>c.id.startsWith('expression:')).map(c=>({expressionId:c.id.slice('expression:'.length),oldValues:c.expectedPrevious&&'parameters' in c.expectedPrevious?c.expectedPrevious.parameters:null,newValues:c.newValue&&'parameters' in c.newValue?c.newValue.parameters:null}))};
+          incrementalPerformance={executionMode:localMetrics.executionMode,route:localMetrics.route,elapsedMs:performance.now()-localResolveStart,providerCalls:harness?.calls.length??0,expressions:changes.filter(c=>c.id.startsWith('expression:')).map(c=>({expressionId:c.id.slice('expression:'.length),oldValues:c.expectedPrevious&&'parameters' in c.expectedPrevious?c.expectedPrevious.parameters:null,newValues:c.newValue&&'parameters' in c.newValue?c.newValue.parameters:null}))};
           const patch={editId:id,projectRevision:doc.revision,newRevision:committed.revision,logicalObjectIds:incrementalProfile.objects.map(o=>o.logicalObjectId),...localMetrics,llmCalls:harness?.calls.length??0,affectedObjectCount:incrementalProfile.objects.length,affectedOperationCount:generated.plan.operations.length,targetOperationIds:changes.map(c=>c.id),affectedFrameRanges:changes.flatMap(c=>{const values=[c.expectedPrevious,c.newValue].filter(v=>v&&typeof v==='object'&&'startFrame' in v) as {startFrame:number;durationFrames:number}[];return values.map(v=>({startFrame:v.startFrame,endFrame:v.startFrame+v.durationFrames}));}),dependencies:committed.state.timingDependencies?.filter(d=>changes.some(c=>c.id.endsWith(':'+d.animationId)||c.id.endsWith(':'+d.anchorAnimationId))),changes,validation:generated.reconciliation,cacheInvalidation:{policy:'new canonical state digest; no global cache clear; decoded source resources retain existing ownership',frameCache:'state-scoped; not per-object reuse'}};
           await atomicJson(path.join(directory,'incremental-edit.json'),{...patch,performance:incrementalPerformance});await harness?.diagnostic('incremental-edit',{...patch,performance:incrementalPerformance});
         }

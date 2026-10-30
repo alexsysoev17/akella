@@ -3,7 +3,7 @@ export function semanticContext(context: unknown): unknown {
   if (!context || typeof context !== "object") return context;
   const c = context as Record<string, unknown>;
   if (c.incrementalEditHint === true) {
-    return Object.fromEntries(["incrementalEditHint","project","projectRevision","userRequest","objectIndex","effectState","skill","constraints"].filter(k=>c[k]!==undefined).map(k=>[k,c[k]]));
+    return Object.fromEntries(["sceneIndex","activeSceneId","selectedObjectIds","disclosures","incrementalEditHint","project","projectRevision","userRequest","objectIndex","effectState","skill","constraints"].filter(k=>c[k]!==undefined).map(k=>[k,c[k]]));
   }
   if (c.contextualEditHint === true) {
     return {

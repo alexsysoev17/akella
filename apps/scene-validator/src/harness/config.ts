@@ -15,6 +15,8 @@ export const harnessConfigSchema = z
             contextWindowTokens: z.number().int().positive(),
             maxOutputTokens: z.number().int().positive(),
             transportOverheadTokens: z.number().int().min(0),
+            reasoningReserveTokens:z.number().int().min(0).optional(),
+            source:z.string().max(300).optional(),
           })
           .strict(),
       )
@@ -22,7 +24,8 @@ export const harnessConfigSchema = z
       .default([]),
     maxLLMCalls: z.number().int().min(1).max(10).default(3),
     maxRepairAttempts: z.number().int().min(0).max(2).default(2),
-    maxContextBytes: z.number().int().min(4000).max(300000).default(60000),
+    // Memory/transport ceiling only. Model token admission is a separate gate.
+    maxContextBytes: z.number().int().min(4000).max(4000000).default(2000000),
     maxOutputTokens: z.number().int().min(100).max(100000).default(16000),
     maxRenderedQAFrames: z.number().int().min(5).max(500).default(300),
     maxDurationMs: z.number().int().min(1000).max(900000).default(240000),
