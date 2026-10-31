@@ -146,6 +146,7 @@ export function defaultMotion(project: LoadedProject): MotionState {
   const durationFrames = Math.max(120, scenes.length * 60);
   return {
     schemaVersion: "1.0.0",
+    anchorDefault:"center",
     settings: {
       fps: 30,
       width: Math.ceil(scenes[0].width),

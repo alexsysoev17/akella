@@ -1,3 +1,4 @@
+import {anchorBindingSchema} from './anchor-contract.js';
 import {motionRuleSchema,ruleMaterializationSchema} from "./rule-contract.js";
 import {skillApplicationSchema} from "../motion-library/skills/contracts.js";
 import {timingOriginSchema, globalFrameSchema, intervalDurationSchema, nonnegativeFrameSchema, coordinateSchema, MAX_FLOAT32} from "./time.js";
@@ -246,6 +247,8 @@ export const timingDependencySchema = z
 export const motionSchema = z
   .object({
     schemaVersion: z.literal("1.0.0"),
+    anchorDefault:z.enum(["legacy","center"]).optional(),
+    anchors:z.array(anchorBindingSchema).max(10000).optional(),
     motionRules:z.array(motionRuleSchema).max(1000).optional(),
     ruleMaterializations:z.array(ruleMaterializationSchema).max(10000).optional(),
     skillApplications: z.array(skillApplicationSchema).max(1000).optional(),
@@ -267,6 +270,8 @@ export const motionSchema = z
   .strict();
 const animRef = { animationId: id };
 export const operationSchema = z.discriminatedUnion("type", [
+ z.object({type:z.literal("setAnchor"),anchor:anchorBindingSchema}).strict(),
+ z.object({type:z.literal("resetAnchor"),logicalObjectId:id,sceneId:id.optional(),startFrame:frame.optional()}).strict(),
   z.object({type:z.literal("setMotionRule"),rule:motionRuleSchema}).strict(),
   z.object({type:z.literal("removeMotionRule"),ruleId:id}).strict(),
   z.object({type:z.literal("setSkillApplication"),application:skillApplicationSchema}).strict(),

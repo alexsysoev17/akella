@@ -40,8 +40,8 @@ export function applyFrame(
         .motionScene!,
       targetId = node.getAttribute("data-motion-target")!;
     const v = result.nodes[JSON.stringify([sceneId, targetId])] ?? {};
-    const x = Number(node.dataset.originX ?? 0),
-      y = Number(node.dataset.originY ?? 0);
+    const x = Number((state.anchorDefault==="center"?node.dataset.centerX:node.dataset.originX) ?? 0),
+      y = Number((state.anchorDefault==="center"?node.dataset.centerY:node.dataset.originY) ?? 0);
     node.setAttribute(
       "transform",
       `translate(${v.x ?? 0} ${v.y ?? 0}) translate(${x} ${y}) rotate(${v.rotation ?? 0}) scale(${v.scaleX ?? v.scale ?? 1} ${v.scaleY ?? v.scale ?? 1}) translate(${-x} ${-y})`,

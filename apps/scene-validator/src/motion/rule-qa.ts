@@ -22,6 +22,7 @@ export async function ruleQA(project: LoadedProject, state: MotionState, previou
         status: 'PASSED' | 'FAILED';
         reason?: string;
     }[] = [], frames = new Set<number>();
+    if(JSON.stringify(state.anchors)!==JSON.stringify(previous?.anchors)){for(const a of state.anchors??[]){frames.add(Math.max(0,Math.min(state.settings.durationFrames-1,a.referenceFrame??a.startFrame??0)));}frames.add(0);frames.add(state.settings.durationFrames-1);}
     for (const e of changed) {
         signal?.throwIfAborted();
         const value = (f: number) => e.transitionId ? scopedExpressionValue(state, e, f, presentation) : expressionValue(e, f, state.settings.fps, state.animations, evaluateAnimation);

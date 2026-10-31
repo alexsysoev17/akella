@@ -1,3 +1,4 @@
+import {parseAnchorEdit} from './anchor-language.js';
 import { z } from 'zod';
 import type { LoadedProject } from '../types.js';
 import type { MotionDocument } from './store.js';
@@ -53,12 +54,13 @@ function compoundParameterFactors(text:string): {amplitudeFactor?:number;frequen
   }
   return Object.keys(result).length?result:null;
 }
-export function incrementalEditProfile(project: LoadedProject, request: string, doc?:MotionDocument, editor?:{selectedObjectId?:string;selectedObjectIds?:string[];selectedSceneId?:string;mentions?:{sourceNodeId:string;sceneId:string}[]}) {
+export function incrementalEditProfile(project: LoadedProject, request: string, doc?:MotionDocument, editor?:{currentFrame?:number;activeSceneId?:string;selectedObjectId?:string;selectedObjectIds?:string[];selectedSceneId?:string;mentions?:{sourceNodeId:string;sceneId:string}[]}) {
   if(/(?:(?:сцена|scene)\s*\d+|\d+\s*сцена)\s+(?:начинается|начинаются|начнет|начнется|starts? at)/iu.test(request))return null;
+  if(/anchor|pivot|точк[ауи] (?:вращения|масштабирования)|относительно (?:центр|верхн|нижн|лев|прав)|вокруг.*цент|из центра/iu.test(request)&&/инерц|колеб|покач|wiggle|spring|отскок|фейд|fade|прозрач|easing|изинг/iu.test(request))return null;
   const retiming=/позже|позд|раньше|медленнее|быстрее|длитель|начинается|после завершения/u.test(request);
   if (request.length > 1600 || (!retiming&&/сцен|scene|появ|уход|перемест|trim|фейд|fade|после|затем|кадр|frame/iu.test(request.replace(/после движени[йя]/giu,'')))) return null;
   if (/wiggle|покач/iu.test(request) && /инерц|колеб/iu.test(request)) return null;
-  let effect:SemanticEdit['effect']|null = /wiggle|покач|постоянн.*колеб|колеб.*постоянн/iu.test(request) ? 'wiggle' : /инерц|колеб/iu.test(request) ? 'inertialOvershoot' : /движени|длитель|easing|изинг|позже|раньше|появлен|появля|начинается/iu.test(request)?'motion':null;
+  let effect:SemanticEdit['effect']|null = /anchor|pivot|точк[ауи] (?:вращения|масштабирования)|относительно (?:центр|верхн|нижн|лев|прав)|вокруг.*цент|из центра/iu.test(request)?'anchor': /wiggle|покач|постоянн.*колеб|колеб.*постоянн/iu.test(request) ? 'wiggle' : /инерц|колеб/iu.test(request) ? 'inertialOvershoot' : /движени|длитель|easing|изинг|позже|раньше|появлен|появля|начинается/iu.test(request)?'motion':null;
   // Route unfamiliar language by authoritative existing targets, not a verb whitelist.
   if(/создай|создать|новую композици|новый ролик|create (?:a |new )/iu.test(request))return null;
   const registry=ruleObjects(project);
@@ -95,7 +97,7 @@ export function incrementalEditProfile(project: LoadedProject, request: string, 
   }
   if(!effect&&doc&&objects.some(o=>doc.state.animations.some(a=>o.sourceInstances.some(i=>i.sceneId===a.sceneId&&i.sourceNodeId===a.targetId))))effect='motion';
   if (!effect || !objects.length || objects.some(o => o.ambiguousScenes.length)) return null;
-  return { effect, objects };
+  return { effect, objects,currentFrame:editor?.currentFrame??0 };
 }
 /** One routing decision; unknown editing language stays compact, not full re-planning. */
 export function semanticEditRoute(project:LoadedProject,request:string,doc:MotionDocument,editor?:Parameters<typeof incrementalEditProfile>[3]){
@@ -108,7 +110,7 @@ export function semanticEditRoute(project:LoadedProject,request:string,doc:Motio
 }
 export const incrementalQuerySchema=z.object({kind:z.enum(['inspectObject','inspectAnimations','inspectDependencies','inspectExpressions','inspectMotionRules','inspectSceneStates']),logicalObjectId:z.string().min(1)}).strict();
 export const incrementalEditSchema = z.object({ edits: z.array(semanticEditSchema).max(20), assumptions: z.array(z.string()).max(20),queries:z.array(incrementalQuerySchema).max(6).optional() }).strict().refine(v=>v.edits.length>0||Boolean(v.queries?.length),'Expected edits or bounded context queries');
-export const incrementalEditInstructions = `Interpret this local motion-effect edit, retaining every requested modifier. Return typed semantic edits only. Use actual supplied logical object IDs, never invent identities. ADD_EFFECT adds an effect; MODIFY_EFFECT updates existing parameters; REMOVE_EFFECT removes only that effect. Rule modifications use actual supplied rule IDs. Scope must remain within admitted objects; never expand to project. Wiggle is continuous smooth seeded motion. Plain wiggle uses effectStorage=expression with existing engine X/Y defaults; explicit pokachivanie uses persistent rule rotation, amplitude3 degrees/frequency.8Hz. Keep existing channels when editing; never substitute rotation for X/Y. Existing parameters and base animations remain unchanged when editing. Inertia requires real base movement. The admitted skill effect is authoritative: never substitute continuous wiggle for admitted inertia. Bare oscillations require current effect/rule or committed-action evidence, otherwise report ambiguity. Unknown identity or unsupported instructions must not be guessed. For existing motion use SHIFT_START with signed deltaFrames (canonical frames), SET_START/frameValue, SHIFT_END, SET_DURATION/frameValue or SCALE_DURATION/durationFactor, MODIFY_EASING/parameters.easing. phase=entrance selects only appearance, never exits. Explicit animationIds disambiguate repeated entrances. Preserve line stagger and attached expressions; dependencyPolicy=preserve-relative unless absolute dependents must stay fixed. EDIT current motion; no full-project regeneration. If evidence is missing, return edits:[] and bounded queries [{kind:inspectObject|inspectAnimations|inspectDependencies|inspectExpressions|inspectMotionRules|inspectSceneStates,logicalObjectId:actual admitted ID}]. One read-only disclosure round is available. Never fabricate an ID.`;
+export const incrementalEditInstructions = `Interpret this local motion-effect edit, retaining every requested modifier. Return typed semantic edits only. Anchor uses effect=anchor, operation=SET_ANCHOR|CENTER_ANCHOR|RESET_ANCHOR|MOVE_ANCHOR|SET_SCALE_ORIGIN|SET_ROTATION_ORIGIN, anchor={action,frame,point:{units:normalized|pixels,x,y},scope:object|scene|fromFrame,preserveVisualPosition:true,space:local}. Scene context stays in edit.scope.sceneId. Never change motion tracks to simulate a pivot. Use actual supplied logical object IDs, never invent identities. ADD_EFFECT adds an effect; MODIFY_EFFECT updates existing parameters; REMOVE_EFFECT removes only that effect. Rule modifications use actual supplied rule IDs. Scope must remain within admitted objects; never expand to project. Wiggle is continuous smooth seeded motion. Plain wiggle uses effectStorage=expression with existing engine X/Y defaults; explicit pokachivanie uses persistent rule rotation, amplitude3 degrees/frequency.8Hz. Keep existing channels when editing; never substitute rotation for X/Y. Existing parameters and base animations remain unchanged when editing. Inertia requires real base movement. The admitted skill effect is authoritative: never substitute continuous wiggle for admitted inertia. Bare oscillations require current effect/rule or committed-action evidence, otherwise report ambiguity. Unknown identity or unsupported instructions must not be guessed. For existing motion use SHIFT_START with signed deltaFrames (canonical frames), SET_START/frameValue, SHIFT_END, SET_DURATION/frameValue or SCALE_DURATION/durationFactor, MODIFY_EASING/parameters.easing. phase=entrance selects only appearance, never exits. Explicit animationIds disambiguate repeated entrances. Preserve line stagger and attached expressions; dependencyPolicy=preserve-relative unless absolute dependents must stay fixed. EDIT current motion; no full-project regeneration. If evidence is missing, return edits:[] and bounded queries [{kind:inspectObject|inspectAnimations|inspectDependencies|inspectExpressions|inspectMotionRules|inspectSceneStates,logicalObjectId:actual admitted ID}]. One read-only disclosure round is available. Never fabricate an ID.`;
 export function incrementalContext(project: LoadedProject, doc: MotionDocument, request: string, profile: NonNullable<ReturnType<typeof incrementalEditProfile>>) {
   const ids = new Set(profile.objects.map(o => o.logicalObjectId));
   const owns = (scene: string, target: string) => profile.objects.some(o => o.sourceInstances.some(i => i.sceneId === scene && i.sourceNodeId === target));
@@ -118,9 +120,11 @@ export function incrementalContext(project: LoadedProject, doc: MotionDocument, 
     projectRevision: doc.revision,
     sceneIndex:project.inspection.document.scenes.map(s=>({sceneId:s.sceneId,index:s.index,name:s.name})),
     userRequest: request,
+    currentFrame:profile.currentFrame,
     objectIndex: profile.objects.map(o => ({logicalObjectId:o.logicalObjectId, name:o.name, sourceInstances:o.sourceInstances})),
     // No geometry, full graph, unrelated history or implementation snippets.
     effectState: {
+      ...(profile.effect==='anchor'?{anchorDefault:doc.state.anchorDefault??'legacy',anchors:doc.state.anchors?.filter(a=>ids.has(a.logicalObjectId))}:{}),
       dependencies:(doc.state.timingDependencies??[]).filter(d=>doc.state.animations.some(a=>owns(a.sceneId,a.targetId)&&(a.animationId===d.animationId||a.animationId===d.anchorAnimationId))),
       expressions: (doc.state.expressions ?? []).filter(e => e.type === profile.effect && (e.ownership?.logicalObjectId ? ids.has(e.ownership.logicalObjectId) : owns(e.sceneId,e.targetId))),
       rules: (doc.state.motionRules ?? []).filter(r => r.effect === profile.effect && (!r.scope.logicalObjectIds.length || r.scope.logicalObjectIds.some(id => ids.has(id)))),
@@ -129,7 +133,7 @@ export function incrementalContext(project: LoadedProject, doc: MotionDocument, 
         transitions: (doc.state.objectTransitions ?? []).filter(t => ids.has(t.logicalObjectId)),
       } : {}),
     },
-    skill: ruleSkills.filter(s => s.id === (profile.effect === 'wiggle' ? 'motion.continuous-wiggle' : 'motion.inertia-after-movement')).map(({id,version,description,defaults,constraints}) => ({id,version,effect:profile.effect,description,defaults,constraints})),
+    skill: ruleSkills.filter(s => s.id === (profile.effect==='anchor'?'motion.anchor':profile.effect === 'wiggle' ? 'motion.continuous-wiggle' : 'motion.inertia-after-movement')).map(({id,version,description,defaults,constraints}) => ({id,version,effect:profile.effect,description,defaults,constraints})),
     constraints: {allowedLogicalObjectIds:[...ids], preserveUnrequestedProperties:true, preserveOtherEffects:true},
   };
 }
@@ -137,6 +141,7 @@ export function incrementalContext(project: LoadedProject, doc: MotionDocument, 
 export function deterministicIncrementalEdit(project: LoadedProject, request: string, doc?:MotionDocument,editor?:Parameters<typeof incrementalEditProfile>[3]): SemanticEdit | null {
   const profile = incrementalEditProfile(project, request,doc,editor);
   if (!profile) return null;
+  if(profile.effect==='anchor')return parseAnchorEdit(request,profile.objects,editor);
   const referencedRule=doc?.state.motionRules?.find(r=>request.includes(r.ruleId));
   const chars = request.split('');
   if(referencedRule){const at=request.indexOf(referencedRule.ruleId);chars.fill(' ',at,at+referencedRule.ruleId.length);}
@@ -217,7 +222,7 @@ export function incrementalPlan(request: string, edits: SemanticEdit[], context:
       if (!rule || (!['ADD_EXCEPTION','REMOVE_EXCEPTION'].includes(edit.operation)&&!request.includes(rule.ruleId)&&(rule.scope.selector==='project'||rule.scope.logicalObjectIds.some(id=>!admitted.has(id))))) throw Error('INCREMENTAL_RULE_NOT_ADMITTED: editing a broader rule requires explicit wider admission');
     }
   }
-  return normalizeSemanticGraph({schemaVersion:'semantic-graph/1.0',clauses:[{clauseId:'edit',text:request}],actions:edits.map((edit,i)=>({actionId:'edit_'+i,clauseId:'edit',kind:'editAnimation',scene:c.objectIndex.find(o=>o.logicalObjectId===edit.targets[0])!.sourceInstances[0].sceneId,constraints:[],unresolvedReason:null,targets:[c.objectIndex.find(o=>o.logicalObjectId===edit.targets[0])!.sourceInstances[0].sourceNodeId],techniques:[edit.effect === 'motion' ? 'customCurve' : edit.effect === 'easing' ? 'customCurve' : edit.effect === 'fade' ? 'fadeIn' : edit.effect],relation:'unchanged',parameters:[],semanticEdit:edit})),assumptions},incrementalGraphContext(context),request);
+  return normalizeSemanticGraph({schemaVersion:'semantic-graph/1.0',clauses:[{clauseId:'edit',text:request}],actions:edits.map((edit,i)=>({actionId:'edit_'+i,clauseId:'edit',kind:'editAnimation',scene:c.objectIndex.find(o=>o.logicalObjectId===edit.targets[0])!.sourceInstances[0].sceneId,constraints:[],unresolvedReason:null,targets:[c.objectIndex.find(o=>o.logicalObjectId===edit.targets[0])!.sourceInstances[0].sourceNodeId],techniques:[edit.effect === 'motion' ? 'customCurve' : edit.effect === 'easing'||edit.effect==='anchor' ? 'customCurve' : edit.effect === 'fade' ? 'fadeIn' : edit.effect],relation:'unchanged',parameters:[],semanticEdit:edit})),assumptions},incrementalGraphContext(context),request);
 }
 
 /** Read-only disclosures are computed from authoritative state, only for admitted IDs. */

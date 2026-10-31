@@ -113,6 +113,7 @@ export async function servePlatform(projectsRoot: string, port = 4173) {
           "/styles.css",
           "/motion.js",
           "/inspector.js",
+          "/anchor-inspector.js",
           "/skills.js",
           "/motion.css",
           "/easing-runtime.js",

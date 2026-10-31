@@ -1,3 +1,4 @@
+import {anchorBinding,anchorLocal,anchoredMotion,transformPoint,motionTransform} from '../motion/anchor.js';
 import {transitionOffsetMatrix} from "../motion/geometry.js";
 import {textViewportOffset} from "../motion/text-clearance.js";
 import {buildRegistry} from "../motion/registry.js";
@@ -18,7 +19,7 @@ import { Resvg } from "@resvg/resvg-js";
 import { createHash } from "node:crypto";
 import type { LoadedProject, Scene } from "../types.js";
 import type { Animation, MotionState } from "../motion/schema.js";
-import { evaluateMotion, type Values } from "../motion/evaluation.js";
+import { evaluateMotion } from "../motion/evaluation.js";
 import {
   canvasMatrix,
   inverse,
@@ -72,6 +73,7 @@ export interface NativeFrame {
     sceneId: string;
     targetId: string;
     points: { x: number; y: number }[];
+    transform?:Matrix; parentTransform?:Matrix; anchor?:{x:number;y:number};anchorLocal?:{x:number;y:number};bounds?:{width:number;height:number};
   }[];
   coverageRegion?: {x:number;y:number;width:number;height:number;canvasWidth:number;canvasHeight:number};
   composition?: {
@@ -147,17 +149,6 @@ const affine = (m: Matrix) => [
   0,
   1,
 ];
-function motionMatrix(v: Values, x = 0, y = 0): Matrix {
-  const r = ((v.rotation ?? 0) * Math.PI) / 180,
-    c = Math.cos(r),
-    s = Math.sin(r),
-    sx = v.scaleX ?? v.scale ?? 1,
-    sy = v.scaleY ?? v.scale ?? 1;
-  return [
-    [c * sx, -s * sy, (v.x ?? 0) + x - c * sx * x + s * sy * y],
-    [s * sx, c * sy, (v.y ?? 0) + y - s * sx * x - c * sy * y],
-  ];
-}
 export class NativeRenderer {
   readonly renderer = "skia-cpu/1" as const;
   private paths: PathResources;
@@ -536,7 +527,7 @@ export class NativeRenderer {
     let probeDepth=0,probePainted=false;
     const trace=new Map<string,NonNullable<NativeFrame["composition"]>["instances"][number]>();
     let sceneOpacity=1,drawOrder=0;
-    const overrides = new Map<string, { wrapper: Matrix; opacity: number; composeInstance: boolean }>(),
+    const overrides = new Map<string, { wrapper: Matrix; opacity: number; composeInstance: boolean;anchor?:{x:number;y:number} }>(),
       blocks = compositionSceneWeights(state, frame, evaluation.blocks);
     let transitions = presentedTransitions(state, frame);
     const detachedTransitions=new Set<string>();
@@ -555,10 +546,10 @@ export class NativeRenderer {
             refs[t.fromSceneId],
             refs[t.toSceneId],
             t,
-            frame,
+            frame,state,
           ),
           offset = evaluation.transitionEffects[t.transitionId] ?? {},
-          visual = transitionOffsetMatrix(v.matrix,offset),
+          visual = transitionOffsetMatrix(v.matrix,offset,v.anchor?transformPoint(v.matrix,v.anchor):undefined),
           wrapper = multiply(
             multiply(multiply(inverse(current.parentCanvas), visual), [
               [1 / current.width, 0, 0],
@@ -568,7 +559,7 @@ export class NativeRenderer {
           );
         overrides.set(JSON.stringify([host, current.sourceNodeId]), {
           wrapper,
-          opacity: v.opacity,
+          opacity: v.opacity,anchor:v.anchor,
           composeInstance: frame >= t.startFrame + t.durationFrames,
         });
       }
@@ -641,11 +632,13 @@ export class NativeRenderer {
       if (!drawingStatic && frozenMembers.has(`${sceneId}/${n.figmaNodeId}`)) {exclude("STATIC_OBJECT_OWNS_PRESENTATION");return;}
       if (!visible && currentStaticRoot !== key) {exclude("EXPLICIT_OR_SOURCE_VISIBILITY");return;}
       const local = multiply(inverse(parent), matrix(n.sceneTransform)),
-        v = evaluation.nodes[key] ?? {},
+        binding=anchorBinding(state.anchors,identities.get(key)??"",sceneId,frame,state.anchorDefault),
         override = overrides.get(key),
+        pivot=override?.anchor?{x:override.anchor.x*num(p.width),y:override.anchor.y*num(p.height)}:anchorLocal(binding,num(p.width),num(p.height)),
+        v = evaluation.nodes[key] ?? {},
         wrapper =
-          override ? (override.composeInstance ? multiply(motionMatrix(v, local[0][2], local[1][2]), override.wrapper) : override.wrapper) : motionMatrix(v, local[0][2], local[1][2]),
-        combined = multiply(wrapper, local),
+          override ? (override.composeInstance ? multiply(anchoredMotion(v,local,binding,num(p.width),num(p.height)), override.wrapper) : override.wrapper) : anchoredMotion(v,local,binding,num(p.width),num(p.height)),
+        combined = override&&!override.composeInstance&&binding?multiply(motionTransform(binding.transform??{},transformPoint(multiply(wrapper,local),pivot),binding.compensation),multiply(wrapper,local)):multiply(wrapper, local),
         world = multiply(worldParent, combined),
         opacity = (override?.opacity ?? num(p.opacity, 1)) * (v.opacity ?? 1);
       if(diagnostic&&!maskOnly){
@@ -656,6 +649,7 @@ export class NativeRenderer {
         hits.push({
           sceneId,
           targetId: n.figmaNodeId,
+          transform:world,parentTransform:worldParent,anchor:transformPoint(world,pivot),anchorLocal:pivot,bounds:{width:num(p.width),height:num(p.height)},
           points: [
             [0, 0],
             [num(p.width), 0],

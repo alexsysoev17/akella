@@ -1,3 +1,4 @@
+import {transformPoint} from './anchor.js';
 import type { MotionState } from "./schema.js";
 import type { Expression } from "../motion-library/expressions/registry.js";
 import { inertialOvershoot, velocityAtTime, windowOffset } from "../motion-library/expressions/functions.js";
@@ -20,7 +21,7 @@ export function scopedExpressionValue(state: MotionState, e: Expression, frame: 
   if (e.property !== "x" && e.property !== "y") throw new Error("UNSUPPORTED_TRANSITION_EFFECT_PROPERTY");
   const row = e.property === "x" ? 0 : 1;
   const velocity = velocityAtTime(
-    seconds => interpolateState(a, b, t, seconds * fps).matrix[row][2],
+    seconds => {const pose=interpolateState(a,b,t,seconds*fps,state);return pose.anchor?transformPoint(pose.matrix,pose.anchor)[e.property==='x'?'x':'y']:pose.matrix[row][2];},
     end / fps - 1 / (fps * 10), 1 / (fps * 1000),
     { start: t.startFrame / fps, end: end / fps },
   );

@@ -1,3 +1,4 @@
+import {buildRegistry} from './registry.js';
 import {materializeRules} from "./rules.js";
 import {textLayoutContract} from "../motion-library/techniques/text.js";
 import {updateProjectTime,refreshTimingOrigins} from "./project-time.js";
@@ -47,6 +48,7 @@ export function validateMotion(
     if (!object.sourceInstances.some(i => i.sceneId === entry.sceneId && i.sourceNodeId === entry.targetId)) throw new Error("STATIC_SOURCE_NOT_FOUND");
     if (state.animations.some(a => members.has(`${a.sceneId}/${a.targetId}`)) || state.expressions?.some(e => members.has(`${e.sceneId}/${e.targetId}`)) || staticObjectTransitions(project,state,members).length) throw new Error("STATIC_OBJECT_HAS_MOTION");
   }
+  for(const a of state.anchors??[]){const registry=buildRegistry(project.inspection.document,project.inspection.fingerprint);const o=registry.objects.find(o=>o.logicalObjectId===a.logicalObjectId);if(!o||a.sceneId&&!o.sourceInstances.some(i=>i.sceneId===a.sceneId))throw Error("ANCHOR_TARGET_NOT_FOUND");}
   const anchorIds=new Set<string>();
   for(const a of state.sceneAnchors ?? []) {if(anchorIds.has(a.sceneId)||!project.inspection.document.scenes.some(s=>s.sceneId===a.sceneId))throw new Error("INVALID_SCENE_ANCHOR");anchorIds.add(a.sceneId);}
   const ids = new Set<string>(),
@@ -266,6 +268,8 @@ export function applyOperations(
     if ("blockId" in op && !block)
       throw new Error(`Блок не найден: ${op.blockId}`);
     switch (op.type) {
+      case "setAnchor": state.anchors=[...(state.anchors??[]).filter(a=>!(a.logicalObjectId===op.anchor.logicalObjectId&&a.sceneId===op.anchor.sceneId&&a.startFrame===op.anchor.startFrame)),op.anchor];break;
+      case "resetAnchor":state.anchors=state.anchors?.filter(a=>!(a.logicalObjectId===op.logicalObjectId&&a.sceneId===op.sceneId&&a.startFrame===op.startFrame));break;
       case "setMotionRule": state.motionRules=[...(state.motionRules??[]).filter(r=>r.ruleId!==op.rule.ruleId),op.rule];break;
       case "removeMotionRule":state.motionRules=state.motionRules?.filter(r=>r.ruleId!==op.ruleId);break;
       case "setSkillApplication": state.skillApplications=[...(state.skillApplications??[]).filter(a=>a.applicationId!==op.application.applicationId),op.application];break;
@@ -544,6 +548,7 @@ export function motionDiff(before: MotionState, after: MotionState) {
   diff(before.blocks, after.blocks, "blocks");
   diff(before.visibility, after.visibility, "visibility");
   diff(before.sceneAnchors ?? [], after.sceneAnchors ?? [], "sceneAnchors");
+  diff(before.anchors??[],after.anchors??[],"anchors");
   diff(before.staticObjects ?? [], after.staticObjects ?? [], "staticObjects");
   diff(before.timingDependencies ?? [], after.timingDependencies ?? [], "timingDependencies");
   diff(

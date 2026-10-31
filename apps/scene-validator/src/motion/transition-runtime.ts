@@ -1,3 +1,4 @@
+import {anchorBinding,anchorLocal,transformPoint} from './anchor.js';
 import {transitionOffsetMatrix} from "./geometry.js";
 import { evaluateEasing } from "../motion-library/easings/registry.js";
 import type { MotionState, ObjectTransition } from "./schema.js";
@@ -45,6 +46,7 @@ export function interpolateState(
   b: PresentationState,
   t: ObjectTransition,
   frame: number,
+  state?:MotionState,
 ) {
   const q = transitionProgress(t, frame),
     u = clamp((frame - t.startFrame) / t.durationFrames),
@@ -63,8 +65,16 @@ export function interpolateState(
     rotation: from.rotation + angle * q,
     shear: mix(from.shear, to.shear),
   };
+  const result=compose(values);
+  const aBinding=state?anchorBinding(state.anchors,t.logicalObjectId,t.fromSceneId,frame,state.anchorDefault):undefined,bBinding=state?anchorBinding(state.anchors,t.logicalObjectId,t.toSceneId,frame,state.anchorDefault):undefined;
+  let anchor:{x:number;y:number}|undefined;
+  if(aBinding||bBinding){
+    const pa=anchorLocal(aBinding,a.width,a.height),pb=anchorLocal(bBinding,b.width,b.height),na={x:pa.x/a.width,y:pa.y/a.height},nb={x:pb.x/b.width,y:pb.y/b.height};anchor={x:mix(na.x,nb.x),y:mix(na.y,nb.y)};
+    const start=transformPoint(a.normalized,na),end=transformPoint(b.normalized,nb);result[0][2]=mix(start.x,end.x)-result[0][0]*anchor.x-result[0][1]*anchor.y;result[1][2]=mix(start.y,end.y)-result[1][0]*anchor.x-result[1][1]*anchor.y;
+  }
   return {
-    matrix: u === 0 ? a.normalized : u === 1 ? b.normalized : compose(values),
+    anchor,
+    matrix: u === 0 ? a.normalized : u === 1 ? b.normalized : result,
     opacity: clamp(mix(a.opacity, b.opacity)),
     progress: u,
   };
@@ -159,7 +169,7 @@ export function applyObjectTransitions(
         states[t.fromSceneId],
         states[t.toSceneId],
         t,
-        frame,
+        frame,state,
       );
     for (const node of root.querySelectorAll<SVGGElement>(
       "[data-motion-target]",
@@ -170,7 +180,7 @@ export function applyObjectTransitions(
         continue;
       // Parent * wrapper * local = interpolated canvas transform / geometry dimensions.
       const offset = effects[t.transitionId] ?? {};
-      const visual = transitionOffsetMatrix(v.matrix,offset);
+      const visual = transitionOffsetMatrix(v.matrix,offset,v.anchor?transformPoint(v.matrix,v.anchor):undefined);
       const wrapper = multiply(
         multiply(multiply(inverse(current.parentCanvas), visual), [
           [1 / current.width, 0, 0],

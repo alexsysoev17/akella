@@ -1,3 +1,4 @@
+import {anchorInspector} from '/anchor-inspector.js';
 import {
   selectedProviderId,
   PROVIDER_LABELS,
@@ -27,7 +28,7 @@ export async function mountMotion(
 ) {
   const previewPreferenceKey='akella-preview-quality:'+projectId;
   let previewQuality='auto';try{const saved=localStorage.getItem(previewPreferenceKey);if(['auto','full','half','third','quarter'].includes(saved))previewQuality=saved;}catch{}
-  let previewMetrics=null,incrementalPerformance=null;
+  let previewMetrics=null,incrementalPerformance=null,pivotInspector;
   function performanceView(){const el=$('m-preview-performance');if(el)el.textContent=JSON.stringify({motionEdit:incrementalPerformance,preview:previewMetrics},null,2);}
   let alive = true,
     raf = 0,
@@ -89,7 +90,9 @@ export async function mountMotion(
       return;
     if (event.data?.type === "motion-ready") {
       send({ type: "motion-state", state: data.document.state, revision:data.document.revision,sourceFingerprint:data.document.sourceFingerprint });
+      send({type:"motion-preview-quality",quality:previewQuality});
       seek(frame);
+      pivotInspector?.select();
       if (pendingPlayback) {
         pendingPlayback = false;
         play();
@@ -101,6 +104,8 @@ export async function mountMotion(
       previewMetrics=event.data.metrics;performanceView();
     }
     if(event.data?.type === "motion-render-error")error(event.data.error);
+    if(event.data?.type==="motion-anchor-start"){if(event.data.revision!==data.document.revision){error("STALE_ANCHOR_FRAME");return;}pause();seek(event.data.frame);return;}
+    if(event.data?.type==="motion-anchor-drag"){if(event.data.revision!==data.document.revision||event.data.sceneId!==selected?.sceneId||event.data.targetId!==selected?.targetId){error("STALE_ANCHOR_FRAME");return;}pause();seek(event.data.frame);pivotInspector?.drag(event.data.point);return;}
     if (event.data?.type === "motion-select") {
       selected = data.objects.find(
         (o) =>
@@ -220,6 +225,7 @@ export async function mountMotion(
     draw();
   }
   function objects() {
+    pivotInspector?.select();
     const scene = $("m-scenes").value;
     container.querySelectorAll("[data-scene-row]").forEach((row) => {
       const id = row.dataset.sceneRow,
@@ -446,6 +452,7 @@ export async function mountMotion(
         request,
         mentions: promptMentions.references(),
         activeSceneId: $("m-scenes").value,
+        currentFrame:frame,
         expectedRevision: data.document.revision,
         settings: {
           provider: selectedProviderId(
@@ -553,6 +560,7 @@ export async function mountMotion(
     };
     const timelineObserver = new ResizeObserver(resizeTimeline);
     timelineObserver.observe($("m-timeline"));
+    pivotInspector=anchorInspector(container,{getData:()=>data,getSelected:()=>selected,getFrame:()=>frame,api,refresh,send,error});
     const detachInspector = attachInspector(container, url);
     const previousStop = stop;
     stop = () => {

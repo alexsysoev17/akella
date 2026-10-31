@@ -82,6 +82,7 @@ export const requestSchema = z
     selectedObjectIds: z.array(z.string().max(180)).max(200).optional(),
     selectedSceneId: z.string().max(180).optional(),
     activeSceneId: z.string().max(180).optional(),
+    currentFrame:z.number().int().optional(),
     settings: providerSettingsSchema,
     expectedRevision: z.string(),
   })
@@ -1143,9 +1144,10 @@ async function recentConversation(project: LoadedProject) {
   }
   return recent;
 }
-function editRequestFingerprint(input:unknown){
+export function editRequestFingerprint(input:unknown){
  const r=input as Record<string,unknown>;
- return digest(Object.fromEntries(['request','expectedRevision','selectedObjectId','selectedObjectIds','selectedSceneId','activeSceneId','mentions'].map(k=>[k,r[k]??null])));
+ const fields=['request','expectedRevision','selectedObjectId','selectedObjectIds','selectedSceneId','activeSceneId',...(r.currentFrame===undefined?[]:['currentFrame']),'mentions'];
+ return digest(Object.fromEntries(fields.map(k=>[k,r[k]??null])));
 }
 export async function executeMotion(
   project: LoadedProject,

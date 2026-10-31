@@ -1,3 +1,4 @@
+import {anchorChangeSchema} from './anchor-contract.js';
 import { z } from 'zod';
 import { easingSchema } from '../motion-library/easings/registry.js';
 const id = z.string().min(1).max(180);
@@ -10,8 +11,8 @@ export const ruleScopeSchema = z.object({
 export const ruleParametersSchema = z.object({ amplitude: z.number().min(0).max(100000).optional(), frequency: z.number().min(.001).max(10000).optional(), decay: z.number().min(0).max(10000).optional(), durationSeconds: z.number().min(.05).max(10).optional(), property: z.enum(['x', 'y', 'rotation', 'scaleX', 'scaleY']).optional(), easing: easingSchema.optional() }).strict();
 export const motionRuleSchema = z.object({ ruleId: id, effect: z.enum(['inertialOvershoot', 'wiggle', 'fade', 'easing']), scope: ruleScopeSchema, parameters: ruleParametersSchema, disabledParameters:ruleParametersSchema.optional(), enabled: z.boolean(), priority: z.number().int().min(0).max(1000000), sourceText: z.string().min(1).max(20000), exceptions: z.array(id).max(200).default([]) }).strict();
 export const semanticEditSchema = z.object({
-    operation: z.enum(['ADD_EFFECT', 'MODIFY_EFFECT', 'REMOVE_EFFECT', 'ENABLE_EFFECT', 'DISABLE_EFFECT', 'MODIFY_PARAMETER', 'MODIFY_DURATION', 'MODIFY_EASING', 'ADD_RULE', 'MODIFY_RULE', 'REMOVE_RULE', 'ADD_EXCEPTION', 'REMOVE_EXCEPTION','SHIFT_START','SHIFT_END','SET_START','SET_DURATION','SCALE_DURATION','REMOVE_ANIMATION','MODIFY_POSITION','MODIFY_ROTATION','MODIFY_SCALE','MODIFY_OPACITY','MODIFY_STAGGER','SET_TEMPORAL_DEPENDENCY','REMOVE_TEMPORAL_DEPENDENCY']),
-    effect: z.enum(['inertialOvershoot','wiggle','fade','easing','motion']), ruleId: id.optional(),
+    operation: z.enum(['ADD_EFFECT', 'MODIFY_EFFECT', 'REMOVE_EFFECT', 'ENABLE_EFFECT', 'DISABLE_EFFECT', 'MODIFY_PARAMETER', 'MODIFY_DURATION', 'MODIFY_EASING', 'ADD_RULE', 'MODIFY_RULE', 'REMOVE_RULE', 'ADD_EXCEPTION', 'REMOVE_EXCEPTION','SHIFT_START','SHIFT_END','SET_START','SET_DURATION','SCALE_DURATION','REMOVE_ANIMATION','MODIFY_POSITION','MODIFY_ROTATION','MODIFY_SCALE','MODIFY_OPACITY','MODIFY_STAGGER','SET_TEMPORAL_DEPENDENCY','REMOVE_TEMPORAL_DEPENDENCY','SET_ANCHOR','CENTER_ANCHOR','RESET_ANCHOR','MOVE_ANCHOR','SET_SCALE_ORIGIN','SET_ROTATION_ORIGIN']),
+    effect: z.enum(['inertialOvershoot','wiggle','fade','easing','motion','anchor']), anchor:anchorChangeSchema.omit({logicalObjectId:true,sceneId:true}).optional(), ruleId: id.optional(),
     // Names/IDs are interpreted by the existing project registry, never synthesized IDs.
     targets: z.array(z.string().min(1)).max(200).default([]),
     excludedTargets: z.array(z.string().min(1)).max(200).default([]),

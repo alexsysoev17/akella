@@ -1,3 +1,4 @@
+import {compileAnchorChange} from './anchor-edit.js';
 import {compileWiggle} from './effect-edit.js';
 import {compileTrackEdit,entranceTrack} from './track-edit.js';
 import { lowerMotionTool } from "./tools.js";
@@ -162,6 +163,7 @@ export function compileSemanticEdit(project: LoadedProject, state: MotionState, 
     if (edit.scope.selector !== 'project' && !targetIds.length && !edit.ruleId)
         throw Error('RULE_EXPLICIT_SCOPE_REQUIRED');
     const objects = ruleObjects(project).filter(o=>targetIds.includes(o.logicalObjectId));
+    if(edit.effect==='anchor'){if(!edit.anchor)throw Error('ANCHOR_CHANGE_REQUIRED');return objects.flatMap(o=>compileAnchorChange(project,state,{...edit.anchor,logicalObjectId:o.logicalObjectId,sceneId:edit.scope.sceneId??o.sourceInstances[0].sceneId}));}
     const own=(scene:string,target:string)=>objects.some(o=>o.sourceInstances.some(i=>i.sceneId===scene&&i.sourceNodeId===target))&&(!edit.scope.sceneId||edit.scope.sceneId===scene);
     if(edit.expressionIds?.some(id=>!state.expressions?.some(e=>e.expressionId===id&&e.type===edit.effect&&own(e.sceneId,e.targetId))))throw Error('EDIT_TARGET_OUTSIDE_SCOPE');
     if(edit.expressionIds?.some(id=>state.ruleMaterializations?.some(m=>m.entity==='expression'&&m.id===id)))throw Error('RULE_OWNED_EFFECT: edit the scoped motion rule instead');

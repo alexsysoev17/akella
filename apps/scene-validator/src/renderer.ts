@@ -506,7 +506,7 @@ export async function buildSceneSvg(
     const rendered = `<g data-node-id="${escape(node.figmaNodeId)}" transform="${svgMatrix(transform)}" opacity="${num(p.opacity, 1)}" style="${filter ? `filter:${filter};` : ""}${allowed.includes(blend) ? `mix-blend-mode:${blend};` : ""}"><g${clip}${clip ? ' data-clip-reason="source"' : ""}>${body}</g></g>`;
     if (!options.motion) return rendered;
     const motionBody = rendered;
-    return `<g data-motion-target="${escape(node.figmaNodeId)}" data-origin-x="${transform[0][2]}" data-origin-y="${transform[1][2]}" data-base-visible="${p.visible !== false}">${motionBody}</g>`;
+    return `<g data-motion-target="${escape(node.figmaNodeId)}" data-origin-x="${transform[0][2]}" data-origin-y="${transform[1][2]}" data-center-x="${transform[0][2]+transform[0][0]*num(p.width)/2+transform[0][1]*num(p.height)/2}" data-center-y="${transform[1][2]+transform[1][0]*num(p.width)/2+transform[1][1]*num(p.height)/2}" data-base-visible="${p.visible !== false}">${motionBody}</g>`;
   }
   const body = await render(scene as unknown as RenderNode, unit);
   const fontCss = stats.fonts

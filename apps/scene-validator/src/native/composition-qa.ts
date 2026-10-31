@@ -1,3 +1,5 @@
+import {anchorBinding,motionTransform,transformPoint} from '../motion/anchor.js';
+import {multiply,inverse} from '../motion/geometry.js';
 import type {LoadedProject} from '../types.js';
 import type {MotionState} from '../motion/schema.js';
 import type {NativeFrame} from './renderer.js';
@@ -32,10 +34,10 @@ export function compositionFrameChecks(project:LoadedProject,state:MotionState,f
    const cover=c.instances.find(i=>i.opaqueCover&&i.sceneId!==rendered.sceneId&&(i.zOrder??-1)>(rendered.zOrder??Infinity)&&i.transform&&Math.abs(i.transform[0][1])<1e-9&&Math.abs(i.transform[1][0])<1e-9&&(()=>{const hit=frame.hits.find(h=>h.sceneId===i.sceneId&&h.targetId===i.targetId);if(!hit)return false;return points.every(p=>p.x>=Math.min(...hit.points.map(p=>p.x))&&p.x<=Math.max(...hit.points.map(p=>p.x))&&p.y>=Math.min(...hit.points.map(p=>p.y))&&p.y<=Math.max(...hit.points.map(p=>p.y)));})());
    checks.push({name:'foreignSceneOcclusion',category:'render',target:owner.name,status:cover?'FAILED':'PASSED',metrics:{frame:frame.frame,cover:cover?.targetId}});
    if(t.active){
-    const desired=interpolateState(refs[t.logicalObjectId][t.fromSceneId],refs[t.logicalObjectId][t.toSceneId],transition,frame.frame);
+    const desired=interpolateState(refs[t.logicalObjectId][t.fromSceneId],refs[t.logicalObjectId][t.toSceneId],transition,frame.frame,state);
     // Transition-bound expressions legitimately displace the interpolated pose.
     const procedural=state.expressions?.some(e=>e.enabled&&(e.transitionId===t.transitionId||e.ownership?.logicalObjectId===t.logicalObjectId));
-    if(!procedural){const error=Math.hypot(a[0][2]-desired.matrix[0][2],a[1][2]-desired.matrix[1][2]);checks.push({name:'transitionPoseContinuity',category:'render',target:owner.name,status:error<1e-5?'PASSED':'FAILED',metrics:{frame:frame.frame,error}});}
+    if(!procedural){const binding=anchorBinding(state.anchors,t.logicalObjectId,t.hostSceneId,frame.frame,state.anchorDefault);let pose=desired.matrix;if(binding){const m=multiply(inverse(expected.parentCanvas),desired.matrix),parent=frame.hits.find(h=>h.sceneId===rendered.sceneId&&h.targetId===rendered.targetId)?.parentTransform??expected.parentCanvas;pose=multiply(parent,multiply(motionTransform(binding.transform??{},transformPoint(m,desired.anchor??{x:0,y:0}),binding.compensation),m));}const error=Math.hypot(a[0][2]-pose[0][2],a[1][2]-pose[1][2]);checks.push({name:'transitionPoseContinuity',category:'render',target:owner.name,status:error<1e-5?'PASSED':'FAILED',metrics:{frame:frame.frame,error}});}
    }
   }
  }

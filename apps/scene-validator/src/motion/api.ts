@@ -1,3 +1,4 @@
+import {commitAnchorChange} from './anchor-service.js';
 import {exportReports,exportReport} from './export-reports.js';
 import {handoffOperations,prepareHandoff} from "../motion-library/skills/runtime.js";
 import {compareFrameComposition} from "../native/composition-qa.js";
@@ -576,6 +577,7 @@ export async function motionApi(
       json({ status: "CANCELLATION_REQUESTED" });
       return true;
     }
+    if(action==="anchor"){json(await commitAnchorChange(project,input));return true;}
     if (action === "operations") {
       const data = z
         .object({
