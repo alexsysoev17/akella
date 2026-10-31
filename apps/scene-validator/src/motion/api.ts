@@ -1,3 +1,4 @@
+import {exportReports,exportReport} from './export-reports.js';
 import {handoffOperations,prepareHandoff} from "../motion-library/skills/runtime.js";
 import {compareFrameComposition} from "../native/composition-qa.js";
 import {projectTime} from "./project-time.js";
@@ -63,6 +64,7 @@ const jobs = new Map<
     total?: number;
     result?: unknown;
     error?: string;
+    exportDiagnostics?:Record<string,unknown>;
   }
 >();
 const active = new Set<string>();
@@ -350,11 +352,12 @@ export async function motionApi(
       json(object);
       return true;
     }
+    if(action==="export-reports"){json(segments[5]?await exportReport(project.root,segments[5]):await exportReports(project.root));return true;}
     if (action === "jobs") {
       const job = jobs.get(segments[5]);
       if (!job || job.projectId !== project.config.projectId){
         const deferred=(await recoveryJobs(project)).find(j=>j.id===segments[5]);
-        if(!deferred)throw new Error("Задание не найдено или сервер перезапущен");
+        if(!deferred){try{const report=await exportReport(project.root,segments[5]);json({projectId:project.config.projectId,status:report.status==='COMPLETED'?'completed':'failed',stage:report.stage,exportDiagnostics:report,error:report.message??(report.status==='RUNNING'?'EXPORT_INTERRUPTED: server restarted':undefined)});return true;}catch(e){if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e;}throw new Error("Задание не найдено или сервер перезапущен");}
         json({status:["PENDING","RUNNING"].includes(deferred.status)?"running":deferred.status==="COMPLETED"?"completed":"failed",stage:"recovering-project",result:deferred.status==="COMPLETED"?await deferredResult(project,deferred):undefined,error:deferred.reason});return true;
       }
       json(job);
@@ -673,11 +676,12 @@ export async function motionApi(
                 (progress, total) =>
                   jobs.set(id, {
                     projectId: project.config.projectId,
-                    status: "running",
+                    ...jobs.get(id),
+                    status: "running",stage:"encoding",
                     progress,
                     total,
                   }),
-                { signal: controller.signal,...(draftInput?.mode==='draft'?{draftQuality:draftInput.quality}:{}) },
+                { signal: controller.signal,exportJobId:id,onStage:(stage,diagnostics)=>jobs.set(id,{...jobs.get(id),projectId:project.config.projectId,status:'running',stage,exportDiagnostics:diagnostics}),...(draftInput?.mode==='draft'?{draftQuality:draftInput.quality}:{}) },
               );
       void work()
         .then((result) =>
@@ -697,7 +701,7 @@ export async function motionApi(
               jobs.set(id,{projectId:project.config.projectId,status:"failed",error:saved?.reason??"Deferred recovery unavailable"});return;
             }finally{deferredAliases.delete(id);}
           }
-          jobs.set(id,{projectId:project.config.projectId,status:"failed",error:e instanceof ProviderSettingsError?e.message:String(e)});
+          jobs.set(id,{projectId:project.config.projectId,status:"failed",exportDiagnostics:(e as {exportDiagnostics?:Record<string,unknown>}).exportDiagnostics,error:e instanceof ProviderSettingsError?e.message:String(e)});
         })
         .finally(() => {
           active.delete(key);

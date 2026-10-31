@@ -28,6 +28,10 @@ export async function ruleQA(project: LoadedProject, state: MotionState, previou
         const samples = Array.from({ length: 65 }, (_, i) => value(e.startFrame + e.durationFrames * i / 64));
         const finite = samples.every(Number.isFinite), deterministic = samples.every((v, i) => v === value(e.startFrame + e.durationFrames * i / 64));
         const settles = e.type !== 'inertialOvershoot' || Math.abs(samples[0]) < 1e-8 && Math.abs(samples[64]) < 1e-8;
+        if(e.type==='inertialOvershoot'&&e.enabled&&e.parameters.amplitude>0){
+            const visible=samples.some(v=>Math.abs(v)>1e-12)||(state.expressions??[]).some(partner=>partner.enabled&&partner.type==='inertialOvershoot'&&partner.sourceAnimationId===e.sourceAnimationId&&partner.expressionId!==e.expressionId&&samples.some((_,i)=>Math.abs(scopedExpressionValue(state,partner,partner.startFrame+partner.durationFrames*i/64,presentation))>1e-12));
+            checks.push({name:`rule:${e.expressionId}:observable-inertia`,status:visible?'PASSED':'FAILED',reason:'INERTIA_NO_OBSERVABLE_RESPONSE: no usable incoming velocity; no synthetic impulse or Wiggle substitution.'});
+        }
         const bounded = e.type !== 'wiggle' || samples.every(v => Math.abs(v) <= e.parameters.amplitude + 1e-8);
         checks.push({ name: `rule:${e.expressionId}:numeric-composition`, status: finite && deterministic && settles && bounded ? 'PASSED' : 'FAILED', reason: `finite=${finite}, deterministic=${deterministic}, settles=${settles}, bounded=${bounded}` });
         for (const p of [.25, .5, .75]) {

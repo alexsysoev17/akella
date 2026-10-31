@@ -12,7 +12,7 @@ export function attachInspector(container, url) {
   panel.className = "agent-inspector";
   panel.hidden = true;
   panel.setAttribute("aria-label", "Agent Inspector");
-  panel.innerHTML = `<div class="inspector-resize" role="separator" aria-label="Ширина Inspector" tabindex="0"></div><header><strong>Agent Inspector</strong><button data-close aria-label="Закрыть">Закрыть</button></header><select aria-label="История запусков"></select><div class="inspector-tabs" role="tablist">${["Обзор", "Понимание", "Действия", "QA", "Данные", "Кадр"].map((t, i) => `<button role="tab" data-tab="${i}">${t}</button>`).join("")}</div><div class="inspector-body"></div><footer><button data-copy>Скопировать отчёт</button><button data-zip>Скачать ZIP</button><button data-project-zip>Диагностика проекта</button><span role="status"></span></footer>`;
+  panel.innerHTML = `<div class="inspector-resize" role="separator" aria-label="Ширина Inspector" tabindex="0"></div><header><strong>Agent Inspector</strong><button data-close aria-label="Закрыть">Закрыть</button></header><select aria-label="История запусков"></select><div class="inspector-tabs" role="tablist">${["Обзор", "Понимание", "Действия", "QA", "Данные", "Кадр", "Экспорт"].map((t, i) => `<button role="tab" data-tab="${i}">${t}</button>`).join("")}</div><div class="inspector-body"></div><footer><button data-copy>Скопировать отчёт</button><button data-zip>Скачать ZIP</button><button data-project-zip>Диагностика проекта</button><span role="status"></span></footer>`;
   container.append(panel);
   const select = panel.querySelector("select"),
     body = panel.querySelector(".inspector-body"),
@@ -103,6 +103,7 @@ export function attachInspector(container, url) {
   function block(title, value) {
     return `<section><h3>${esc(title)}</h3>${tree(value, title)}</section>`;
   }
+  let exportsData=[];
   function render() {
     if (disposed) return;
     panel.querySelectorAll("[data-tab]").forEach((b) => {
@@ -110,6 +111,7 @@ export function attachInspector(container, url) {
       b.classList.toggle("active", active);
       b.setAttribute("aria-selected", String(active));
     });
+    if(tab===6){values.clear();body.innerHTML='<p>Экспорт: сохранённая диагностика, включая ошибки до кодирования. Художественная оценка: NOT_TESTED.</p>'+exportsData.map(r=>block(`${r.exportPreset} · ${r.status} · ${r.stage}`,r)).join('');return;}
     if(tab===5){
       values.clear();
       body.innerHTML=`<form data-frame-form><label>Кадр <input name="frame" type="number" min="0" step="1" value="${frameNumber}" required></label><button>Показать и сравнить с предыдущим</button></form><p>Текущее сохранённое состояние проекта, фактический Native Renderer. Исторический запуск не воспроизводится автоматически.</p>${frameData?`<img style="width:100%" alt="Кадр ${frameNumber}" src="${url}/frame?frame=${frameNumber}&scale=0.25&revision=${encodeURIComponent(frameData.revision)}">${tree(frameData,"Вычисленная композиция и соседний кадр")}`:""}`;
@@ -252,6 +254,7 @@ export function attachInspector(container, url) {
     loading = true;
     try {
       const runs = await fetchJSON("");
+      if(tab===6){const response=await fetch(url+'/export-reports');if(!response.ok)throw Error('Не удалось прочитать отчёты экспорта');const next=await response.json();if(pretty(next)!==pretty(exportsData)||!body.querySelector('section')){exportsData=next;render();}}
       const old = selectedId;
       select.innerHTML = runs
         .map(
@@ -270,7 +273,7 @@ export function attachInspector(container, url) {
         lastVersion = version;
         rawData = null;
         data = selectedId ? await fetchJSON("/" + selectedId) : null;
-        render();
+        if(tab!==6) render();
       }
       status.textContent = "";
     } catch (e) {
@@ -302,6 +305,7 @@ export function attachInspector(container, url) {
         tab = Number(b.dataset.tab);
         localStorage.setItem("agent-inspector-tab", String(tab));
         render();
+        if(tab===6) update();
       }),
   );
   panel.querySelector("[data-copy]").onclick = async () => {

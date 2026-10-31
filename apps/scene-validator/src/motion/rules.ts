@@ -123,7 +123,7 @@ export function materializeRules(state: MotionState, project: LoadedProject) {
                 continue; // A contiguous next movement has no post-motion interval to modify.
             for (const property of m.properties) {
                 if (state.expressions.some(e => e.enabled && e.type === 'inertialOvershoot' && e.sourceAnimationId === m.id && e.property === property))
-                    throw Error('RULE_EXISTING_EFFECT_CONFLICT: explicit effect already owns this base channel');
+                    continue; // Existing source-bound inertia retains its ID and parameters on ADD.
                 const expressionId = stable(["inertialOvershoot", o.logicalObjectId, m.id, property]);
                 state.expressions.push({ expressionId, type: 'inertialOvershoot', sceneId: m.sceneId, targetId: m.targetId, property, startFrame: m.end, durationFrames: end - m.end, enabled: true, sourceAnimationId: m.id, ...(m.transition ? { transitionId: m.transition, ownership: { scope: 'transition' as const, logicalObjectId: o.logicalObjectId } } : {}), parameters: { amplitude: r.parameters.amplitude ?? .25, frequency: r.parameters.frequency ?? 2.5, decay: r.parameters.decay ?? 3, velocityLookbackFrames: Math.min(6, m.end - m.start), mode: 'ae', settlingEnvelope: 'smoothTail' } });
                 state.ruleMaterializations.push({ ruleId: r.ruleId, entity: 'expression', id: expressionId });
@@ -245,6 +245,15 @@ export function compileSemanticEdit(project: LoadedProject, state: MotionState, 
     const ops: Plan['operations'] = [];
     if (modify && !existing && scope.phase === 'entrance')
         ops.push({ type: 'setMotionRule', rule: { ...rule, ruleId: stable([rule.ruleId, 'only-entrance']), scope: { ...scope, phase: 'all' }, parameters: { amplitude: 0 }, priority: priority - 1 } });
+    if(edit.operation==='ADD_EFFECT'&&edit.effect==='inertialOvershoot'){
+        // Reuse the rule materializer as a compiler, without persisting an implicit rule.
+        // Plain ADD effects retain the ordinary expression lifecycle and dependent removal.
+        const candidate=structuredClone(state);candidate.motionRules=[...(candidate.motionRules??[]),rule];materializeRules(candidate,project);
+        const ids=new Set(state.expressions?.map(e=>e.expressionId));
+        const created=(candidate.expressions??[]).filter(e=>!ids.has(e.expressionId));
+        const retained=(state.expressions??[]).filter(e=>e.type==='inertialOvershoot'&&own(e.sceneId,e.targetId)&&!state.ruleMaterializations?.some(m=>m.entity==='expression'&&m.id===e.expressionId));
+        return [...created,...retained].map(expression=>({type:'setExpression' as const,expression}));
+    }
     ops.push({ type: 'setMotionRule', rule });
     if (edit.operation === 'REMOVE_EFFECT') {
         const objects = ruleObjects(project), own = (s: string, t: string) => objects.some(o => (!targetIds.length || targetIds.includes(o.logicalObjectId)) && !excluded.includes(o.logicalObjectId) && o.sourceInstances.some(i => i.sceneId === s && i.sourceNodeId === t)) && (!scope.sceneId || scope.sceneId === s);

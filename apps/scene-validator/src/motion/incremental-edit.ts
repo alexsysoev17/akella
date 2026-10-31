@@ -56,9 +56,9 @@ function compoundParameterFactors(text:string): {amplitudeFactor?:number;frequen
 export function incrementalEditProfile(project: LoadedProject, request: string, doc?:MotionDocument, editor?:{selectedObjectId?:string;selectedObjectIds?:string[];selectedSceneId?:string;mentions?:{sourceNodeId:string;sceneId:string}[]}) {
   if(/(?:(?:сцена|scene)\s*\d+|\d+\s*сцена)\s+(?:начинается|начинаются|начнет|начнется|starts? at)/iu.test(request))return null;
   const retiming=/позже|позд|раньше|медленнее|быстрее|длитель|начинается|после завершения/u.test(request);
-  if (request.length > 1600 || (!retiming&&/сцен|scene|появ|уход|перемест|trim|фейд|fade|после|затем|кадр|frame/iu.test(request))) return null;
+  if (request.length > 1600 || (!retiming&&/сцен|scene|появ|уход|перемест|trim|фейд|fade|после|затем|кадр|frame/iu.test(request.replace(/после движени[йя]/giu,'')))) return null;
   if (/wiggle|покач/iu.test(request) && /инерц|колеб/iu.test(request)) return null;
-  let effect:SemanticEdit['effect']|null = /wiggle|покач/iu.test(request) ? 'wiggle' : /инерц|колеб/iu.test(request) ? 'inertialOvershoot' : /движени|длитель|easing|изинг|позже|раньше|появлен|появля|начинается/iu.test(request)?'motion':null;
+  let effect:SemanticEdit['effect']|null = /wiggle|покач|постоянн.*колеб|колеб.*постоянн/iu.test(request) ? 'wiggle' : /инерц|колеб/iu.test(request) ? 'inertialOvershoot' : /движени|длитель|easing|изинг|позже|раньше|появлен|появля|начинается/iu.test(request)?'motion':null;
   // Route unfamiliar language by authoritative existing targets, not a verb whitelist.
   if(/создай|создать|новую композици|новый ролик|create (?:a |new )/iu.test(request))return null;
   const registry=ruleObjects(project);
@@ -75,6 +75,18 @@ export function incrementalEditProfile(project: LoadedProject, request: string, 
       const current=(doc.state.expressions??[]).filter(e=>recent.expressionIds.includes(e.expressionId));
       objects=registry.filter(o=>current.some(e=>e.ownership?.logicalObjectId===o.logicalObjectId||o.sourceInstances.some(i=>i.sceneId===e.sceneId&&i.sourceNodeId===e.targetId)));
       effect??=recent.effect as 'wiggle'|'inertialOvershoot';
+    }
+  }
+  // Bare oscillation language is contextual, never a synonym for continuous noise.
+  if(doc&&objects.length&&/колеб/iu.test(request)&&!/инерц|после.*движ|после.*заверш|затуха|постоянн|wiggle|покач/iu.test(request)){
+    const owns=(scene:string,target:string)=>objects.some(o=>o.sourceInstances.some(i=>i.sceneId===scene&&i.sourceNodeId===target));
+    const types=new Set((doc.state.expressions??[]).filter(e=>(e.enabled||/включи|отключи/iu.test(request))&&owns(e.sceneId,e.targetId)).map(e=>e.type).filter(t=>['wiggle','inertialOvershoot'].includes(t)));
+    for(const r of doc.state.motionRules??[])if(r.enabled&&['wiggle','inertialOvershoot'].includes(r.effect)&&objects.some(o=>!r.exceptions.includes(o.logicalObjectId)&&(!r.scope.logicalObjectIds.length||r.scope.logicalObjectIds.includes(o.logicalObjectId))))types.add(r.effect as 'wiggle'|'inertialOvershoot');
+    if(types.size===1)effect=[...types][0] as SemanticEdit['effect'];
+    else {
+      const recent=recentSuccessfulActions(doc).find(a=>['wiggle','inertialOvershoot'].includes(a.effect)&&a.expressionIds.some(id=>(doc.state.expressions??[]).some(e=>e.expressionId===id&&e.enabled&&owns(e.sceneId,e.targetId))));
+      if(recent)effect=recent.effect as SemanticEdit['effect'];
+      else throw Error('AMBIGUOUS_EFFECT_TYPE: specify inertia after movement or continuous wiggle');
     }
   }
   if(!effect&&doc&&objects.length&&/амплитуд|частот|слаб|силь|затух/iu.test(request)){
@@ -96,7 +108,7 @@ export function semanticEditRoute(project:LoadedProject,request:string,doc:Motio
 }
 export const incrementalQuerySchema=z.object({kind:z.enum(['inspectObject','inspectAnimations','inspectDependencies','inspectExpressions','inspectMotionRules','inspectSceneStates']),logicalObjectId:z.string().min(1)}).strict();
 export const incrementalEditSchema = z.object({ edits: z.array(semanticEditSchema).max(20), assumptions: z.array(z.string()).max(20),queries:z.array(incrementalQuerySchema).max(6).optional() }).strict().refine(v=>v.edits.length>0||Boolean(v.queries?.length),'Expected edits or bounded context queries');
-export const incrementalEditInstructions = `Interpret this local motion-effect edit, retaining every requested modifier. Return typed semantic edits only. Use actual supplied logical object IDs, never invent identities. ADD_EFFECT adds an effect; MODIFY_EFFECT updates existing parameters; REMOVE_EFFECT removes only that effect. Rule modifications use actual supplied rule IDs. Scope must remain within admitted objects; never expand to project. Wiggle is continuous smooth seeded motion. Plain wiggle uses effectStorage=expression with existing engine X/Y defaults; explicit pokachivanie uses persistent rule rotation, amplitude3 degrees/frequency.8Hz. Keep existing channels when editing; never substitute rotation for X/Y. Existing parameters and base animations remain unchanged when editing. Inertia requires real base movement. Unknown identity or unsupported instructions must not be guessed. For existing motion use SHIFT_START with signed deltaFrames (canonical frames), SET_START/frameValue, SHIFT_END, SET_DURATION/frameValue or SCALE_DURATION/durationFactor, MODIFY_EASING/parameters.easing. phase=entrance selects only appearance, never exits. Explicit animationIds disambiguate repeated entrances. Preserve line stagger and attached expressions; dependencyPolicy=preserve-relative unless absolute dependents must stay fixed. EDIT current motion; no full-project regeneration. If evidence is missing, return edits:[] and bounded queries [{kind:inspectObject|inspectAnimations|inspectDependencies|inspectExpressions|inspectMotionRules|inspectSceneStates,logicalObjectId:actual admitted ID}]. One read-only disclosure round is available. Never fabricate an ID.`;
+export const incrementalEditInstructions = `Interpret this local motion-effect edit, retaining every requested modifier. Return typed semantic edits only. Use actual supplied logical object IDs, never invent identities. ADD_EFFECT adds an effect; MODIFY_EFFECT updates existing parameters; REMOVE_EFFECT removes only that effect. Rule modifications use actual supplied rule IDs. Scope must remain within admitted objects; never expand to project. Wiggle is continuous smooth seeded motion. Plain wiggle uses effectStorage=expression with existing engine X/Y defaults; explicit pokachivanie uses persistent rule rotation, amplitude3 degrees/frequency.8Hz. Keep existing channels when editing; never substitute rotation for X/Y. Existing parameters and base animations remain unchanged when editing. Inertia requires real base movement. The admitted skill effect is authoritative: never substitute continuous wiggle for admitted inertia. Bare oscillations require current effect/rule or committed-action evidence, otherwise report ambiguity. Unknown identity or unsupported instructions must not be guessed. For existing motion use SHIFT_START with signed deltaFrames (canonical frames), SET_START/frameValue, SHIFT_END, SET_DURATION/frameValue or SCALE_DURATION/durationFactor, MODIFY_EASING/parameters.easing. phase=entrance selects only appearance, never exits. Explicit animationIds disambiguate repeated entrances. Preserve line stagger and attached expressions; dependencyPolicy=preserve-relative unless absolute dependents must stay fixed. EDIT current motion; no full-project regeneration. If evidence is missing, return edits:[] and bounded queries [{kind:inspectObject|inspectAnimations|inspectDependencies|inspectExpressions|inspectMotionRules|inspectSceneStates,logicalObjectId:actual admitted ID}]. One read-only disclosure round is available. Never fabricate an ID.`;
 export function incrementalContext(project: LoadedProject, doc: MotionDocument, request: string, profile: NonNullable<ReturnType<typeof incrementalEditProfile>>) {
   const ids = new Set(profile.objects.map(o => o.logicalObjectId));
   const owns = (scene: string, target: string) => profile.objects.some(o => o.sourceInstances.some(i => i.sceneId === scene && i.sourceNodeId === target));
@@ -130,7 +142,7 @@ export function deterministicIncrementalEdit(project: LoadedProject, request: st
   if(referencedRule){const at=request.indexOf(referencedRule.ruleId);chars.fill(' ',at,at+referencedRule.ruleId.length);}
   for (const o of profile.objects) for (const range of objectMentionRanges(o.name, request)) chars.fill(' ', range.start, range.end);
   if(/-\s*\d/u.test(request))return null;
-  const rest = chars.join('').replace(/у выделенных объектов|всем зв[её]здам/giu,'').toLowerCase().replace(/(\d)[.,](?=\d)/gu,'$1§').replace(/[,.!—–-]/g,' ').replace(/§/g,'.').replace(/ё/g,'е').replace(/немножко/gu,'немного').replace(/сильно/gu,'значительно').replace(/\s+/g,' ').trim();
+  const rest = chars.join('').replace(/после (?:завершения|конца) (?:каждого )?движени[йя]|после движени[йя]/giu,'').replace(/у выделенных объектов|всем зв[её]здам/giu,'').toLowerCase().replace(/(\d)[.,](?=\d)/gu,'$1§').replace(/[,.!—–-]/g,' ').replace(/§/g,'.').replace(/ё/g,'е').replace(/немножко/gu,'немного').replace(/сильно/gu,'значительно').replace(/\s+/g,' ').trim();
   if(profile.effect==='motion'){
     const scope={selector:'objects',phase:/появ/u.test(rest)?'entrance':'all'};
     const shift=rest.match(/^(?:пусть\s+)?(?:появляется|появляются|появление|начинается|начинаются|начало) на (\d+) (?:кадр|кадра|кадров|frames?) (позже|раньше)$/u);
@@ -150,7 +162,7 @@ export function deterministicIncrementalEdit(project: LoadedProject, request: st
   const parameters:SemanticEdit['parameters']={};
   let amplitudeFactor:number|undefined,frequencyFactor:number|undefined,durationFactor:number|undefined;
   // Every word must be consumed: unknown modifiers/negations require compact semantic interpretation.
-  const known=/^(?:сделай|уменьши|увеличь|измени|добавь|добавить|убери|удали|включи|отключи|у|на|к|и|в|два|раза|раз|эффект|эффекта|колебаний|колебания|колебание|инерцию|инерции|покачивание|покачивания|постоянного|постоянное|постоянный|wiggle|амплитуду|амплитуды|частоту|частоты|движения|движений|все|только|еще|чуть|немного|значительно|гораздо|намного|слабее|послабее|сильнее|посильнее|вдвое|медленнее|быстрее|объекты|объектам|правило|правила|исключение|исключения|из|для|линейный|линейное|изинг|easing|linear|easeInOutCubic|easeInCubic|easeOutCubic|\d+(?:\.\d+)?%?)$/iu;
+  const known=/^(?:сделай|уменьши|увеличь|измени|добавь|добавить|убери|удали|включи|отключи|у|на|к|и|в|два|раза|раз|эффект|эффекта|колебаний|колебания|колебание|инерцию|инерции|покачивание|покачивания|постоянного|постоянное|постоянный|wiggle|амплитуду|амплитуды|частоту|частоты|движения|движений|все|только|еще|чуть|немного|значительно|гораздо|намного|слабее|послабее|сильнее|посильнее|вдвое|медленнее|быстрее|объекты|объектам|объектов|правило|правила|исключение|исключения|из|для|линейный|линейное|изинг|easing|linear|easeInOutCubic|easeInCubic|easeOutCubic|\d+(?:\.\d+)?%?)$/iu;
   if(!rest.split(' ').every(word=>known.test(word)))return null;
   if(compound){
     if(!['wiggle','inertialOvershoot'].includes(profile.effect)||/добав|убери|удали|включи|отключи|быстрее|медленнее|правил|исключени/u.test(rest))return null;
@@ -160,7 +172,7 @@ export function deterministicIncrementalEdit(project: LoadedProject, request: st
   else if(referencedRule&&/исключени/u.test(rest)&&/^(?:добавь|убери|удали)/u.test(rest))operation=/^добавь/u.test(rest)?'ADD_EXCEPTION':'REMOVE_EXCEPTION';
   else if(referencedRule&&/правил/u.test(rest)&&/^(?:убери|удали)/u.test(rest))operation='REMOVE_RULE';
   else if(/^добавь/u.test(rest)&&/правило/u.test(rest))operation='ADD_RULE';
-  else if (/^(?:добавь|добавить)/u.test(rest)&&profile.effect==='wiggle'&&/постоянн|wiggle/u.test(rest)) operation='ADD_EFFECT';
+  else if (/^(?:добавь|добавить)/u.test(rest)&&(profile.effect==='inertialOvershoot'||profile.effect==='wiggle'&&/постоянн|wiggle|покач/u.test(rest))) operation='ADD_EFFECT';
   else if (/^(?:убери|удали)/u.test(rest)) operation='REMOVE_EFFECT';
   else if (/^включи/u.test(rest)) operation='ENABLE_EFFECT';
   else if (/^отключи/u.test(rest)) operation='DISABLE_EFFECT';

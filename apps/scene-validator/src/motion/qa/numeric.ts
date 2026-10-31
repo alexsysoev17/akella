@@ -13,7 +13,7 @@ export interface Check {
   reason?: string;
   metrics?: unknown;
 }
-export function numericQA(state: MotionState, request = "", presentation: StatePresentation = {}) {
+export function numericQA(state: MotionState, request = "", presentation: StatePresentation = {}, options:{purpose?:'intent'|'export'}={}) {
   const checks: Check[] = [],
     frames = new Set<number>([0, state.settings.durationFrames - 1]);
   const add = (f: number) =>
@@ -84,24 +84,24 @@ export function numericQA(state: MotionState, request = "", presentation: StateP
       if(!checkedVectors.has(key)){
         checkedVectors.add(key);
         const vectorMax=Math.max(...samples.map((v,i)=>Math.hypot(v,scopedExpressionValue(state,partner,e.startFrame+e.durationFrames*i/count,presentation))));
-        checks.push({name:'visiblePositionalInertia',target:e.sourceAnimationId,status:vectorMax>threshold?'PASSED':'FAILED',reason:vectorMax<=threshold?'Combined X/Y inertia is below the unchanged positional visibility threshold':undefined,metrics:{maximumOffset:vectorMax,threshold,expressionIds:[e.expressionId,partner.expressionId]}});
+        checks.push({name:'visiblePositionalInertia',target:e.sourceAnimationId,status:vectorMax>threshold?'PASSED':options.purpose==='export'&&Number.isFinite(vectorMax)?'WARNING':'FAILED',reason:vectorMax<=threshold?'Combined X/Y inertia is below the unchanged positional visibility threshold; export reproduces the saved strength, it does not require a new visible effect':undefined,metrics:{maximumOffset:vectorMax,threshold,expressionIds:[e.expressionId,partner.expressionId]}});
       }
       checks.push({name:'positionalInertiaComponent',target:e.expressionId,status:Number.isFinite(max)?'PASSED':'FAILED',reason:'Visibility is measured on the combined positional vector, not independently on each axis.',metrics:{maximumOffset:max,componentVisible:max>threshold}});
     }else{
     checks.push({
       name: "visibleOscillation",
       target: e.expressionId,
-      status: max > threshold ? "PASSED" : "FAILED",
+      status: max > threshold ? "PASSED" : options.purpose==='export'&&Number.isFinite(max)?'WARNING':"FAILED",
       reason:
         max <= threshold
-          ? e.parameters.mode === "ae"
+          ? options.purpose==='export'?"Saved inertia is below the unchanged visibility threshold. Export reproduces its exact parameters; this is not a non-finite/continuity defect.":e.parameters.mode === "ae"
             ? "Insufficient instantaneous incoming velocity or zero amplitude; inspect base easing/distance. AE mode cannot substitute a lookback secant or impulse."
             : "Insufficient incoming velocity or zero amplitude; change lookback or explicit incomingImpulse"
           : undefined,
-      metrics: { maximumOffset: max },
+      metrics: { maximumOffset: max,threshold,peakFrame:e.startFrame+e.durationFrames*samples.findIndex(v=>Math.abs(v)===max)/count,startFrame:e.startFrame,endFrame:e.startFrame+e.durationFrames,purpose:options.purpose??'intent' },
     });
     }
-    const periodic = hz * duration >= 1.5 && !(partner && max <= 1e-12);
+    const periodic = hz * duration >= 1.5 && !(partner && max <= 1e-12) && !(options.purpose==='export'&&max<=1e-12);
     const halfPeriods = peaks
       .slice(1)
       .map((p, i) => p.time - peaks[i].time)
@@ -258,7 +258,7 @@ export function numericQA(state: MotionState, request = "", presentation: StateP
             ? "WARNING"
             : "FAILED",
           reason: "Consecutive base tracks have different end/start values",
-          metrics: { property, previousEnd: end, nextStart: start },
+          metrics: { property, frame: current.startFrame, previousEnd: end, nextStart: start },
         });
     }
   }
