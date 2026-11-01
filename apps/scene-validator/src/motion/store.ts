@@ -1,3 +1,4 @@
+import { agentPolicy, type AgentValidationMode } from './agent-policy.js';
 import { ensureRegistry } from "./registry.js";
 import { isDeepStrictEqual } from "node:util";
 import { createHash, randomUUID } from "node:crypto";
@@ -148,6 +149,7 @@ export async function changeMotion(
     expectedRevision: string;
     signal?:AbortSignal;
     checkpoint?:()=>void;
+    agentValidationMode?: AgentValidationMode;
     expectedSourceFingerprint?: string;
     operations?: unknown;
     operationBatches?: unknown[];
@@ -242,7 +244,7 @@ export async function changeMotion(
       const {prepareSkill}=await import("../motion-library/skills/runtime.js");
       for(const app of doc.state.skillApplications.filter(a=>a.enabled))await prepareSkill(project,doc.state,app,{repair:false,signal:input.signal,beforeRender:input.checkpoint});
     }
-    if(doc.state.motionRules?.length||before.motionRules?.length){const {ruleQA,hasVerifiedRuleQA}=await import("./rule-qa.js");ruleQAReused=hasVerifiedRuleQA(project,doc.state,before);if(!ruleQAReused){const qa=await ruleQA(project,doc.state,before,input.signal,input.checkpoint);if(qa.status!=="PASSED")throw Object.assign(Error("MOTION_RULE_QA_FAILED"),{report:qa});}}
+    if((!input.agentValidationMode||agentPolicy(input.agentValidationMode).mandatoryQA)&&(doc.state.motionRules?.length||before.motionRules?.length)){const {ruleQA,hasVerifiedRuleQA}=await import("./rule-qa.js");ruleQAReused=hasVerifiedRuleQA(project,doc.state,before);if(!ruleQAReused){const qa=await ruleQA(project,doc.state,before,input.signal,input.checkpoint);if(qa.status!=="PASSED")throw Object.assign(Error("MOTION_RULE_QA_FAILED"),{report:qa});}}
     const previousRevision = doc.revision;
     doc.revision = randomUUID();
     if (input.transactionId)

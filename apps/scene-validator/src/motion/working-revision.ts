@@ -1,10 +1,14 @@
+import {expressionValue} from './expressions.js';
+import {scopedExpressionValue} from './transition-effects.js';
+import {evaluateAnimation} from './engine.js';
+import {agentPolicy, agentValidationMode, type AgentValidationMode} from './agent-policy.js';
 import {objectsIn} from './context.js';
 import {renderNativeFrame} from '../native/client.js';
 import { z } from 'zod';
 import { isDeepStrictEqual } from 'node:util';
 import type { LoadedProject } from '../types.js';
 import { operationSchema, type MotionState, type Operation } from './schema.js';
-import { applyOperations, motionDiff } from './operations.js';
+import { applyOperations, motionDiff, validateMotion } from './operations.js';
 import { motionToolSchema, lowerMotionTool } from './tools.js';
 import { buildRegistry } from './registry.js';
 import { evaluateMotion } from './evaluation.js';
@@ -28,6 +32,7 @@ export type ResultCheck = z.infer<typeof requirementCheckSchema>;
 /** Ephemeral canonical candidate only. Persistence/history/lock remain in changeMotion. */
 export class WorkingRevision {
     original: MotionState;
+    readonly scopeExpansions: unknown[] = [];
     private readTargets=new Set<string>();
     state: MotionState;
     batches: Operation[][] = [];
@@ -44,13 +49,13 @@ export class WorkingRevision {
         batchIndex: number;
         operationsDigest: string;
     }>();
-    constructor(readonly project: LoadedProject, public revision: string, state: MotionState, readonly request: string) { this.original = structuredClone(state); this.state = structuredClone(state); }
+    constructor(readonly project: LoadedProject, public revision: string, state: MotionState, readonly request: string, readonly validationMode: AgentValidationMode = agentValidationMode()) { this.original = structuredClone(state); this.state = structuredClone(state); }
     defineChecks(input: unknown, targets: string[], allowTimeline = false, dependencyPolicy: "reject" | "preserve-relative" = "reject") { if (this.startedEditing)
-        throw Error('CHECKS_MUST_PRECEDE_EDITS'); const checks = z.array(requirementCheckSchema).min(1).max(200).parse(input); if (new Set(checks.map(c => c.checkId)).size !== checks.length)
+        throw Error('CHECKS_MUST_PRECEDE_EDITS'); const checks = z.array(requirementCheckSchema).min(agentPolicy(this.validationMode).mandatoryResultChecks ? 1 : 0).max(200).parse(input); if (new Set(checks.map(c => c.checkId)).size !== checks.length)
         throw Error('DUPLICATE_CHECK_ID'); if (checks.some(c => !this.request.includes(c.sourceText)))
         throw Error('CHECK_SOURCE_NOT_IN_USER_REQUEST'); if (!targets.length || targets.some(id => !this.objects().some(o => o.logicalObjectId === id)))
         throw Error("INVALID_DECLARED_TARGET_SCOPE"); this.scope = [...new Set(targets)];this.observeTargets(targets); this.allowTimeline = allowTimeline; this.dependencyPolicy = dependencyPolicy; this.checks = checks; return { defined: checks.length, scope: this.scope, allowTimeline }; }
-    apply(input: unknown, deliveryId: string, typed = false) { if (!this.checks.length)
+    apply(input: unknown, deliveryId: string, typed = false) { if (agentPolicy(this.validationMode).mandatoryResultChecks && !this.checks.length)
         throw Error('DEFINE_RESULT_CHECKS_FIRST'); const inputDigest = digest(input); const previous = this.receipts.get(deliveryId); if (previous) {
         if (previous.digest !== inputDigest)
             throw Error('TOOL_CALL_ID_REUSED');
@@ -58,8 +63,29 @@ export class WorkingRevision {
             throw Error('TOOL_CALL_REVERTED: use a new callId');
         return previous.result;
     } const ops = typed ? lowerMotionTool(this.project, this.state, motionToolSchema.parse(input)) : z.array(operationSchema).min(1).max(500).parse(input); if (this.batches.reduce((n, b) => n + b.length, 0) + ops.length > 500)
-        throw Error("WORKING_OPERATION_LIMIT: canonical history supports at most 500 operations per atomic transaction"); const before = this.state; const next = applyOperations(this.state, ops, this.project); this.assertScope(next, ops); this.startedEditing = true; this.state = next; this.batches.push(ops); this.checkedDigest = undefined; const result = { applied: ops.length, candidateDigest: digest(next), diff: motionDiff(before, next) }; this.receipts.set(deliveryId, { digest: inputDigest, result, batchIndex: this.batches.length - 1, operationsDigest: digest(ops) }); return result; }
+        throw Error("WORKING_OPERATION_LIMIT: canonical history supports at most 500 operations per atomic transaction"); const before = this.state; const next = applyOperations(this.state, ops, this.project); this.assertScope(next, ops); this.startedEditing = true; this.state = next; this.batches.push(ops); this.checkedDigest = undefined; const result = { applied: ops.length, candidateDigest: digest(next), diff: motionDiff(before, next), scopeExpansions: this.scopeExpansions, validationMode: this.validationMode }; this.receipts.set(deliveryId, { digest: inputDigest, result, batchIndex: this.batches.length - 1, operationsDigest: digest(ops) }); return result; }
     assertScope(next: MotionState, ops: Operation[]) {
+        if (!agentPolicy(this.validationMode).declaredScopeIsBoundary) {
+            const objects=this.objects();
+            const touched=new Set<string>();
+            const add=(e:unknown)=>{if(!e||typeof e!=='object')return;const v=e as {logicalObjectId?:string;sceneId?:string;targetId?:string};const o=objects.find(o=>o.logicalObjectId===v.logicalObjectId||o.sourceInstances.some(i=>i.sceneId===v.sceneId&&i.sourceNodeId===v.targetId));if(o)touched.add(o.logicalObjectId);};
+            for(const field of ['animations','expressions','objectTransitions','anchors','motionRules','visibility','timingDependencies'] as const){
+                if(isDeepStrictEqual(this.state[field],next[field]))continue;
+                const before=this.state[field]??[],after=next[field]??[];
+                for(const e of [...before,...after]){
+                    if(before.some(b=>isDeepStrictEqual(b,e))&&after.some(a=>isDeepStrictEqual(a,e)))continue;
+                    add(e);
+                    if('scope'in e&&e.scope&&'logicalObjectIds'in e.scope) e.scope.logicalObjectIds.forEach(id=>touched.add(id));
+                    if('animationId'in e){add(next.animations.find(a=>a.animationId===e.animationId)??this.state.animations.find(a=>a.animationId===e.animationId));}
+                }
+            }
+            const timelineChanged=!isDeepStrictEqual(this.state.settings,next.settings)||!isDeepStrictEqual(this.state.blocks,next.blocks);
+            this.observeTargets([...touched]);
+            const expanded=[...touched].filter(id=>!this.scope.includes(id));
+            if(expanded.length||timelineChanged)this.scopeExpansions.push({batch:this.batches.length,targets:expanded,timelineChanged,reason:'Actual canonical transaction diff; explicit tool operations and engine-derived dependencies',operationTypes:ops.map(o=>o.type)});
+            this.scope=[...new Set([...this.scope,...touched])];
+            return;
+        }
         const own = (e: {
             sceneId: string;
             targetId: string;
@@ -100,7 +126,7 @@ export class WorkingRevision {
     revert() { if (!this.batches.length)
         throw Error('NO_EDIT_TO_REVERT'); this.batches.pop(); this.state = this.batches.reduce((state, batch) => applyOperations(state, batch, this.project), structuredClone(this.original)); this.checkedDigest = undefined; return this.diff(); }
     rollback() { this.state = structuredClone(this.original); this.batches = []; this.checkedDigest = undefined; }
-    diff() { return { baseRevision: this.revision, candidateDigest: digest(this.state), batches: this.batches.length, diff: motionDiff(this.original, this.state) }; }
+    diff() { return { baseRevision: this.revision, candidateDigest: digest(this.state), batches: this.batches.length, validationMode: this.validationMode, scopeExpansions: this.scopeExpansions, diff: motionDiff(this.original, this.state) }; }
     evaluate() {
         const presentation = statePresentation(this.project, this.state), entries = (s: MotionState, k: string) => k === 'animation' ? s.animations : k === 'expression' ? (s.expressions ?? []) : (s.objectTransitions ?? []), entry = (s: MotionState, k: string, id: string) => entries(s, k).find(e => ('animationId' in e ? e.animationId : 'expressionId' in e ? e.expressionId : e.transitionId) === id);
         return this.checks.map(c => { const a = c.assertion; let actual: unknown, passed = false; if(a.kind==='entryMatches'){const matches=entries(this.state,a.entity).filter(e=>{const logical='logicalObjectId'in e?e.logicalObjectId:this.objects().find(o=>o.sourceInstances.some(i=>i.sceneId===e.sceneId&&i.sourceNodeId===e.targetId))?.logicalObjectId;if(a.logicalObjectId&&logical!==a.logicalObjectId)return false;if(a.targetId&&(!('targetId'in e)||e.targetId!==a.targetId))return false;if(a.sceneId&&('sceneId'in e?e.sceneId!==a.sceneId:e.fromSceneId!==a.sceneId&&e.toSceneId!==a.sceneId))return false;return a.where.every(condition=>{let value:unknown=e;for(const key of condition.path){if(['__proto__','prototype','constructor'].includes(key))return false;value=value&&typeof value==='object'?Object.getOwnPropertyDescriptor(value,key)?.value:undefined;}return isDeepStrictEqual(value,condition.value);});});actual={count:matches.length,ids:matches.map(e=>'animationId'in e?e.animationId:'expressionId'in e?e.expressionId:e.transitionId)};return {...c,status:matches.length>=a.minimumCount?'PASSED':'FAILED',actual};}if(a.kind==='renderedDelta'){const proof=this.renderProofs.get(c.checkId);return {...c,...(proof?.digest===digest(this.state)?proof.result:{status:'NOT_TESTED',actual:null})};}if (a.kind === 'startDelta') {
@@ -147,15 +173,26 @@ export class WorkingRevision {
             }).range > a.minimumRange;
         } return { ...c, status: passed ? 'PASSED' : 'FAILED', actual }; });
     }
+    validateIntegrity() {
+        validateMotion(this.state,this.project);
+        const presentation=statePresentation(this.project,this.state),frames=new Set<number>();
+        const changed=[...this.state.animations.filter(a=>!this.original.animations.some(b=>isDeepStrictEqual(a,b))),...(this.state.expressions??[]).filter(a=>!this.original.expressions?.some(b=>isDeepStrictEqual(a,b))),...(this.state.objectTransitions??[]).filter(a=>!this.original.objectTransitions?.some(b=>isDeepStrictEqual(a,b)))];
+        for(const e of changed)for(let i=0;i<=64;i++)frames.add(e.startFrame+e.durationFrames*i/64);
+        const finite=(v:unknown):boolean=>typeof v==='number'?Number.isFinite(v):Array.isArray(v)?v.every(finite):v&&typeof v==='object'?Object.values(v).every(finite):true;
+        for(const e of this.state.expressions??[]){if(!changed.includes(e))continue;for(let i=0;i<=64;i++){const frame=e.startFrame+e.durationFrames*i/64;const value=e.transitionId?scopedExpressionValue(this.state,e,frame,presentation):expressionValue(e,frame,this.state.settings.fps,this.state.animations,evaluateAnimation);if(!Number.isFinite(value))throw Error('NON_FINITE_EXPRESSION_VALUE');}}
+        for(const frame of frames)if(!finite(evaluateMotion(this.state,frame,presentation)))throw Error('NON_FINITE_MOTION_VALUE');
+        return {status:'PASSED',numericFrames:frames.size,renderValidation:'NOT_TESTED',mathematicalProof:'bounded numerical sampling plus canonical validation'};
+    }
     async validate(signal?: AbortSignal, beforeRender?: () => void) { signal?.throwIfAborted();const validationStarted=performance.now();let sampledRenderMs=0; const frames=new Map<string,Awaited<ReturnType<typeof renderNativeFrame>>>();
         for(const check of this.checks){const a=check.assertion;if(a.kind!=='renderedDelta')continue;
             const sample=async(state:MotionState,frame:number)=>{if(frame>=state.settings.durationFrames)throw Error('CHECK_FRAME_OUTSIDE_OUTPUT');const key=digest(state)+':'+frame;let rendered=frames.get(key);if(!rendered){beforeRender?.();const renderStarted=performance.now();rendered=await renderNativeFrame(this.project,state,frame,{scale:.25,diagnostics:true,signal});sampledRenderMs+=performance.now()-renderStarted;frames.set(key,rendered);}const instances=rendered.composition?.instances.filter(i=>i.logicalObjectId===a.logicalObjectId&&i.visible&&(!a.sceneId||i.sceneId===a.sceneId))??[];if(instances.length!==1||!instances[0].transform)return {value:null,reason:instances.length>1?'AMBIGUOUS_VISIBLE_INSTANCE':'NO_VISIBLE_INSTANCE'};const i=instances[0],m=i.transform!;return {value:a.property==='x'?m[0][2]:a.property==='y'?m[1][2]:a.property==='rotation'?Math.atan2(m[1][0],m[0][0])*180/Math.PI:i.effectiveOpacity??i.opacity??0,frame,sceneId:i.sceneId,targetId:i.targetId,transform:m};};
             const baseline=await sample(this.original,a.beforeFrame),candidate=await sample(this.state,a.afterFrame);const delta=baseline.value===null||candidate.value===null?null:candidate.value-baseline.value;this.renderProofs.set(check.checkId,{digest:digest(this.state),result:{status:delta!==null&&Number.isFinite(delta)&&Math.abs(delta-a.delta)<=a.tolerance?'PASSED':'FAILED',actual:{baseline,candidate,delta,basis:'Actual native-rendered instance transforms; not artistic approval'}}});
         }
-        const checks = this.evaluate(), qa = await ruleQA(this.project, this.state, this.original, signal, beforeRender, { scale: .25 }); const passed = checks.length > 0 && checks.every(c => c.status === 'PASSED') && qa.status === 'PASSED'; this.checkedDigest = passed ? digest(this.state) : undefined; return { status: passed ? 'PASSED' : 'FAILED', checks, qa,timings:{totalMs:performance.now()-validationStarted,renderMs:sampledRenderMs+qa.timings.renderMs}, artisticAssessment: 'NOT_TESTED' }; }
-    assertReady() { if (!this.batches.length || !this.checks.length || this.checkedDigest !== digest(this.state))
+        const checks = this.evaluate(), qa = await ruleQA(this.project, this.state, this.original, signal, beforeRender, { scale: .25 }); this.validateIntegrity(); const passed = (!agentPolicy(this.validationMode).mandatoryResultChecks || checks.length > 0) && checks.every(c => c.status === 'PASSED') && qa.status === 'PASSED'; const commitAllowed = !agentPolicy(this.validationMode).mandatoryQA || passed; this.checkedDigest = commitAllowed ? digest(this.state) : undefined; return { status: passed ? 'PASSED' : 'FAILED', commitAllowed, technicalIntegrity: 'PASSED', checks, qa,timings:{totalMs:performance.now()-validationStarted,renderMs:sampledRenderMs+qa.timings.renderMs}, artisticAssessment: 'NOT_TESTED' }; }
+    assertReady() { if (!agentPolicy(this.validationMode).mandatoryQA) { if(!this.batches.length)throw Error('NO_EDIT_TO_COMMIT');this.validateIntegrity();return this.evaluate(); } if (!this.batches.length || !this.checks.length || this.checkedDigest !== digest(this.state))
         throw Error('CANDIDATE_NOT_VERIFIED'); const checks = this.evaluate(); if (checks.some(c => c.status !== 'PASSED'))
         throw Error('RESULT_CHECK_FAILED'); return checks; }
+    authorizeContextTargets(ids:string[]){if(!agentPolicy(this.validationMode).declaredScopeIsBoundary)this.scope=[...new Set([...this.scope,...ids])];}
     observeTargets(ids:string[]){for(const id of ids)this.readTargets.add(id);}
     /** One bounded rebase; any changed read dependency is a real conflict. */
     rebase(revision:string,latest:MotionState){

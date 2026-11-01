@@ -225,7 +225,7 @@ export async function proposeMotion(
     signal?: AbortSignal;
     config?: Partial<HarnessConfig>;
     evalContext?: { evalId: string; datasetVersion: string };
-    resumeContract?:IntentPlan;runId?:string;deferredRecovery?:boolean;executionRuntime?:"agent"|"legacy";
+    resumeContract?:IntentPlan;runId?:string;deferredRecovery?:boolean;executionRuntime?:"agent"|"legacy";validationMode?:"minimal"|"strict";
   } = {},
 ) {
   let settingsSource = "api";
@@ -1158,7 +1158,7 @@ export async function executeMotion(
     signal?: AbortSignal;
     config?: Partial<HarnessConfig>;
     evalContext?: { evalId: string; datasetVersion: string };
-    resumeContract?:IntentPlan;runId?:string;deferredRecovery?:boolean;executionRuntime?:"agent"|"legacy";
+    resumeContract?:IntentPlan;runId?:string;deferredRecovery?:boolean;executionRuntime?:"agent"|"legacy";validationMode?:"minimal"|"strict";
   } = {},
 ) {
   runtimeCode.assertCurrent();

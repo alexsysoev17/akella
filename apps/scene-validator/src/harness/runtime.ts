@@ -104,7 +104,7 @@ export class HarnessRun {
     this.recoverySignal=external??new AbortController().signal;
     this.supervisor=new GlobalFailureSupervisor({
       request:"",revision:"unknown",reserveSourceAttempt:config.recovery.codeRepair.enabled,maxAttempts:config.recovery.supervisorMaxAttempts,maxDurationMs:config.recovery.supervisorMaxDurationMs,signal:external,
-      resources:()=>({primaryCalls:this.calls.filter(c=>!c.purpose?.includes("recovery")&&c.purpose!=="code-repair").length,recoveryCalls:this.calls.filter(c=>c.purpose?.includes("recovery")).length,codeInvestigationCalls:this.calls.filter(c=>c.purpose==="code-repair").length,maxPrimaryCalls:config.maxLLMCalls,projectRecoveryAttempts:config.recovery.maxAttempts,codeInvestigationEnabled:config.recovery.codeRepair.enabled}),
+      resources:()=>({primaryCalls:this.calls.filter(c=>!c.purpose?.includes("recovery")&&c.purpose!=="code-repair").length,recoveryCalls:this.calls.filter(c=>c.purpose?.includes("recovery")).length,codeInvestigationCalls:this.calls.filter(c=>c.purpose==="code-repair").length,maxPrimaryCalls:this.agentExecution?null:config.maxLLMCalls,projectRecoveryAttempts:config.recovery.maxAttempts,codeInvestigationEnabled:config.recovery.codeRepair.enabled}),
       known:async fingerprint=>(await supervisorExperience(project.root)).filter(r=>r.fingerprint===fingerprint&&r.codeVersion===digest(this.references)&&r.status==="VERIFIED").map(r=>({strategy:r.strategy,procedure:r.procedure,validation:r.validation})),
       trace:()=>this.events.slice(-12).map(e=>({stage:e.stage,at:e.at,durationMs:e.durationMs})),
       persist:async report=>{await this.diagnostic("global-recovery",{status:report.status,latestFailure:report.events.at(-1)?.errorCode,eventCount:report.events.length,attemptCount:report.attempts.length,reason:report.finalReason});if(config.privacy==="full")await atomicJson(path.join(directory,"global-recovery.json"),redact(report));},
@@ -167,12 +167,14 @@ export class HarnessRun {
     if(this.recoverySignal.aborted)throw Error("CANCELLED");
     if(this.repairStarted!==undefined&&performance.now()-this.repairStarted>this.config.recovery.maxDurationMs)throw Error("RECOVERY_TIME_BUDGET");
   }
+  private agentExecution = false;
+  enableAgentExecution() { this.agentExecution = true; clearTimeout(this.timer); }
   checkpoint() {
     if (this.signal.aborted)
       throw this.signal.reason instanceof BudgetError
         ? this.signal.reason
         : new BudgetError("CANCELLED");
-    if (performance.now() - this.started > this.config.maxDurationMs)
+    if (!this.agentExecution && performance.now() - this.started > this.config.maxDurationMs)
       throw new BudgetError("EXECUTION_TIMEOUT");
   }
   async record(stage: string, data: unknown) {
@@ -224,10 +226,10 @@ export class HarnessRun {
           3)
     )
       throw new BudgetError("RECOVERY_PROVIDER_BUDGET");
-    if (this.calls.filter(c=>!c.purpose?.includes("recovery")).length >= this.config.maxLLMCalls && !isRecovery && !isCodeRepair)
+    if (this.calls.filter(c=>!c.purpose?.includes("recovery")).length >= this.config.maxLLMCalls && !isRecovery && !isCodeRepair && !isAgent)
       throw new BudgetError("LLM_CALL_BUDGET");
     if (
-      this.calls.length >=
+      !isAgent && this.calls.length >=
       this.config.maxLLMCalls + (this.config.recovery?.maxAttempts ?? 3) + 2
     )
       throw new BudgetError("LLM_CALL_BUDGET");
@@ -254,7 +256,7 @@ export class HarnessRun {
     request = { ...request, maxOutputTokens: budget.outputTokens };
     const known = this.calls.reduce((n, c) => n + (c.cost ?? 0), 0);
     if (
-      this.config.maxEstimatedCost !== null &&
+      !isAgent && this.config.maxEstimatedCost !== null &&
       known >= this.config.maxEstimatedCost
     )
       throw new BudgetError("COST_BUDGET");
@@ -265,7 +267,7 @@ export class HarnessRun {
       : this.config.repairBudgetMs - (now - this.repairStarted!);
     const primaryRecoveryReserve=semantic&&this.config.recovery.enabled?Math.min(this.config.repairBudgetMs,this.config.recovery.maxDurationMs,Math.max(0,this.config.maxDurationMs-this.config.minimumRetryBudgetMs-this.config.executionReserveMs)):0;
     const totalRemaining = reservedRecovery ? this.config.recovery.maxDurationMs-(now-this.repairStarted!) : this.config.maxDurationMs - (now - this.started) - primaryRecoveryReserve - (primaryRecoveryReserve>0?this.config.executionReserveMs:0);
-    const available = Math.min(phaseRemaining, totalRemaining);
+    const available = isAgent ? request.timeoutMs : Math.min(phaseRemaining, totalRemaining);
     const completed = this.calls.filter((c) => c.status === "SUCCESS" && (reservedRecovery ? c.purpose===request.purpose : c.purpose?.startsWith("semantic") && c.purpose!=="semantic-recovery"));
     const estimated = Math.max(
       this.config.minimumRetryBudgetMs,
@@ -273,7 +275,7 @@ export class HarnessRun {
     );
     if (
       available <= 0 ||
-      (this.calls.length > 0 &&
+      (!isAgent && this.calls.length > 0 &&
         available < estimated + this.config.executionReserveMs)
     ) {
       const code = isAgent ? "AGENT_TIME_BUDGET" : semantic ? "SEMANTIC_TIME_BUDGET" : "REPAIR_TIME_BUDGET";
@@ -354,7 +356,7 @@ export class HarnessRun {
       if (result.usage && result.usage.outputTokens > request.maxOutputTokens)
         throw new BudgetError("OUTPUT_TOKEN_BUDGET");
       if (
-        this.config.maxEstimatedCost !== null &&
+        !isAgent && this.config.maxEstimatedCost !== null &&
         result.estimatedCost !== null &&
         known + result.estimatedCost > this.config.maxEstimatedCost
       )
@@ -369,7 +371,7 @@ export class HarnessRun {
       call.latencyMs = performance.now()-start;
       this.providerInitializationStatus = "CALL_FAILED";
       const code = (e as {code?:string})?.code;
-      if (!transportRetried && !this.signal.aborted && ["TRANSPORT","PROVIDER_TRANSPORT_ERROR","PROVIDER_EVENT_PARSE_ERROR"].includes(code ?? "") && this.calls.length < this.config.maxLLMCalls) {
+      if (!transportRetried && !this.signal.aborted && ["TRANSPORT","PROVIDER_TRANSPORT_ERROR","PROVIDER_EVENT_PARSE_ERROR"].includes(code ?? "") && (isAgent || this.calls.length < this.config.maxLLMCalls)) {
         const recovery = await this.supervisor.attempt(event, {strategy:"deterministic",procedure:"bounded-provider-transport-retry/1",reason:"One transient transport retry against the identical immutable request; normal call/time/context budgets still apply",run:()=>this.invoke(adapter,request,true),verify:async result=>({status:"PASSED",responseReceived:true,callIndex:result.callIndex})});
         if (recovery.ok) return recovery.value!;
         throw recovery.error;

@@ -27,7 +27,7 @@ const components = [
   "motion-library/guidance",
   "motion/store",
   "motion/incremental-patch",
-  "motion/agent-runtime", "motion/working-revision", "motion-library/expressions/program",
+  "motion/agent-policy", "motion/agent-runtime", "motion/working-revision", "motion-library/expressions/program",
   "motion/anchor",
   "motion/anchor-contract",
   "motion/anchor-edit",

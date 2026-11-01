@@ -6,19 +6,20 @@ import { identityFixture, node } from './identity-fixture.js';
 import { readMotion, changeMotion } from '../src/motion/store.js';
 import { executeMotion } from '../src/motion/service.js';
 import { registerProvider } from '../src/harness/providers/index.js';
-import { WorkingRevision } from '../src/motion/working-revision.js';
+import { WorkingRevision as BaseWorkingRevision } from '../src/motion/working-revision.js';
 import { evaluateProgram, programSchema } from '../src/motion-library/expressions/program.js';
 import { evaluateMotion } from '../src/motion/evaluation.js';
 import { statePresentation } from '../src/motion/transitions.js';
 import { renderNativeFrame, closeNativeRenderer } from '../src/native/client.js';
 import { exportVideo } from '../src/motion/video.js';
 import { logicalId } from '../src/motion/registry.js';
+class WorkingRevision extends BaseWorkingRevision { constructor(...args: ConstructorParameters<typeof BaseWorkingRevision>) { super(...args.slice(0,4) as [typeof args[0],string,typeof args[2],string], 'strict'); } }
 after(() => closeNativeRenderer());
 const call = (tool: string, args: unknown, id = randomUUID()) => ({ tool, argumentsJson: JSON.stringify(args), callId: id });
 const answer = (calls: unknown[]) => ({ calls, disposition: 'CONTINUE', message: 'Изменения проверены', assumptions: [] });
 async function fixture() { const f = await identityFixture(1, s => { s[0].children = [1, 2, 3].map(i => node('star' + i, 'звезда ' + i, 30 * i, 30, 16, 16)); }); let d = await readMotion(f.project); d = (await changeMotion(f.project.root, { expectedRevision: d.revision, request: 'setup', operations: [{ type: 'setProjectSettings', settings: { ...d.state.settings, width: 160, height: 100, fps: 30, durationFrames: 90 } }, { type: 'setBlocks', blocks: d.state.blocks.map(b => ({ ...b, startFrame: 0, durationFrames: 90 })) }, ...[1, 2, 3].map(i => ({ type: 'addAnimation', animation: { animationId: 'in' + i, sceneId: 's0', targetId: 'star' + i, startFrame: 0, durationFrames: 20, effect: 'slideUp', parameters: { distance: 25, mode: 'in' }, easing: 'linear', enabled: true } })), ...[1, 2, 3].map(i => ({ type: 'setExpression', expression: { expressionId: 'spin' + i, type: 'wiggle', sceneId: 's0', targetId: 'star' + i, property: 'rotation', startFrame: 0, durationFrames: 90, enabled: true, parameters: { amplitude: 3, frequency: 1, seed: i, temporalMode: 'continuous' } } }))] })).document; return { ...f, doc: d }; }
 function provider(fn: (n: number, r: any) => unknown) { let calls = 0; const id = 'agent-fixture-' + randomUUID().slice(0, 8), stop = registerProvider(id, () => ({ id, mode: 'mock', capabilities: () => ({ structuredOutput: true, nativeToolCalling: false, cancellation: true, usage: false, nativeOutputTokenLimit: false }), generate: async (r) => ({ output: await fn(++calls, r), usage: null, estimatedCost: null, latencyMs: 0, diagnostics: ['mock understanding; real runtime/tools/render/storage'], toolCalls: [] }) })); return { id, stop, calls: () => calls }; }
-async function run(f: Awaited<ReturnType<typeof fixture>>, p: ReturnType<typeof provider>, request: string, maxLLMCalls = 3) { return executeMotion(f.project, { editId: randomUUID(), mode: 'edit', request, expectedRevision: (await readMotion(f.project)).revision, settings: { provider: p.id, model: '' } }, () => { }, { executionRuntime: 'agent', config: { maxLLMCalls, maxRepairAttempts: 0 } }); }
+async function run(f: Awaited<ReturnType<typeof fixture>>, p: ReturnType<typeof provider>, request: string, maxLLMCalls = 3) { return executeMotion(f.project, { editId: randomUUID(), mode: 'edit', request, expectedRevision: (await readMotion(f.project)).revision, settings: { provider: p.id, model: '' } }, () => { }, { executionRuntime: 'agent', validationMode:'strict', config: { maxLLMCalls, maxRepairAttempts: 0 } }); }
 const targets = [1, 2, 3].map(i => logicalId('звезда ' + i));
 test('agent inspects three targets, removes actual rotation, adds positional wiggle, renders, checks final state and commits once with Undo/Redo', async () => { const f = await fixture(), request = 'Добавь wiggle звёздам 1, 2, 3 и убери вращение'; const p = provider(n => n === 1 ? answer([call('listObjects', {}), call('describeTool', { kind: 'check' })]) : n === 2 ? answer(targets.map(logicalObjectId => call('inspectAnimations', { logicalObjectId }))) : answer([call('defineChecks', { targets, checks: [...[1, 2, 3].map(i => ({ checkId: 'remove' + i, sourceText: request, assertion: { kind: 'absent', entity: 'expression', id: 'spin' + i } })), ...[1, 2, 3].map(i => ({ checkId: 'position' + i, sourceText: request, assertion: { kind: 'motionVaries', sceneId: 's0', targetId: 'star' + i, property: 'x', frames: [30, 40, 50, 60], minimumRange: .01 } })), { checkId: 'preserve', sourceText: request, assertion: { kind: 'basePreserved', animationIds: ['in1', 'in2', 'in3'] } }] }), call('applyEdit', { operations: [...[1, 2, 3].map(i => ({ type: 'removeExpression', expressionId: 'spin' + i })), ...[1, 2, 3].flatMap(i => ['x', 'y'].map(property => ({ type: 'setExpression', expression: { expressionId: property + i, type: 'wiggle', sceneId: 's0', targetId: 'star' + i, property, startFrame: 0, durationFrames: 90, enabled: true, parameters: { amplitude: 4, frequency: 1, seed: i, temporalMode: 'continuous' } } })))] }), call('renderFrame', { frames: [30, 40] }), call('runFocusedQA', {}), call('commitRevision', {})])); try {
     const source = await readFile(f.project.scenePath), r = await run(f, p, request);
@@ -129,12 +130,12 @@ finally {
     p.stop();
     await f.cleanup();
 } });
-test('resource stop never commits a partially edited candidate and uses no Code Repair', async () => { const f = await fixture(), request = 'Первую звезду позже и обязательно сохрани после проверки', p = provider(() => answer([call('defineChecks', { targets: [targets[0]], checks: [{ checkId: 'delay', sourceText: request, assertion: { kind: 'startDelta', animationId: 'in1', frames: 5 } }] }), call('edit', { tool: 'updateAnimation', animationId: 'in1', patch: { startFrame: 5 } })])); try {
-    await assert.rejects(() => run(f, p, request, 1), (e: any) => e.agentDisposition === 'RESOURCE_LIMIT_REACHED');
+test('no-progress stop preserves an uncommitted candidate without Code Repair or a fixed call ceiling', async () => { const f = await fixture(), request = 'Первую звезду позже и обязательно сохрани после проверки', p = provider(() => answer([call('defineChecks', { targets: [targets[0]], checks: [{ checkId: 'delay', sourceText: request, assertion: { kind: 'startDelta', animationId: 'in1', frames: 5 } }] }), call('edit', { tool: 'updateAnimation', animationId: 'in1', patch: { startFrame: 5 } })])); try {
+    await assert.rejects(() => run(f, p, request, 1), (e: any) => e.code === 'REPEATED_UNCHANGED_TOOL_FAILURE' && e.agentDisposition === 'TECHNICAL_BLOCKED');
     const after = await readMotion(f.project);
     assert.equal(after.revision, f.doc.revision);
     assert.deepEqual(after.state, f.doc.state);
-    assert.equal(p.calls(), 1);
+    assert.ok(p.calls()>1 && p.calls()<=4);
 }
 finally {
     p.stop();
