@@ -65,6 +65,8 @@ const jobs = new Map<
     total?: number;
     result?: unknown;
     error?: string;
+    agentDisposition?:string;
+    errorCode?:string;
     exportDiagnostics?:Record<string,unknown>;
   }
 >();
@@ -703,7 +705,7 @@ export async function motionApi(
               jobs.set(id,{projectId:project.config.projectId,status:"failed",error:saved?.reason??"Deferred recovery unavailable"});return;
             }finally{deferredAliases.delete(id);}
           }
-          jobs.set(id,{projectId:project.config.projectId,status:"failed",exportDiagnostics:(e as {exportDiagnostics?:Record<string,unknown>}).exportDiagnostics,error:e instanceof ProviderSettingsError?e.message:String(e)});
+          jobs.set(id,{projectId:project.config.projectId,status:"failed",exportDiagnostics:(e as {exportDiagnostics?:Record<string,unknown>}).exportDiagnostics,agentDisposition:(e as {agentDisposition?:string}).agentDisposition,errorCode:(e as {code?:string}).code,error:e instanceof ProviderSettingsError||(e as {agentDisposition?:string}).agentDisposition?e.message:String(e)});
         })
         .finally(() => {
           active.delete(key);

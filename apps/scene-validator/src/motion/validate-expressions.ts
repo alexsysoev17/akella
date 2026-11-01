@@ -1,3 +1,4 @@
+import {validateProgram} from '../motion-library/expressions/program.js';
 import { TimelineConstraintError, requiredProjectFrames } from "./constraints.js";
 import { intervalConflict } from "./intervals.js";
 import { expressionLifecycles } from "../motion-library/expressions/registry.js";
@@ -15,15 +16,16 @@ export function validateExpressions(
     const target = objects.get(`${e.sceneId}/${e.targetId}`);
     if (!target || target.mask)
       throw new Error("Expression target missing or is a mask");
+    if(e.type==="procedural"){validateProgram(e.program);for(const i of e.program.instructions)if(i.op==="sample"&&!state.animations.some(a=>a.animationId===i.animationId))throw Error("PROGRAM_DEPENDENCY_MISSING");}
     if (e.transitionId) {
       const t = state.objectTransitions?.find(t => t.transitionId === e.transitionId);
-      if (!t || !["wiggle", "inertialOvershoot"].includes(e.type) || !["x", "y"].includes(e.property) || ![t.fromSceneId, t.toSceneId].includes(e.sceneId))
+      if (!t || !["procedural", "wiggle", "inertialOvershoot"].includes(e.type) || !["x", "y"].includes(e.property) || ![t.fromSceneId, t.toSceneId].includes(e.sceneId))
         throw new Error(`UNSUPPORTED_EFFECT_BINDING: ${e.expressionId} requires a current transition and additive X/Y Wiggle or inertia`);
     }
     if (e.ownership?.scope === "sceneInstance" && e.transitionId) throw new Error("EFFECT_SCOPE_MISMATCH: instance effect cannot bind a transition");
     if (e.ownership && e.ownership.scope === "transition" && !e.transitionId) throw new Error("UNSUPPORTED_EFFECT_BINDING: transition owner requires a motion transition");
     if (e.transitionId && e.ownership?.logicalObjectId !== undefined && e.ownership.logicalObjectId !== state.objectTransitions!.find(t => t.transitionId === e.transitionId)!.logicalObjectId) throw new Error("EFFECT_OWNER_MISMATCH");
-    if (e.ownership?.scope === "logicalObject" && (e.type !== "wiggle" || !["x", "y", "rotation", "scaleX", "scaleY"].includes(e.property) || !e.ownership.logicalObjectId)) throw new Error("UNSUPPORTED_LOGICAL_EFFECT: only additive transform Wiggle is supported");
+    if (e.ownership?.scope === "logicalObject" && (!["wiggle","procedural"].includes(e.type) || !["x", "y", "rotation", "scaleX", "scaleY"].includes(e.property) || !e.ownership.logicalObjectId)) throw new Error("UNSUPPORTED_LOGICAL_EFFECT: only additive transform Wiggle is supported");
     if (e.type === "inertialOvershoot" && e.transitionId) {
       const t = state.objectTransitions!.find(t => t.transitionId === e.transitionId)!;
       if (e.parameters.mode !== "ae" || e.sourceAnimationId !== t.transitionId || e.startFrame !== t.startFrame + t.durationFrames || e.parameters.incomingImpulse) throw new Error("INVALID_TRANSITION_INERTIA_ANCHOR");

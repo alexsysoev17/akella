@@ -1,3 +1,4 @@
+import {programSchema} from './program.js';
 import {globalFrameSchema, intervalDurationSchema} from "../../motion/time.js";
 import { z } from "zod";
 import { springParameters, bounceParameters } from "../easings/registry.js";
@@ -26,6 +27,7 @@ const amplitude = finite(0, 100000),
   frequency = finite(0.001, 10000),
   decay = finite(0, 10000);
 export const expressionSchema = z.discriminatedUnion("type", [
+  z.object({...common,type:z.literal("procedural"),program:programSchema,parameters:z.object({amplitude}).strict()}).strict(),
   z
     .object({
       ...common,
@@ -96,7 +98,7 @@ export const expressionSchema = z.discriminatedUnion("type", [
 export type Expression = z.infer<typeof expressionSchema>;
 /** Shared temporal contract; absence of temporalMode preserves old stored Wiggle output. */
 export const expressionLifecycles = {
-  wiggle: "continuous", loop: "continuous",
+  procedural: "continuous", wiggle: "continuous", loop: "continuous",
   inertialOvershoot: "settling", dampedOscillation: "settling",
   spring: "settling", bounce: "settling",
 } as const satisfies Record<Expression["type"], "continuous" | "settling">;
@@ -105,6 +107,7 @@ export const expressionRegistry = expressionSchema.options.map((option) => ({
   lifecycle: expressionLifecycles[option.shape.type.value],
   parameterSchema: z.toJSONSchema(option.shape.parameters),
   description: {
+    procedural: "Versioned bounded mathematical stack program; arbitrary additive property functions, explicit read-only base-track sample dependencies. No IO/eval/recursion.",
     wiggle: "Seeded smooth value noise; units/sec frequency.",
     dampedOscillation: "Additive sine with exponential decay per second.",
     inertialOvershoot:

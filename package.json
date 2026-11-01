@@ -36,7 +36,7 @@
     "eval:motion-tools": "node --import tsx scripts/eval-motion-tools.ts --live",
     "test:text-placement": "node --import tsx --test apps/scene-validator/tests/text-placement.browser.ts",
     "test:compat": "node scripts/test.mjs --compat",
-    "test:native": "node --import tsx --test --test-concurrency=1 apps/scene-validator/tests/native-*.test.ts",
+    "test:native": "node scripts/test.mjs --native",
     "pretest:native": "node scripts/build-ui.mjs",
     "pretest:compat": "node scripts/build-ui.mjs",
     "prebenchmark": "node scripts/build-ui.mjs",
@@ -45,7 +45,9 @@
     "recovery": "node --import tsx scripts/recovery.ts",
     "eval:recovery": "node --import tsx scripts/eval-recovery.ts",
     "eval:code-repair": "node --import tsx scripts/eval-code-repair.ts",
-    "benchmark:preview": "node --import tsx scripts/benchmark-preview.ts"
+    "benchmark:preview": "node --import tsx scripts/benchmark-preview.ts",
+    "benchmark:agent": "node --import tsx scripts/benchmark.ts --agent --dataset harness/evals/agent-native.json",
+    "benchmark:agent:live": "node --import tsx scripts/benchmark.ts --agent --dataset harness/evals/agent-native.json --live"
   },
   "dependencies": {
     "@openai/codex-sdk": "0.162.1",

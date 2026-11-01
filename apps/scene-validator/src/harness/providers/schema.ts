@@ -38,3 +38,16 @@ export function validateProviderSchema(schema: unknown, strict = true) {
   };
   visit(root, "$");
 }
+/** Lossless wire factoring of identical schema subtrees. Runtime validation stays unchanged. */
+export function compactProviderSchema(schema:unknown):unknown {
+ const counts=new Map<string,{count:number;value:Record<string,unknown>}>();
+ const candidate=(v:Record<string,unknown>)=>!v.$ref&&(typeof v.type==='string'||Array.isArray(v.anyOf))&&JSON.stringify(v).length>=20;
+ const scan=(v:unknown):void=>{if(Array.isArray(v)){v.forEach(scan);return;}if(!v||typeof v!=='object')return;const node=v as Record<string,unknown>;if(candidate(node)){const key=JSON.stringify(node),row=counts.get(key);counts.set(key,{count:(row?.count??0)+1,value:node});}Object.values(node).forEach(scan);};scan(schema);
+ const definitions=new Map<string,{name:string;value:Record<string,unknown>}>();let index=0;const existing=(schema as {$defs?:Record<string,unknown>}).$defs??{};
+ for(const [key,row]of counts)if(row.count>1){let name:string;do{name='w'+index++;}while(name in existing);if(row.count*(key.length-JSON.stringify({$ref:'#/$defs/'+name}).length)<=key.length+name.length+6)continue;definitions.set(key,{name,value:row.value});}
+ if(!definitions.size)return schema;
+ const rewrite=(v:unknown,skip?:string):unknown=>{if(Array.isArray(v))return v.map(x=>rewrite(x));if(!v||typeof v!=='object')return v;const key=JSON.stringify(v),d=definitions.get(key);if(d&&key!==skip)return {$ref:'#/$defs/'+d.name};return Object.fromEntries(Object.entries(v).map(([k,x])=>[k,rewrite(x)]));};
+ const result=rewrite(schema) as Record<string,unknown>;
+ result.$defs={...result.$defs as object,...Object.fromEntries([...definitions].map(([key,d])=>[d.name,rewrite(d.value,key)]))};
+ return JSON.stringify(result).length<JSON.stringify(schema).length?result:schema;
+}

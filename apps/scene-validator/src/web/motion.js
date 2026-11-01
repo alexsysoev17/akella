@@ -347,7 +347,7 @@ export async function mountMotion(
       const job = await api("jobs/" + jobId);
       if (job.status === "failed") {
         executionMessage =
-          "Запрос не выполнен. Изменения этого запроса не подтверждены.";
+          ({NEEDS_USER_INPUT:"Нужно уточнение.",TECHNICAL_BLOCKED:"Техническое ограничение. Исходная анимация сохранена.",RESOURCE_LIMIT_REACHED:"Достигнут лимит выполнения. Исходная анимация сохранена.",CANCELLED:"Выполнение отменено."})[job.agentDisposition]??"Запрос не выполнен. Изменения этого запроса не подтверждены.";
         $("m-proposal").textContent = executionMessage;
         data = await api("");
         refresh(true);
@@ -392,7 +392,7 @@ export async function mountMotion(
     pause();
     frame = result.playbackStart ?? 0;
     const reconciliation = result.reconciliation;
-    executionMessage = reconciliation
+    executionMessage = result.agentRuntime ? result.plan.summary : reconciliation
       ? `${reconciliation.status === "SUCCESS" ? "Применено" : reconciliation.status === "PARTIAL_SUCCESS" ? "Выполнено частично" : "Не выполнено"}: ${reconciliation.completed} из ${reconciliation.requested} ${result.intentContract ? "требований" : "задач"}.`
       : "";
     if (reconciliation?.validationLevels) {

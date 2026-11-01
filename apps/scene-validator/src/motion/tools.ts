@@ -1,10 +1,11 @@
+import {programSchema} from '../motion-library/expressions/program.js';
 import {globalFrameSchema, intervalDurationSchema} from "./time.js";
 import { TimelineConstraintError } from "./constraints.js";
 import { intervalConflict } from "./intervals.js";
 import { z } from "zod";
 import { createHash } from "node:crypto";
 import type { LoadedProject } from "../types.js";
-import { animationSchema, objectTransitionSchema, type MotionState, type Plan } from "./schema.js";
+import { animationSchema,keyframeAnimationSchema,keyframeSchema, objectTransitionSchema, type MotionState, type Plan } from "./schema.js";
 import { easingSchema } from "../motion-library/easings/registry.js";
 import { expressionSchema, expressionLifecycles } from "../motion-library/expressions/registry.js";
 import { channels, applyOperations } from "./operations.js";
@@ -15,13 +16,16 @@ import { freezeObjectOperations } from "./static-object.js";
 const id = z.string().min(1).max(180);
 const timingPatch = { startFrame: globalFrameSchema.optional(), durationFrames: intervalDurationSchema.optional() };
 const parameters = z.record(z.string(), z.union([z.number().finite(), z.string(), z.boolean(), z.null()]));
+/** Tool constructor derives redundant keyframe duration; canonical stored schema remains strict. */
+export const keyframeToolAnimationSchema=keyframeAnimationSchema.extend({durationFrames:keyframeAnimationSchema.shape.durationFrames.optional()});
+export const toolAnimationSchema=z.union([animationSchema,keyframeToolAnimationSchema]);
 export const motionToolSchema = z.discriminatedUnion("tool", [
   z.object({ tool: z.literal("freezeObject"), logicalObjectId: id }).strict(),
   z.object({ tool: z.literal("releaseStaticObject"), logicalObjectId: id }).strict(),
-  z.object({ tool: z.literal("createAnimation"), animation: animationSchema }).strict(),
-  z.object({ tool: z.literal("updateAnimation"), animationId: id, patch: z.object({ ...timingPatch, easing: easingSchema.optional(), enabled: z.boolean().optional(), parameters: parameters.optional() }).strict() }).strict(),
+  z.object({ tool: z.literal("createAnimation"), animation: toolAnimationSchema }).strict(),
+  z.object({ tool: z.literal("updateAnimation"), animationId: id, patch: z.object({ ...timingPatch, easing: easingSchema.optional(), enabled: z.boolean().optional(), parameters: parameters.optional(),keyframes:z.array(keyframeSchema).min(2).max(500).optional() }).strict() }).strict(),
   z.object({ tool: z.literal("addEffect"), expression: expressionSchema }).strict(),
-  z.object({ tool: z.literal("updateEffect"), expressionId: id, patch: z.object({ ...timingPatch, enabled: z.boolean().optional(), ownership: expressionSchema.options[0].shape.ownership, transitionId: id.optional(), parameters: parameters.optional() }).strict() }).strict(),
+  z.object({ tool: z.literal("updateEffect"), expressionId: id, patch: z.object({ ...timingPatch, enabled: z.boolean().optional(), ownership: expressionSchema.options[0].shape.ownership, transitionId: id.optional(), parameters: parameters.optional(),program:programSchema.optional() }).strict() }).strict(),
   z.object({ tool: z.literal("removeAnimation"), animationId: id, dependentPolicy: z.enum(["reject", "removeDependents"]).default("reject") }).strict(),
   z.object({ tool: z.literal("removeEffect"), expressionId: id }).strict(),
   z.object({ tool: z.literal("createStateTransition"), transition: objectTransitionSchema }).strict(),
@@ -52,26 +56,32 @@ export const findObject = resolveObjectReference;
 /** Payload/identity resolution only; the shared operation validator admits the candidate once. */
 export function lowerMotionTool(project: LoadedProject, state: MotionState, input: MotionTool): Plan["operations"] {
   const command = motionToolSchema.parse(input);
+  // Tools accept a known logical ID as a reference, but persist actual source IDs.
+  const sourceTarget=(sceneId:string,targetId:string)=>{const registry=buildRegistry(project.inspection.document,project.inspection.fingerprint);if(registry.objects.some(o=>o.sourceInstances.some(i=>i.sceneId===sceneId&&i.sourceNodeId===targetId)))return targetId;const object=registry.objects.find(o=>o.logicalObjectId===targetId);const refs=object?.sourceInstances.filter(i=>i.sceneId===sceneId)??[];if(refs.length!==1)return fail(refs.length?'AMBIGUOUS_TARGET':'TARGET_NOT_FOUND','Resolve a single current source instance for this scene',{sceneId,targetId},['findObject','inspectObject']);return refs[0].sourceNodeId;};
+  if(command.tool==='createAnimation')command.animation.targetId=sourceTarget(command.animation.sceneId,command.animation.targetId);
+  if(command.tool==='addEffect')command.expression.targetId=sourceTarget(command.expression.sceneId,command.expression.targetId);
   switch (command.tool) {
     case "freezeObject": return freezeObjectOperations(project, state, command.logicalObjectId);
     case "releaseStaticObject": return [{ type: "removeStaticObject", logicalObjectId: command.logicalObjectId }];
     case "createAnimation":
       if (state.animations.some(a => a.animationId === command.animation.animationId)) return fail("ID_ALREADY_EXISTS", "Use updateAnimation for an existing track", { animationId: command.animation.animationId }, ["updateAnimation"]);
-      return [{ type: "addAnimation", animation: command.animation }];
+      return [{ type: "addAnimation", animation: animationSchema.parse({...command.animation,durationFrames:command.animation.effect==='keyframes'?(command.animation.durationFrames??command.animation.parameters.points.at(-1)?.frame):command.animation.durationFrames}) }];
     case "updateAnimation": {
       const a = state.animations.find(a => a.animationId === command.animationId);
       const t = state.objectTransitions?.find(t => t.transitionId === command.animationId);
       if (a) {
-        const parameters = a.effect === "keyframes" && command.patch.durationFrames && !command.patch.parameters
+        if(command.patch.keyframes&&a.effect!=="keyframes")return fail("KEYFRAME_PATCH_REQUIRES_KEYFRAME_TRACK","This patch cannot convert or recreate an existing effect",{animationId:a.animationId});
+        const parameters = a.effect === "keyframes" && command.patch.keyframes ? {...a.parameters,...command.patch.parameters,points:command.patch.keyframes} : a.effect === "keyframes" && command.patch.durationFrames && !command.patch.parameters
           ? { ...a.parameters, points: a.parameters.points.map(p => ({ ...p, frame: Math.round(p.frame * command.patch.durationFrames! / a.durationFrames) })) }
           : { ...a.parameters, ...command.patch.parameters };
-        const animation = animationSchema.parse({ ...a, ...command.patch, parameters });
+        const {keyframes,...patch}=command.patch;
+        const animation = animationSchema.parse({ ...a, ...patch,...(keyframes&&!patch.durationFrames?{durationFrames:keyframes.at(-1)!.frame}:{}), parameters });
         const conflict = intervalConflict(animation, state.settings.durationFrames, "finite");
         if (conflict) return fail(conflict.code, "Animation exceeds project duration", conflict, ["adjustTimeline", "updateAnimation"]);
         return [{ type: "updateAnimation", animationId: a.animationId, animation }];
       }
       if (t) {
-        if (command.patch.parameters || command.patch.enabled !== undefined) return fail("UNSUPPORTED_TRANSITION_PATCH", "Transition patches support timing and easing only", { transitionId: t.transitionId });
+        if (command.patch.parameters || command.patch.keyframes || command.patch.enabled !== undefined) return fail("UNSUPPORTED_TRANSITION_PATCH", "Transition patches support timing and easing only", { transitionId: t.transitionId });
         const next = { ...t, ...command.patch };
         const conflict = intervalConflict(next, state.settings.durationFrames, "transition");
         if (conflict) return fail(conflict.code, "Transition endpoint needs a visible project frame", conflict, ["adjustTimeline", "updateAnimation"]);
@@ -81,23 +91,21 @@ export function lowerMotionTool(project: LoadedProject, state: MotionState, inpu
     }
     case "addEffect": {
       const e = command.expression;
-      const matches = (state.expressions ?? []).filter(old => old.sceneId === e.sceneId && old.targetId === e.targetId && old.type === e.type && old.property === e.property && old.transitionId === e.transitionId);
-      if (matches.length > 1) return fail("AMBIGUOUS_EFFECT_MATCH", "Several effects match this channel", { expressionIds: matches.map(e => e.expressionId) }, ["inspectAnimations", "updateEffect"]);
-      if (matches.length) return fail("EFFECT_ALREADY_EXISTS", "Update the existing effect without replacing its identity or base binding", { expressionId: matches[0].expressionId }, ["updateEffect"]);
-      const collision = state.expressions?.find(old => old.expressionId === e.expressionId);
-      if (collision) return fail("ID_ALREADY_EXISTS", "Effect ID belongs to another target/channel", { expressionId: e.expressionId });
+      const collision=state.expressions?.find(old=>old.expressionId===e.expressionId);
+      if(collision&&JSON.stringify(collision)!==JSON.stringify(e))return fail("ID_ALREADY_EXISTS","Use updateEffect to change an existing expression",{expressionId:e.expressionId},["updateEffect"]);
       return [{ type: "setExpression", expression: e }];
     }
     case "updateEffect": {
       const e = state.expressions?.find(e => e.expressionId === command.expressionId);
       if (!e) return fail("EFFECT_NOT_FOUND", "No current expression with this ID", { expressionId: command.expressionId }, ["inspectAnimations"]);
+      if(command.patch.program&&e.type!=="procedural")return fail("PROGRAM_PATCH_REQUIRES_PROCEDURAL_EFFECT","Preserve this effect and use its supported parameters",{expressionId:e.expressionId});
       return [{ type: "setExpression", expression: expressionSchema.parse({ ...e, ...Object.fromEntries(Object.entries(command.patch).filter(([, value]) => value !== undefined)), parameters: { ...e.parameters, ...command.patch.parameters } }) }];
     }
     case "removeAnimation": {
       const a = state.animations.find(a => a.animationId === command.animationId);
       const t = state.objectTransitions?.find(t => t.transitionId === command.animationId);
       if (!a && !t) return fail("ANIMATION_NOT_FOUND", "Animation identity no longer exists", { animationId: command.animationId });
-      const dependent = (state.expressions ?? []).filter(e => e.transitionId === command.animationId || "sourceAnimationId" in e && e.sourceAnimationId === command.animationId);
+      const dependent = (state.expressions ?? []).filter(e => e.transitionId === command.animationId || "sourceAnimationId" in e && e.sourceAnimationId === command.animationId || e.type==="procedural"&&e.program.instructions.some(i=>i.op==="sample"&&i.animationId===command.animationId));
       if (dependent.length && command.dependentPolicy !== "removeDependents") return fail("DEPENDENT_EFFECTS_REQUIRE_POLICY", "Choose explicit dependent deletion or preserve the base", { expressionIds: dependent.map(e => e.expressionId) }, ["removeAnimation:removeDependents", "inspectDependencies"]);
       return [
         ...dependent.map(e => ({ type: "removeExpression" as const, expressionId: e.expressionId })),
@@ -152,7 +160,7 @@ export const motionToolCatalog = ["findObject", "inspectObject", "inspectTimelin
 export const inspectObject = findObject;
 export const inspectTimeline = (state: MotionState) => structuredClone({ settings: state.settings, blocks: state.blocks });
 export function inspectDependencies(state: MotionState, animationId: string) {
-  return structuredClone({ expressions: state.expressions?.filter(e => e.transitionId === animationId || "sourceAnimationId" in e && e.sourceAnimationId === animationId) ?? [], timing: state.timingDependencies?.filter(d => d.animationId === animationId || d.anchorAnimationId === animationId) ?? [] });
+  return structuredClone({ expressions: state.expressions?.filter(e => e.transitionId === animationId || "sourceAnimationId" in e && e.sourceAnimationId === animationId || e.type==="procedural"&&e.program.instructions.some(i=>i.op==="sample"&&i.animationId===animationId)) ?? [], timing: state.timingDependencies?.filter(d => d.animationId === animationId || d.anchorAnimationId === animationId) ?? [] });
 }
 // Aliases deliberately reuse canonical tools and candidate admission.
 export const validateChanges = prepareMotionTools;

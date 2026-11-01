@@ -13,6 +13,7 @@ export function hasVerifiedRuleQA(project:LoadedProject,state:MotionState,before
  const at=verified.get(proofKey(project,state,before));return at!==undefined&&Date.now()-at<60000;
 }
 export async function ruleQA(project: LoadedProject, state: MotionState, previous?: MotionState, signal?: AbortSignal, beforeRender?: () => void, renderOptions:{scale?:number}={}) {
+    const started=performance.now();let renderDurationMs=0;
     const owned = new Set(state.ruleMaterializations?.filter(m => m.entity === 'expression').map(m => m.id));
     const changed = (state.expressions ?? []).filter(e => JSON.stringify(e) !== JSON.stringify(previous?.expressions?.find(p => p.expressionId === e.expressionId)));
     const previousOwned = new Set(previous?.ruleMaterializations?.filter(m => m.entity === 'expression').map(m => m.id));
@@ -57,12 +58,13 @@ export async function ruleQA(project: LoadedProject, state: MotionState, previou
     for (const frame of sampled) {
         signal?.throwIfAborted();
         beforeRender?.();
-        const rendered = await renderNativeFrame(project, state, frame, { signal,scale:renderOptions.scale??1 });
+        const renderStarted=performance.now();const rendered = await renderNativeFrame(project, state, frame, { signal,scale:renderOptions.scale??1 });
+        renderDurationMs+=performance.now()-renderStarted;
         checks.push({ name: `rule-native-frame:${frame}`, status: rendered.png.length ? 'PASSED' : 'FAILED' });
     }
     if (sampled.length)
         checks.push({ name: 'renderedFrames', status: 'PASSED' });
     const status=checks.some(c=>c.status==='FAILED')?'FAILED':'PASSED';
     if(status==='PASSED'){if(verified.size>=32)verified.delete(verified.keys().next().value!);verified.set(proofKey(project,state,previous),Date.now());}
-    return { status, checks, renderScale:renderOptions.scale??1, numericEffects: changed.length, removedEffects: removed.length, renderedFrames: sampled, renderValidation: sampled.length ? 'PASSED' : 'NOT_TESTED', visualArtisticAssessment: 'NOT_TESTED', baseAnimationPreservation: 'verified by typed delta scope; no creative-quality claim' };
+    return { status, checks,timings:{totalMs:performance.now()-started,renderMs:renderDurationMs,numericMs:performance.now()-started-renderDurationMs}, renderScale:renderOptions.scale??1, numericEffects: changed.length, removedEffects: removed.length, renderedFrames: sampled, renderValidation: sampled.length ? 'PASSED' : 'NOT_TESTED', visualArtisticAssessment: 'NOT_TESTED', baseAnimationPreservation: 'verified by typed delta scope; no creative-quality claim' };
 }

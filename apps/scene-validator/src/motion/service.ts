@@ -1,3 +1,4 @@
+import {executeAgentMotion} from './agent-runtime.js';
 import {buildMotionPatch,validatePatchRevision} from './motion-patch.js';
 import { inspectSemanticCoverage, SemanticCoverageError } from "./intent/coverage.js";
 import { codeVersions } from "../harness/versions.js";
@@ -224,7 +225,7 @@ export async function proposeMotion(
     signal?: AbortSignal;
     config?: Partial<HarnessConfig>;
     evalContext?: { evalId: string; datasetVersion: string };
-    resumeContract?:IntentPlan;runId?:string;deferredRecovery?:boolean;
+    resumeContract?:IntentPlan;runId?:string;deferredRecovery?:boolean;executionRuntime?:"agent"|"legacy";
   } = {},
 ) {
   let settingsSource = "api";
@@ -1157,7 +1158,7 @@ export async function executeMotion(
     signal?: AbortSignal;
     config?: Partial<HarnessConfig>;
     evalContext?: { evalId: string; datasetVersion: string };
-    resumeContract?:IntentPlan;runId?:string;deferredRecovery?:boolean;
+    resumeContract?:IntentPlan;runId?:string;deferredRecovery?:boolean;executionRuntime?:"agent"|"legacy";
   } = {},
 ) {
   runtimeCode.assertCurrent();
@@ -1194,6 +1195,10 @@ export async function executeMotion(
       const result={id,request,revision:doc.revision,sourceFingerprint:project.inspection.fingerprint,status:'applied',document:changed.document,time:projectTime(changed.document.state,changed.document.revision),taskExecution:true,playbackStart:0,plan:{status:'ready',summary:'Последнее изменение отменено',operations:[],warnings:[],assumptions:[]},reconciliation:{status:'SUCCESS',requested:1,completed:1},requirements:[],tasks:[],persistence:{status:'CONFIRMED'}} as unknown as Awaited<ReturnType<typeof proposeMotion>>;
       await atomicJson(path.join(run.directory,'proposal.json'),result);await atomicJson(path.join(run.directory,'commit-verified.json'),{revision:changed.document.revision,receipt:changed.document.lastCommit});return result;
     }catch(error){await run.captureFailure(error);await run.finish('FAILED');throw error;}
+  }
+  if((options.executionRuntime??process.env.AKELLA_MOTION_RUNTIME??"agent")==="agent"&&!options.resumeContract){
+    const request=await prepareMotionRequest(project,input);if(request.settings.provider!=="manual-response"){await saveProviderSettings(project,request.settings,"execution");
+    return await executeAgentMotion(project,request,onStage,{...options,requestFingerprint:editRequestFingerprint(request)}) as unknown as Awaited<ReturnType<typeof proposeMotion>>;}
   }
   onStage("generating");
   const result = await proposeMotion(project, input, onStage, true, {...options,...(delivery?{runId:delivery}:{})});

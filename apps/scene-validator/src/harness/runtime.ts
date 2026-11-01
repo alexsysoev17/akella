@@ -200,6 +200,7 @@ export class HarnessRun {
     )
       throw new BudgetError("PROVIDER_NOT_REGISTERED");
     const purpose = request.purpose ?? "motion-repair";
+    const isAgent=purpose==="agent-execution";
     const semantic = purpose.startsWith("semantic") && purpose!=="semantic-recovery";
     const isCodeRepair = purpose.startsWith("code-repair");
     const isRecovery = purpose.includes("recovery");
@@ -215,6 +216,7 @@ export class HarnessRun {
       throw new BudgetError("LLM_CALL_BUDGET");
     if (
       !semantic &&
+      !isAgent &&
       !isCodeRepair &&
       repairCalls >=
         (this.config.recovery?.maxAttempts ??
@@ -257,8 +259,8 @@ export class HarnessRun {
     )
       throw new BudgetError("COST_BUDGET");
     const now = performance.now();
-    if (!semantic && this.repairStarted === undefined) this.repairStarted = now;
-    const phaseRemaining = semantic
+    if (!semantic && !isAgent && this.repairStarted === undefined) this.repairStarted = now;
+    const phaseRemaining = isAgent ? this.config.maxDurationMs-(now-this.started)-this.config.executionReserveMs : semantic
       ? this.config.semanticPlanningTimeoutMs - (now - this.started)
       : this.config.repairBudgetMs - (now - this.repairStarted!);
     const primaryRecoveryReserve=semantic&&this.config.recovery.enabled?Math.min(this.config.repairBudgetMs,this.config.recovery.maxDurationMs,Math.max(0,this.config.maxDurationMs-this.config.minimumRetryBudgetMs-this.config.executionReserveMs)):0;
@@ -274,7 +276,7 @@ export class HarnessRun {
       (this.calls.length > 0 &&
         available < estimated + this.config.executionReserveMs)
     ) {
-      const code = semantic ? "SEMANTIC_TIME_BUDGET" : "REPAIR_TIME_BUDGET";
+      const code = isAgent ? "AGENT_TIME_BUDGET" : semantic ? "SEMANTIC_TIME_BUDGET" : "REPAIR_TIME_BUDGET";
       await this.record("provider-call-skipped", {
         code,
         purpose,

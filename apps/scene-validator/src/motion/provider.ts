@@ -1,5 +1,5 @@
 import { capabilityGuidance } from "../motion-library/guidance.js";
-import { objectEnvelope, validateProviderSchema } from "../harness/providers/schema.js";
+import { objectEnvelope, validateProviderSchema,compactProviderSchema } from "../harness/providers/schema.js";
 import { createHash } from "node:crypto";
 import { redactSecrets } from "../harness/security.js";
 import {
@@ -245,7 +245,7 @@ export class AIClient implements AIProvider {
     mode = "semantic",
     nativeSchema?: z.ZodType,
   ): Promise<T> {
-    if (this.runtime?.includeCapabilityGuidance !== false && !(context as {incrementalEditHint?:boolean})?.incrementalEditHint) instructions += "\n" + capabilityGuidance();
+    if (mode!=="task-repair" && this.runtime?.includeCapabilityGuidance !== false && !(context as {incrementalEditHint?:boolean})?.incrementalEditHint) instructions += "\n" + capabilityGuidance();
     const compact = JSON.stringify({ mode, context, userRequest: request });
     const prompt = instructions + "\nCONTEXT JSON:\n" + compact;
     const runtimeSchema = z.toJSONSchema(schema, {
@@ -265,7 +265,7 @@ export class AIClient implements AIProvider {
     const logicalSchema = nativeSchema
       ? z.toJSONSchema(nativeSchema, { io: "output", reused: "ref" })
       : runtimeSchema;
-    const wire = strictWire ? objectEnvelope(compatibleSchema(logicalSchema)) : { schema: logicalSchema, wrapped: false };
+    const wire = strictWire ? objectEnvelope(compactProviderSchema(compatibleSchema(logicalSchema))) : { schema: logicalSchema, wrapped: false };
     const responseSchema = wire.schema;
     if (strictWire) validateProviderSchema(responseSchema);
     await writeFile(

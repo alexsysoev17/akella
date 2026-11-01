@@ -12,7 +12,7 @@ async function run(files, renderer) {
       ["--import", "tsx", "--test", "--test-concurrency=1", ...files],
       {
         stdio: "inherit",
-        env: { ...process.env, AKELLA_RENDERER: renderer },
+        env: { ...process.env, AKELLA_RENDERER: renderer, AKELLA_MOTION_RUNTIME: process.env.AKELLA_MOTION_RUNTIME ?? "legacy" },
         shell: false,
       },
     );
@@ -22,8 +22,10 @@ async function run(files, renderer) {
   if (code !== 0) process.exit(Number(code) || 1);
 }
 // Existing browser-specific assertions remain unchanged and explicitly exercise compatibility.
-await run(historical, "browser-compat");
-await run([root + "text-placement.browser.ts"], "browser-compat");
+if (!process.argv.includes("--native")) {
+  await run(historical, "browser-compat");
+  await run([root + "text-placement.browser.ts"], "browser-compat");
+}
 const native = (await readdir(root))
   .filter((n) => n.startsWith("native-") && n.endsWith(".test.ts"))
   .sort()

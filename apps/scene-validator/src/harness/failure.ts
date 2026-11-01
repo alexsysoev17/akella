@@ -22,6 +22,7 @@ export async function duringStage<T>(
   }
 }
 export interface FailureDiagnostic {
+  agentDisposition?:string;
   originalFailure?:{stage:string;code:string;invariant:string};
   causalChain?:{eventId:string;parentEventId:string|null;rootEventId:string;code:string;stage:string}[];
   failureStage: string;
@@ -53,6 +54,7 @@ export function failureDiagnostic(
       .replaceAll(process.cwd(), "<repository>")
       .replaceAll(os.homedir(), "<home>");
   return {
+    ...(typeof (error as {agentDisposition?:string})?.agentDisposition==="string"?{agentDisposition:(error as {agentDisposition:string}).agentDisposition}:{}),
     failureStage: tagged?.failureStage ?? stage,
     errorCode:
       providerAbortCode(root) ?? (typeof code === "string"

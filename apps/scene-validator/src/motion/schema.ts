@@ -60,6 +60,18 @@ const wave = z
 export const keyframeSchema = z
   .object({ frame: nonnegativeFrameSchema, value: scalar })
   .strict();
+export const keyframeAnimationSchema = z
+    .object({
+      ...common,
+      effect: z.literal("keyframes"),
+      parameters: z
+        .object({
+          property: z.enum(["x", "y", "opacity", "scale", "rotation", "trim"]),
+          points: z.array(keyframeSchema).min(2).max(500),
+        })
+        .strict(),
+    })
+    .strict();
 export const animationSchema = z.discriminatedUnion("effect", [
   z
     .object({
@@ -165,18 +177,7 @@ export const animationSchema = z.discriminatedUnion("effect", [
       }),
     })
     .strict(),
-  z
-    .object({
-      ...common,
-      effect: z.literal("keyframes"),
-      parameters: z
-        .object({
-          property: z.enum(["x", "y", "opacity", "scale", "rotation", "trim"]),
-          points: z.array(keyframeSchema).min(2).max(500),
-        })
-        .strict(),
-    })
-    .strict(),
+  keyframeAnimationSchema,
 ]);
 export const transitionSchema = z
   .object({ type: z.enum(["cut", "crossfade"]), durationFrames: outputFrame })

@@ -1,0 +1,391 @@
+import {runtimeCode} from '../runtime-code.js';
+import { objectMentionRanges } from './object-aliases.js';
+import { animationSchema } from './schema.js';
+import { expressionSchema, expressionRegistry } from '../motion-library/expressions/registry.js';
+import { objectsIn } from './context.js';
+import { redact } from '../harness/security.js';
+import { semanticEditRoute } from './incremental-edit.js';
+import { compileSemanticEdit } from './rules.js';
+import { applyOperations } from './operations.js';
+import { z } from 'zod';
+import { randomUUID, createHash } from 'node:crypto';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import type { LoadedProject } from '../types.js';
+import type { HarnessConfig } from '../harness/config.js';
+import { HarnessRun } from '../harness/runtime.js';
+import { createProvider } from '../harness/providers/index.js';
+import { compatibleSchema, normalizeProviderOutput } from './provider.js';
+import { objectEnvelope, validateProviderSchema } from '../harness/providers/schema.js';
+import { WorkingRevision, requirementCheckSchema } from './working-revision.js';
+import { motionToolSchema,keyframeToolAnimationSchema, inspectAnimations, findObject } from './tools.js';
+import { operationSchema } from './schema.js';
+import { readMotion, changeMotion } from './store.js';
+import { digest } from '../harness/context.js';
+import { codeVersions } from '../harness/versions.js';
+import { renderNativeFrame } from '../native/client.js';
+import { evaluateMotion } from './evaluation.js';
+import { statePresentation } from './transitions.js';
+import { atomicJson as persistJson, safeDirectory } from '../files.js';
+import { projectTime } from './project-time.js';
+import { recentSuccessfulActions } from './contextual-resolution.js';
+import { motionKnowledge } from '../motion-library/knowledge.js';
+import type { ProviderSettings } from './provider.js';
+const atomicJson = (file: string, value: unknown) => persistJson(file, redact(value));
+const callSchema = z.object({ callId: z.string().min(1).max(100), tool: z.enum(['listScenes', 'listObjects', 'findObject', 'inspectObject', 'inspectAnimations', 'inspectExpressions', 'inspectMotionRules', 'inspectDependencies', 'inspectTimeline', 'inspectSceneState', 'compareFrames', 'inspectAvailableCapabilities', 'inspectKnowledge', 'describeTool', 'defineChecks', 'edit', 'applyEdit', 'inspectDiff', 'revertEdit', 'rollbackRevision', 'evaluateObjectAtTime', 'sampleAnimation', 'renderFrame', 'renderFrameSequence', 'runFocusedQA', 'commitRevision']), argumentsJson: z.string().max(150000) }).strict();
+export const agentTurnSchema = z.object({ calls: z.array(callSchema).max(32), disposition: z.enum(['CONTINUE', 'COMMIT', 'NEEDS_USER_INPUT', 'TECHNICAL_BLOCKED']), message: z.string().max(4000), assumptions: z.array(z.string().max(1000)).max(20) }).strict();
+const instructions = `You are AKELLA's motion executor. Inspect → act → observe → evaluate → correct within ONE ephemeral working revision. Use tools, never return a global semantic plan. Tool calls are sequential and results reflect current state. argumentsJson is JSON text validated against each tool's real schema. Correct field errors locally after tool feedback, never regenerate the whole project. listObjects returns canonical logical IDs/source instances. inspectAnimations returns full current entries. describeTool returns selected edit/operation/check schemas. For createAnimation/addAnimation/addEffect/setExpression always specify variant to avoid loading unrelated effect schemas. inspectAvailableCapabilities returns compact descriptors; inspectKnowledge loads only selected entries. defineChecks MUST precede edits: declare canonical targets (and allowTimeline only if authorized), register each user's measurable requirement with its exact sourceText and independent check (startDelta, entryField, absent, motionVaries, basePreserved). For retiming choose dependencyPolicy=preserve-relative if preserving graph offsets; otherwise unrelated dependent changes are blocked. Explicit +5 frames means actual baseline delta 5 for EVERY target; 0 is not success. Checks cannot be redefined after edits. If context.workingRevision.definedChecks is already nonempty, preserve those checks and repair the existing candidate; do not redefine them. A skipped local optimization is feedback, not an admission veto. x/y channels are offsets from immutable source geometry, never absolute source x/y. Preserve the initial pose for an in-place relative move using baselineDelta checks; entrances may intentionally start displaced. Do not omit user clauses. Arbitrary artistic intent may be implemented with keyframes or safe procedural programs, without registering a technique. createAnimation/updateAnimation/addEffect/updateEffect/removeEffect and transitions use edit with an existing typed motionTool. applyEdit uses {operations:[canonical operations]}; describeTool with operationType obtains the exact schema. Use canonical rule removal for rule-owned effects, not edits that will rematerialize. Preserve unrelated tracks and source geometry. Continuous POSITION wiggle must use X/Y; never rotation when rotation removal was requested. Inertia means existing inertialOvershoot bound to the real movement endpoint/velocity, not wiggle. The library is optional knowledge, not a whitelist. Procedural expression type=procedural uses version1 bounded postfix math; sample operations read only declared base track IDs. No JS, eval, files/network or changing application source. inspectDiff and runFocusedQA before commitRevision. Commit is accepted only for a verified candidate and passing checks; tools cannot mark PASS by assertion. If QA fails, correct or revert only failed edits and repeat affected checks. No source Code Repair in this loop. When references/schemas are known, BATCH defineChecks, edit(s), runFocusedQA and commitRevision in the SAME response, instead of making one model call per tool. Do not finish a turn after editing without requesting QA and commit; tool execution itself blocks an invalid commit and returns corrective feedback. Existing objectIndex entries already contain current animations, so do not re-read identical data. For createAnimation keyframes, omit durationFrames when the last keyframe already defines it; the tool derives duration deterministically. animation.targetId and expression.targetId persist SOURCE NODE IDs; tools can deterministically resolve a known logical ID, never guess an unknown ID. Tool references can be obtained earlier in the same task. A generic unsupported tool/field is recoverable, not fatal. Report true identity ambiguity as NEEDS_USER_INPUT; reasonable artistic defaults may be explicit assumptions. disposition COMMIT is not a commit by itself. Do not claim artistic perfection; raster evidence proves rendering, not intent completeness.`;
+const empty = z.object({}).strict();
+const inspectArgs = z.object({ logicalObjectId: z.string().optional(), sceneId: z.string().optional(), offset: z.number().int().min(0).optional(), limit: z.number().int().min(1).max(100).optional() }).strict();
+export class MotionAgentSession {
+    ready = false;
+    qa: unknown;
+    constructor(readonly working: WorkingRevision, readonly run: HarnessRun) { }
+    async call(input: z.infer<typeof callSchema>) {
+        const a = JSON.parse(input.argumentsJson);
+        const w = this.working;
+        let result: unknown;
+        switch (input.tool) {
+            case 'listScenes':
+                empty.parse(a);
+                result = w.project.inspection.document.scenes.map(s => ({ sceneId: s.sceneId, name: s.name }));
+                break;
+            case 'listObjects': {
+                const q = inspectArgs.parse(a), all = w.objects().filter(o => !q.sceneId || o.sourceInstances.some(i => i.sceneId === q.sceneId));
+                result = { total: all.length, offset: q.offset ?? 0, objects: all.slice(q.offset ?? 0, (q.offset ?? 0) + (q.limit ?? 50)) };
+                break;
+            }
+            case 'findObject': {
+                const q = z.object({ name: z.string(), sceneId: z.string().optional() }).strict().parse(a);
+                result = findObject(w.project, w.state, { referenceText: q.name, ...q, allowLogicalFallback: true });
+                break;
+            }
+            case 'inspectObject':
+            case 'inspectAnimations':
+            case 'inspectExpressions':
+            case 'inspectMotionRules':
+            case 'inspectDependencies': {
+                const q = inspectArgs.parse(a);
+                if (q.logicalObjectId) {
+                    const resolved = w.objects().filter(o => o.logicalObjectId === q.logicalObjectId || o.sourceInstances.some(i => i.sourceNodeId === q.logicalObjectId));
+                    if (resolved.length !== 1)
+                        throw Error('LOGICAL_OBJECT_NOT_FOUND: use listObjects or findObject');
+                    q.logicalObjectId = resolved[0].logicalObjectId;
+                }
+                if (!q.logicalObjectId && !q.sceneId)
+                    throw Error('SCOPED_INSPECTION_REQUIRED');
+                const objects = w.objects().filter(o => !q.logicalObjectId || o.logicalObjectId === q.logicalObjectId);w.observeTargets(objects.map(o=>o.logicalObjectId));const entries = inspectAnimations(w.project, w.state, q);
+                result = input.tool === 'inspectDependencies' ? { timing: w.state.timingDependencies?.filter(d => entries.some(e => e.id === d.animationId || e.id === d.anchorAnimationId)) } : input.tool === 'inspectMotionRules' ? w.state.motionRules?.filter(r => !r.scope.logicalObjectIds.length || objects.some(o => r.scope.logicalObjectIds.includes(o.logicalObjectId))) : { objects: input.tool === 'inspectObject' ? objects : undefined, sourceObjects:input.tool==='inspectObject'?w.project.inspection.document.scenes.flatMap(objectsIn).filter(n=>objects.some(o=>o.sourceInstances.some(i=>i.sceneId===n.sceneId&&i.sourceNodeId===n.targetId))).slice(q.offset??0,(q.offset??0)+(q.limit??50)):undefined,entryCount:entries.length,hasMore:entries.length>(q.offset??0)+(q.limit??50),sourceStates: input.tool === 'inspectObject' ? Object.fromEntries(objects.map(o => [o.logicalObjectId, statePresentation(w.project, w.state)[o.logicalObjectId]])) : undefined, entries: (input.tool === 'inspectExpressions' ? entries.filter(e => e.storage === 'expression') : entries).slice(q.offset??0,(q.offset??0)+(q.limit??50)) };
+                break;
+            }
+            case 'inspectTimeline':
+                empty.parse(a);
+                result = { settings: w.state.settings, blocks: w.state.blocks };
+                break;
+            case 'inspectSceneState': {
+                const q = z.object({ sceneId: z.string(), offset: z.number().int().nonnegative().optional() }).strict().parse(a);
+                const scene = w.project.inspection.document.scenes.find(s => s.sceneId === q.sceneId);
+                if (!scene)
+                    throw Error('SCENE_NOT_FOUND');
+                const objects = objectsIn(scene);
+                result = { sceneId: scene.sceneId, total: objects.length, objects: objects.slice(q.offset ?? 0, (q.offset ?? 0) + 100) };
+                break;
+            }
+            case 'compareFrames': {
+                const q = z.object({ frames: z.array(z.number().int().nonnegative()).length(2) }).strict().parse(a);
+                const rendered = [];
+                for (const frame of q.frames) {
+                    if (frame >= w.state.settings.durationFrames)
+                        throw Error('FRAME_OUTSIDE_OUTPUT');
+                    this.run.beforeRender();
+                    rendered.push(await renderNativeFrame(w.project, w.state, frame, { scale: .25, encoding: 'rgba', signal: this.run.signal }));
+                }
+                let changed = 0, total = 0;
+                const pixelsA = rendered[0].png, pixelsB = rendered[1].png;
+                for (let i = 0; i < pixelsA.length; i += 4) {
+                    let diff = 0;
+                    for (let j = 0; j < 4; j++)
+                        diff += Math.abs(pixelsA[i + j] - pixelsB[i + j]);
+                    if (diff)
+                        changed++;
+                    total += diff;
+                }
+                result = { frames: q.frames, changedPixels: changed, meanAbsoluteChannelDifference: total / pixelsA.length, pixelCount: pixelsA.length / 4, artisticAssessment: 'NOT_TESTED' };
+                break;
+            }
+            case 'inspectAvailableCapabilities':
+                empty.parse(a);
+                result = { animations: animationSchema.options.map(o => o.shape.effect.value), expressions: expressionRegistry.map(({ id, description, lifecycle }) => ({ id, description, lifecycle })), knowledgeAccess: 'inspectKnowledge with kind and explicit IDs; describeTool with name and optional variant' };
+                break;
+            case 'inspectKnowledge': {
+                const q = z.object({ kind: z.enum(['skills', 'expressions', 'capabilities', 'customEasings', 'presets', 'techniques']), ids: z.array(z.string()).min(1).max(3) }).strict().parse(a);
+                const knowledge = await motionKnowledge(w.request, false), entries = knowledge[q.kind] as {
+                    id: string;
+                }[];
+                result = entries.filter(e => q.ids.includes(e.id));
+                break;
+            }
+            case 'describeTool': {
+                const q = z.object({ kind: z.enum(['edit', 'operation', 'check']), name: z.string().optional(), variant: z.string().optional() }).strict().parse(a);
+                let schema: z.ZodType | undefined = q.kind === 'check' ? requirementCheckSchema : q.kind === 'edit' && q.name ? motionToolSchema.options.find(o => o.shape.tool.value === q.name) : q.kind === 'operation' && q.name ? operationSchema.options.find(o => o.shape.type.value === q.name) : undefined;
+                if (q.variant) {
+                    const animation = animationSchema.options.find(o => o.shape.effect.value === q.variant), expression = expressionSchema.options.find(o => o.shape.type.value === q.variant);
+                    if (q.kind === 'edit' && q.name === 'createAnimation' && animation)
+                        schema = z.object({ tool: z.literal('createAnimation'), animation:q.variant==='keyframes'?keyframeToolAnimationSchema:animation }).strict();
+                    else if (q.kind === 'edit' && q.name === 'addEffect' && expression)
+                        schema = z.object({ tool: z.literal('addEffect'), expression }).strict();
+                    else if (q.kind === 'operation' && q.name === 'addAnimation' && animation)
+                        schema = z.object({ type: z.literal('addAnimation'), animation }).strict();
+                    else if (q.kind === 'operation' && q.name === 'setExpression' && expression)
+                        schema = z.object({ type: z.literal('setExpression'), expression }).strict();
+                    else
+                        throw Error('SCHEMA_VARIANT_NOT_FOUND');
+                }
+                if (!schema)
+                    throw Error('DESCRIBE_REQUIRES_EXACT_TOOL_OR_OPERATION_NAME');
+                result = z.toJSONSchema(schema, { io: 'output' });
+                break;
+            }
+            case 'defineChecks':
+                result = w.defineChecks(z.object({ checks: z.array(requirementCheckSchema), targets: z.array(z.string()).min(1), allowTimeline: z.boolean().optional(), dependencyPolicy: z.enum(["reject", "preserve-relative"]).optional() }).strict().parse(a).checks, a.targets, a.allowTimeline, a.dependencyPolicy);
+                break;
+            case 'edit':
+                result = w.apply(a, input.callId, true);
+                this.ready = false;
+                break;
+            case 'applyEdit':
+                result = w.apply(z.object({ operations: z.array(operationSchema).min(1).max(500) }).strict().parse(a).operations, input.callId);
+                this.ready = false;
+                break;
+            case 'inspectDiff':
+                empty.parse(a);
+                result = w.diff();
+                break;
+            case 'revertEdit':
+                empty.parse(a);
+                result = w.revert();
+                this.ready = false;
+                break;
+            case 'rollbackRevision':
+                empty.parse(a);
+                w.rollback();
+                this.ready = false;
+                result = { rolledBack: true };
+                break;
+            case 'sampleAnimation':
+            case 'evaluateObjectAtTime': {
+                const q = z.object({ sceneId: z.string(), targetId: z.string(), frames: z.array(z.number().int()).min(1).max(65) }).strict().parse(a);
+                const p = statePresentation(w.project, w.state);
+                result = q.frames.map(frame => ({ frame, values: evaluateMotion(w.state, frame, p).nodes[JSON.stringify([q.sceneId, q.targetId])] ?? {} }));
+                break;
+            }
+            case 'renderFrame':
+            case 'renderFrameSequence': {
+                const q = z.object({ frames: z.array(z.number().int()).min(1).max(8),logicalObjectIds:z.array(z.string()).max(20).optional() }).strict().parse(a);
+                result = [];
+                for (const frame of q.frames) {
+                    if (frame < 0 || frame >= w.state.settings.durationFrames)
+                        throw Error('FRAME_OUTSIDE_OUTPUT');
+                    this.run.beforeRender();
+                    const rendered = await renderNativeFrame(w.project, w.state, frame, { scale: .25, diagnostics:true,signal: this.run.signal });
+                    const file = `agent-frame-${frame}-${digest(w.state).slice(0, 12)}.png`;
+                    if (this.run.config.privacy === 'full')
+                        await writeFile(path.join(this.run.directory, file), rendered.png);
+                    (result as unknown[]).push({ frame, artifact: this.run.config.privacy === 'full' ? file : null, pixelHash: createHash('sha256').update(rendered.png).digest('hex'), width: rendered.width, height: rendered.height,observedInstances:rendered.composition?.instances.filter(i=>q.logicalObjectIds?q.logicalObjectIds.includes(i.logicalObjectId??''):i.visible).slice(0,100), artisticAssessment: 'NOT_TESTED' });
+                }
+                break;
+            }
+            case 'runFocusedQA': {
+                empty.parse(a);
+                const started = performance.now();
+                result = this.qa = await w.validate(this.run.signal, () => this.run.beforeRender());
+                this.run.qaDurationMs += performance.now() - started;
+                this.run.renderDurationMs += (result as Awaited<ReturnType<WorkingRevision['validate']>>).timings.renderMs;
+                break;
+            }
+            case 'commitRevision':
+                empty.parse(a);
+                result = { verifiedChecks: w.assertReady(), ready: true };
+                this.ready = true;
+                break;
+        }
+        return result;
+    }
+}
+export async function executeAgentMotion(project: LoadedProject, request: {
+    request: string;
+    mode: string;
+    settings: ProviderSettings;
+    expectedRevision: string;
+    editId?: string;
+    activeSceneId?: string;
+    selectedObjectIds?: string[];
+    selectedObjectId?: string;
+    currentFrame?: number;
+}, onStage: (stage: string) => void, options: {
+    signal?: AbortSignal;
+    config?: Partial<HarnessConfig>;
+    requestFingerprint?: string;
+} = {}) {
+    const id = request.editId ?? randomUUID(), doc = await readMotion(project), run = await HarnessRun.start(project, id, request.request, request.settings.provider, request.settings.model, options.signal, options.config);
+    run.references = await codeVersions();
+    const w = new WorkingRevision(project, doc.revision, doc.state, request.request), session = new MotionAgentSession(w, run), turns: unknown[] = [];
+    let assumptions: string[] = [], message = '', disposition = 'CONTINUE';let localOptimizationIssue:unknown;
+    const persist = async () => { const report = { version: '1', working: w.diff(), turns, qa: session.qa, checks: w.evaluate(), codeRepairInvocations: 0 }; if (run.config.privacy === 'full')
+        await atomicJson(path.join(run.directory, 'agent-runtime.json'), report); await run.diagnostic('agent-runtime', { version: '1', turnCount: turns.length, candidateDigest: digest(w.state), checks: w.evaluate(), codeRepairInvocations: 0 }); };
+    try {
+        if (doc.revision !== request.expectedRevision)
+            throw Object.assign(Error('STALE_PROJECT_REVISION'), { code: 'STALE_PROJECT_REVISION' });
+        await atomicJson(path.join(run.directory, 'request.json'), { id, request, revision: doc.revision });
+        try{const local = semanticEditRoute(project, request.request, doc, request).edit;
+        if (local) {
+            const ops = compileSemanticEdit(project, doc.state, local, request.request), candidate = applyOperations(doc.state, ops, project);
+            const checks: z.infer<typeof requirementCheckSchema>[] = [];
+            const changed = candidate.animations.filter(a => JSON.stringify(a) !== JSON.stringify(doc.state.animations.find(b => b.animationId === a.animationId)));
+            for (const a of changed) {
+                const old = doc.state.animations.find(b => b.animationId === a.animationId);
+                if (old && local.operation === 'SHIFT_START' && local.deltaFrames !== undefined)
+                    checks.push({ checkId: 'start-' + a.animationId, sourceText: request.request, assertion: { kind: 'startDelta', animationId: a.animationId, frames: local.deltaFrames } });
+                else
+                    checks.push({ checkId: 'track-' + a.animationId, sourceText: request.request, assertion: { kind: 'entryField', entity: 'animation', id: a.animationId, path: ['startFrame'], value: a.startFrame } });
+            }
+            for (const e of candidate.expressions ?? []) {
+                if (JSON.stringify(e) !== JSON.stringify(doc.state.expressions?.find(b => b.expressionId === e.expressionId)))
+                    for (const [key, value] of Object.entries(e.parameters)) {
+                        if (['number', 'string', 'boolean'].includes(typeof value))
+                            checks.push({ checkId: e.expressionId + '-' + key, sourceText: request.request, assertion: { kind: 'entryField', entity: 'expression', id: e.expressionId, path: ['parameters', key], value: value as number | string | boolean } });
+                    }
+            }
+            for (const e of doc.state.expressions ?? [])
+                if (!candidate.expressions?.some(b => b.expressionId === e.expressionId))
+                    checks.push({ checkId: 'removed-' + e.expressionId, sourceText: request.request, assertion: { kind: 'absent', entity: 'expression', id: e.expressionId } });
+            if (!checks.length) {
+                const e = candidate.expressions?.find(e => ops.some(o => o.type === 'setExpression' && o.expression.expressionId === e.expressionId));
+                if (e)
+                    checks.push({ checkId: 'ensure-' + e.expressionId, sourceText: request.request, assertion: { kind: 'entryField', entity: 'expression', id: e.expressionId, path: ['enabled'], value: e.enabled } });
+            }
+            if (checks.length) {
+                w.defineChecks(checks, local.targets.length ? local.targets : local.scope.logicalObjectIds ?? [], false, 'preserve-relative');
+                w.apply(ops, 'local');
+                const qaStarted = performance.now();
+                session.qa = await w.validate(run.signal, () => run.beforeRender());
+                run.qaDurationMs += performance.now() - qaStarted;
+                run.renderDurationMs += (session.qa as Awaited<ReturnType<WorkingRevision['validate']>>).timings.renderMs;
+                if((session.qa as {status:string}).status==='PASSED'){w.assertReady();session.ready = true;}else localOptimizationIssue={code:'LOCAL_QA_FAILED',qa:session.qa};
+                message = 'Анимация обновлена';
+                await run.record('agent-local-edit', { route: 'LOCAL_FAST_PATH', operations: ops, checks: w.evaluate(), providerCalls: 0 });
+                await persist();
+            }
+        }
+        }catch(error){const code=(error as {code?:string}).code??(error as Error).message?.match(/^[A-Z][A-Z0-9_]+/)?.[0]??'LOCAL_TOOL_VALIDATION';if(run.signal.aborted||/^(?:NATIVE_|RENDER_|PROVIDER_|STALE_|SOURCE_|CANCEL|EXECUTION_)/.test(code))throw error;localOptimizationIssue={code,message:String(error)};await run.record('local-optimization-skipped',localOptimizationIssue);}
+        if (!session.ready) {
+            const schema = z.toJSONSchema(agentTurnSchema, { io: 'output' }), adapter = createProvider(request.settings.provider, run.directory), strict = adapter.capabilities().schemaDialect !== 'json-schema', wire = strict ? objectEnvelope(compatibleSchema(schema)) : { schema, wrapped: false };
+            if (!adapter.capabilities().structuredOutput)
+                throw Object.assign(Error('Provider must support structured tool envelopes; native OS tools are not enabled'), { code: 'UNSUPPORTED_CAPABILITY' });
+            if (strict)
+                validateProviderSchema(wire.schema);
+            run.providerInitializationStatus = 'READY';
+            const named = w.objects().filter(o => objectMentionRanges(o.name, request.request).length || o.sourceInstances.some(i => i.sourceNodeId === request.selectedObjectId || request.selectedObjectIds?.includes(i.sourceNodeId))).slice(0, 12);
+            w.observeTargets(named.map(o=>o.logicalObjectId));
+        const initial = {localOptimizationIssue,workingRevision:{...w.diff(),definedChecks:w.checks},coordinateContract: { xY: 'Animation x/y and keyframes x/y are OFFSETS from source geometry in parent-local coordinates. Resting translation is 0, not the Figma x/y coordinate. Source position remains immutable. For a relative move +25 start at current motion offset (usually0), end at offset+25.', scale: 'multipliers, resting1', rotation: 'degrees added to source rotation, resting0', opacity: 'absolute motion override multiplied by source opacity; resting1', baselineChecks: 'For an in-place move, verify start against original state and final offset against original using baselineDelta; checking only final-minus-new-start can hide an unintended initial jump.' }, objectIndex: named.map(o => {const entries=inspectAnimations(project,w.state,{logicalObjectId:o.logicalObjectId});return {...o,animationCount:entries.length,animationsTruncated:entries.length>12,animations:entries.slice(0,12)};}), scenes: project.inspection.document.scenes.slice(0, 20).map(s => ({ sceneId: s.sceneId, name: s.name, blocks: doc.state.blocks.filter(b => b.sceneId === s.sceneId) })), runtime: 'agent-native/1', project: { revision: doc.revision, settings: doc.state.settings, sceneCount: project.inspection.document.scenes.length, objectCount: w.objects().length }, editor: { activeSceneId: request.activeSceneId, selectedObjectIds: request.selectedObjectIds ?? (request.selectedObjectId ? [request.selectedObjectId] : []), currentFrame: request.currentFrame }, recentActions: recentSuccessfulActions(doc).slice(-4), tools: callSchema.shape.tool.options, toolArguments: { listScenes: {}, listObjects: { sceneId: 'optional', offset: 0, limit: 50 }, findObject: { name: 'string', sceneId: 'optional' }, inspectAnimations: { logicalObjectId: 'ID' }, describeTool: { kind: 'edit|operation|check', name: 'exact tool or operation name', variant: 'effect/type for creation (keyframes, wiggle, procedural, trimPath, etc.)' }, defineChecks: { checks: 'ResultCheck[] (request schema using describeTool kind=check)', targets: 'canonical logical IDs authorized by request', allowTimeline: false, dependencyPolicy: 'reject|preserve-relative (allow only derived dependent start shifts; direct writes remain scoped)' }, edit: 'existing MotionTool object', applyEdit: { operations: 'canonical Operation[]' }, sampleAnimation: { sceneId: 'ID', targetId: 'ID', frames: [0, 15, 30] }, renderFrame: { frames: [0] }, inspectDiff: {}, revertEdit: {}, runFocusedQA: {}, commitRevision: {} }, animationPrimitives: animationSchema.options.map(o => o.shape.effect.value), expressionPrimitives: expressionRegistry.map(e => ({ id: e.id, description: e.description })), editNames: motionToolSchema.options.map(o => o.shape.tool.value), operationNames: operationSchema.options.map(o => o.shape.type.value) };
+            const feedback: unknown[] = [];
+            const repeated = new Set<string>();
+            for (let turn = 0; turn < run.config.maxLLMCalls && !session.ready; turn++) {
+                run.checkpoint();
+                onStage(run.repairAttempts>0?'repairing':'generating');
+                run.phase = 'agent-tool-execution';
+                const userContext = JSON.stringify({ userRequest: request.request, context: initial, taskHistory: feedback });
+                run.contextBytes = Math.max(run.contextBytes, Buffer.byteLength(userContext));
+                const response = await run.invoke(adapter, { purpose: 'agent-execution', messages: [{ role: 'system', content: instructions }, { role: 'user', content: userContext }], responseSchema: wire.schema, model: request.settings.model || undefined, signal: run.signal, timeoutMs: run.config.providerTimeoutMs, maxOutputTokens: run.config.maxOutputTokens });
+                const payload = response.toolCalls.length ? { calls: response.toolCalls.map((c, i) => ({ callId: `native-${turn}-${i}`, tool: c.name, argumentsJson: JSON.stringify(c.arguments) })), disposition: 'CONTINUE', message: '', assumptions: [] } : wire.wrapped ? (response.output as {
+                    response?: unknown;
+                })?.response : response.output;
+                const parsed = agentTurnSchema.safeParse(strict ? normalizeProviderOutput(payload, schema) : payload);
+                if (!parsed.success) {
+                    const error = { code: 'INVALID_TOOL_RESPONSE', issues: parsed.error.issues.slice(0, 8) };
+                    feedback.push(error);
+                    turns.push({ turn, error, rawOutput: response.output });run.repairAttempts++;
+                    continue;
+                }
+                const answer = parsed.data;
+                assumptions = [...new Set([...assumptions,...answer.assumptions])];
+                message = answer.message;
+                disposition = answer.disposition;
+                const results: unknown[] = [];
+                let hadToolError = false;
+                run.phase="agent-tool-execution";
+                for (const call of answer.calls) {
+                    run.checkpoint();
+                    try {
+                        const result = await session.call(call);if(result&&typeof result==='object'&&(result as {status?:string}).status==='FAILED')hadToolError=true;
+                        results.push({ call, result });
+                    }
+                    catch (error) {
+                        hadToolError = true;
+                        session.ready = false;
+                        const issue = (error as {
+                            issue?: Record<string, unknown>;
+                        }).issue ?? { code: (error as {
+                                code?: string;
+                            }).code ?? (error instanceof z.ZodError ? 'INVALID_TOOL_ARGUMENT' : (error as Error).message?.match(/^[A-Z][A-Z0-9_]+/)?.[0] ?? 'TECHNICAL_INVARIANT_FAILED'), message: String(error), ...(error instanceof z.ZodError ? { issues: error.issues.slice(0, 8) } : {}) };
+                        const signature = digest([call.tool, call.argumentsJson, issue]);
+                        results.push({ call, error: issue });
+                        if (repeated.has(signature))
+                            throw Object.assign(Error('REPEATED_UNCHANGED_TOOL_FAILURE'), { code: 'REPEATED_UNCHANGED_TOOL_FAILURE' });
+                        repeated.add(signature);
+                    }
+                }
+                if (hadToolError){session.ready = false;run.repairAttempts++;}
+                feedback.push({ assistant: answer, results });
+                turns.push({ turn, calls: answer.calls, results });
+                await run.record('agent-turn', { turn, results });
+                await persist();
+                if (['NEEDS_USER_INPUT', 'TECHNICAL_BLOCKED'].includes(disposition))
+                    break;
+            }
+        }
+        if (!session.ready)
+            throw Object.assign(Error(disposition === 'NEEDS_USER_INPUT' || disposition === 'TECHNICAL_BLOCKED' ? message : 'Не хватило доступных шагов для проверенного результата; исходная анимация сохранена.'), { code: disposition === 'CONTINUE' ? 'AGENT_CALL_BUDGET' : disposition, agentDisposition: disposition === 'CONTINUE' ? 'RESOURCE_LIMIT_REACHED' : disposition });
+        onStage('applying');
+        let checks = w.assertReady();
+        const current=await readMotion(project);if(current.revision!==w.revision){run.phase='agent-rebase';const rebase=w.rebase(current.revision,current.state);await run.record('agent-rebase',rebase);const rebaseStarted=performance.now();session.qa=await w.validate(run.signal,()=>run.beforeRender());run.qaDurationMs+=performance.now()-rebaseStarted;run.renderDurationMs+=(session.qa as Awaited<ReturnType<WorkingRevision['validate']>>).timings.renderMs;checks=w.assertReady();await persist();}
+        run.phase = 'atomic-commit';
+        runtimeCode.assertCurrent();
+        const publication = await changeMotion(project.root, { expectedRevision: w.revision, expectedSourceFingerprint: project.inspection.fingerprint, operationBatches: w.batches, expectedCandidate: w.state, transactionId: id, requestFingerprint: options.requestFingerprint ?? digest(request), request: request.request, origin: 'ai', assumptions, signal: run.signal, checkpoint: () => run.checkpoint() });
+        if ((session.qa as {
+            qa?: {
+                renderValidation: string;
+            };
+        })?.qa?.renderValidation === 'PASSED')
+            run.firstPreviewAvailableMs = performance.now() - run.started;
+        const reconciliation = { status: 'SUCCESS', requested: checks.length, completed: checks.length, intentCompleteness: 'MODEL_INTERPRETED_NOT_INDEPENDENTLY_PROVEN', validationLevels: { execution: 'PASSED', render: (session.qa as {
+                    qa?: {
+                        renderValidation: string;
+                    };
+                })?.qa?.renderValidation ?? 'NOT_TESTED', artistic: 'NOT_TESTED' } };
+        const result = { id, request, revision: doc.revision, sourceFingerprint: project.inspection.fingerprint, status: 'applied', taskExecution: true, agentDisposition: assumptions.length ? 'SUCCESS_WITH_EXPLICIT_ASSUMPTIONS' : 'SUCCESS', agentRuntime: 'agent-native/1', document: publication.document, time: projectTime(publication.document.state, publication.document.revision), plan: { status: 'ready', summary: message || 'Анимация обновлена', operations: w.batches.flat(), warnings: [], assumptions }, requirements: checks.map(c => ({ ...c, requirementId: c.checkId, techniques: [], qaResult: { status: 'PASSED', renderValidation: (session.qa as {
+                        qa?: {
+                            renderValidation: string;
+                        };
+                    })?.qa?.renderValidation ?? 'NOT_TESTED' } })), tasks: [], reconciliation, persistence: { status: 'CONFIRMED' }, playbackStart: 0 };
+        try {
+            await atomicJson(path.join(run.directory, 'proposal.json'), result);
+            await atomicJson(path.join(run.directory, 'commit-verified.json'), { revision: publication.document.revision });
+            await run.finish('SUCCESS', { reconciliation });
+        }
+        catch (error) {
+            result.persistence = { status: 'DURABILITY_WARNING' };
+            await run.finish('SUCCESS', { reconciliation }).catch(() => { });
+        }
+        return result;
+    }
+    catch (error) {
+        if (/BUDGET|TIMEOUT/.test(String(error)))
+            Object.assign(error as object, { agentDisposition: 'RESOURCE_LIMIT_REACHED' });
+        else if(!(error as {agentDisposition?:string}).agentDisposition)Object.assign(error as object,{agentDisposition:run.signal.aborted?'CANCELLED':'TECHNICAL_BLOCKED'});
+        await persist().catch(() => { });
+        await run.captureFailure(error);
+        await run.finish('FAILED');
+        throw error;
+    }
+}
