@@ -360,12 +360,15 @@ export class AIClient implements AIProvider {
         ),
       ),
     );
+    const repairIssues:{code:string;path:PropertyKey[];message:string}[]=[];
+    const collect=(rows:readonly {code:string;path:PropertyKey[];message:string}[])=>{for(const issue of rows){if(repairIssues.length>=8)break;if('errors'in issue&&Array.isArray(issue.errors))collect(issue.errors.flat());else repairIssues.push({code:issue.code,path:issue.path,message:issue.message});}};
+    if(!parsed.success)collect(parsed.error.issues);
     try {
       return schema.parse(normalized);
     } catch (e) {
-      throw new Error(
+      throw Object.assign(new Error(
         `INVALID_OUTPUT: ответ не соответствует структурированному контракту. Подробности сохранены в contract-validation.json.`,
-      );
+      ),{code:'INVALID_OUTPUT',contractIssues:repairIssues});
     }
   }
 }

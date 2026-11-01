@@ -116,6 +116,7 @@ export function incrementalContext(project: LoadedProject, doc: MotionDocument, 
   const owns = (scene: string, target: string) => profile.objects.some(o => o.sourceInstances.some(i => i.sceneId === scene && i.sourceNodeId === target));
   return {
     incrementalEditHint: true,
+    incrementalEffect:profile.effect,
     project: {projectId: project.config.projectId, fps: doc.state.settings.fps, durationFrames: doc.state.settings.durationFrames},
     projectRevision: doc.revision,
     sceneIndex:project.inspection.document.scenes.map(s=>({sceneId:s.sceneId,index:s.index,name:s.name})),
@@ -167,7 +168,7 @@ export function deterministicIncrementalEdit(project: LoadedProject, request: st
   const parameters:SemanticEdit['parameters']={};
   let amplitudeFactor:number|undefined,frequencyFactor:number|undefined,durationFactor:number|undefined;
   // Every word must be consumed: unknown modifiers/negations require compact semantic interpretation.
-  const known=/^(?:сделай|уменьши|увеличь|измени|добавь|добавить|убери|удали|включи|отключи|у|на|к|и|в|два|раза|раз|эффект|эффекта|колебаний|колебания|колебание|инерцию|инерции|покачивание|покачивания|постоянного|постоянное|постоянный|wiggle|амплитуду|амплитуды|частоту|частоты|движения|движений|все|только|еще|чуть|немного|значительно|гораздо|намного|слабее|послабее|сильнее|посильнее|вдвое|медленнее|быстрее|объекты|объектам|объектов|правило|правила|исключение|исключения|из|для|линейный|линейное|изинг|easing|linear|easeInOutCubic|easeInCubic|easeOutCubic|\d+(?:\.\d+)?%?)$/iu;
+  const known=/^(?:сделай|уменьши|увеличь|измени|добавь|добавить|убери|удали|включи|отключи|у|на|к|и|в|два|раза|раз|эффект|эффекта|колебаний|колебания|колебание|затухающие|затухающих|затухающего|затухающее|инерцию|инерции|покачивание|покачивания|постоянного|постоянное|постоянный|wiggle|амплитуду|амплитуды|частоту|частоты|движения|движений|все|только|еще|чуть|немного|значительно|гораздо|намного|слабее|послабее|сильнее|посильнее|вдвое|медленнее|быстрее|объекты|объектам|объектов|правило|правила|исключение|исключения|из|для|линейный|линейное|изинг|easing|linear|easeInOutCubic|easeInCubic|easeOutCubic|\d+(?:\.\d+)?%?)$/iu;
   if(!rest.split(' ').every(word=>known.test(word)))return null;
   if(compound){
     if(!['wiggle','inertialOvershoot'].includes(profile.effect)||/добав|убери|удали|включи|отключи|быстрее|медленнее|правил|исключени/u.test(rest))return null;

@@ -1,3 +1,4 @@
+import {incrementalMotionPatchSchema,effectPatchContext,lowerIncrementalPatch,incrementalPatchInstructions} from '../incremental-patch.js';
 import {requestContextCategories} from "../../harness/providers/budget.js";
 import { incrementalEditSchema, incrementalEditInstructions, incrementalPlan, incrementalGraphContext } from "../incremental-edit.js";
 import {semanticEditSchema} from "../rule-contract.js";
@@ -150,11 +151,14 @@ export class SemanticProvider implements IntentProvider {
 
     if ((context as {incrementalEditHint?:boolean})?.incrementalEditHint) {
       const local = (context as {deterministicEdit?:unknown}).deterministicEdit;
-      let response = local ? {edits:[semanticEditSchema.parse(local)],assumptions:["Однозначная typed-команда применена без LLM"]} : await (await this.provider("interpret")).structured(semanticContext(context),request,incrementalEditInstructions,z.union([incrementalEditSchema,semanticGraphSchema,intentPlanSchema]),"semantic-planning",incrementalEditSchema);
+      const compactEffect=effectPatchContext(context);const wireSchema=compactEffect?incrementalMotionPatchSchema:incrementalEditSchema;
+      let response = local ? {edits:[semanticEditSchema.parse(local)],assumptions:["Однозначная typed-команда применена без LLM"]} : await (await this.provider("interpret")).structured({...semanticContext(context) as object,...(feedback?{structuralFeedback:feedback}:{})},request,incrementalEditInstructions+(compactEffect?"\n"+incrementalPatchInstructions:""),z.union([incrementalMotionPatchSchema,incrementalEditSchema,semanticGraphSchema,intentPlanSchema]),"semantic-planning",wireSchema);
+      if('result'in response)response=lowerIncrementalPatch(response,context);
       if('queries'in response&&response.queries?.length){
         if(response.edits.length||!this.recovery?.readContext)throw Error('INVALID_CONTEXT_DISCLOSURE_REQUEST');
         const disclosures=await this.recovery.readContext(response.queries);
-        response=await (await this.provider('patch-disclosure')).structured({...semanticContext(context) as object,disclosures},request,incrementalEditInstructions+' Context disclosure is complete. Return edits only; no further queries.',incrementalEditSchema,'semantic-planning',incrementalEditSchema);
+        response=await (await this.provider('patch-disclosure')).structured({...semanticContext(context) as object,disclosures},request,incrementalEditInstructions+' Context disclosure is complete. No further queries.'+(compactEffect?'\n'+incrementalPatchInstructions:''),z.union([incrementalMotionPatchSchema,incrementalEditSchema]),'semantic-planning',wireSchema);
+        if('result'in response)response=lowerIncrementalPatch(response,context);
         if('queries'in response&&response.queries?.length)throw Error('CONTEXT_DISCLOSURE_LIMIT');
       }
       if ('edits' in response) return incrementalPlan(request,response.edits,context,response.assumptions);
@@ -982,7 +986,7 @@ export async function semanticPlan(
   const compactTier =
     (context as { contextualEditHint?: boolean })?.contextualEditHint === true;
   await trace("reference-context", {
-    contextCategories: requestContextCategories({messages:[{role:"system",content:incrementalTier?incrementalEditInstructions:compactTier?selectorEditInstructions:graphInstructions+"\n"+skillPlanningInstructions},{role:"user",content:JSON.stringify({userRequest:request,context:projectedContext})}],responseSchema:compatibleSchema(z.toJSONSchema(incrementalTier?incrementalEditSchema:compactTier?selectorEditSchema:semanticGraphSchema,{io:"output",reused:"ref"}))}),
+    contextCategories: requestContextCategories({messages:[{role:"system",content:incrementalTier?incrementalEditInstructions+(effectPatchContext(context)?"\n"+incrementalPatchInstructions:""):compactTier?selectorEditInstructions:graphInstructions+"\n"+skillPlanningInstructions},{role:"user",content:JSON.stringify({userRequest:request,context:projectedContext})}],responseSchema:compatibleSchema(z.toJSONSchema(incrementalTier?(effectPatchContext(context)?incrementalMotionPatchSchema:incrementalEditSchema):compactTier?selectorEditSchema:semanticGraphSchema,{io:"output",reused:"ref"}))}),
     contextAccounting: incrementalTier && (context as {deterministicEdit?:unknown}).deterministicEdit ? "LOCAL_ONLY_NO_PROVIDER_REQUEST" : "PROJECTED_BEFORE_PROVIDER_GUIDANCE_AND_ENVELOPE",
     payloadTier: incrementalTier ? "incremental-effect-edit" : compactTier ? "contextual-effect-edit" : "standard",
     projectRevision: options.projectRevision,
@@ -993,13 +997,13 @@ export async function semanticPlan(
     providerConversation: projectedContext.recentConversation ?? [],
     contextProjectionBytes: Buffer.byteLength(JSON.stringify(projectedContext)),
     instructionBytes: Buffer.byteLength(
-      incrementalTier ? incrementalEditInstructions : compactTier ? selectorEditInstructions : graphInstructions+"\n"+skillPlanningInstructions,
+      incrementalTier ? incrementalEditInstructions+(effectPatchContext(context)?"\n"+incrementalPatchInstructions:"") : compactTier ? selectorEditInstructions : graphInstructions+"\n"+skillPlanningInstructions,
     ),
     outputSchemaBytes: Buffer.byteLength(
       JSON.stringify(
         compatibleSchema(
           z.toJSONSchema(
-            incrementalTier ? incrementalEditSchema : compactTier ? selectorEditSchema : semanticGraphSchema,
+            incrementalTier ? (effectPatchContext(context)?incrementalMotionPatchSchema:incrementalEditSchema) : compactTier ? selectorEditSchema : semanticGraphSchema,
             {
               io: "output",
               reused: "ref",
@@ -1022,7 +1026,8 @@ export async function semanticPlan(
       try{draft=await provider.interpret(context, request, feedback);}
       catch(error){
         if(!options.recover || !/OUTPUT_TRUNCATED|INVALID_OUTPUT|PROVIDER_TIMEOUT/.test(String(error)))throw error;
-        draft=await options.recover(error,"semantic-planning",()=>provider.interpret(context,request,{compactOutput:true,reason:"No complete initial plan exists. Group identical target behavior; preserve every source clause, temporal dependency and technique. Omit redundant explanations."}));
+        if(incrementalTier&&/INVALID_OUTPUT/.test(String(error)))correctionUsed=true;
+        draft=await options.recover(error,"semantic-planning",()=>provider.interpret(context,request,incrementalTier?{outputContract:"IncrementalMotionPatch",issues:(error as {contractIssues?:unknown}).contractIssues??[],reason:"Return one compact PATCH, verified NO_OP evidence, or QUERY. PATCH edits must be nonempty. Do not return/regenerate a full graph or repeat an empty edits response."}:{compactOutput:true,reason:"No complete initial plan exists. Group identical target behavior; preserve every source clause, temporal dependency and technique. Omit redundant explanations."}));
       }
       await trace("draft-" + attempt, draft);
       if (attempt > 1)
@@ -1128,6 +1133,7 @@ export async function semanticPlan(
           : {}),
         category: semanticFailureCategory(error),
         failureReason: failure,
+        ...(incrementalTier?{outputContract:"IncrementalMotionPatch",issues:(error as {contractIssues?:unknown}).contractIssues??[]}:{}),
         source:
           error instanceof SemanticCoverageError
             ? "coverage-validator"

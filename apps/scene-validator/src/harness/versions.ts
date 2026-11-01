@@ -26,6 +26,7 @@ const components = [
   "harness/recovery/resume",
   "motion-library/guidance",
   "motion/store",
+  "motion/incremental-patch",
   "motion/anchor",
   "motion/anchor-contract",
   "motion/anchor-edit",

@@ -4,13 +4,13 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-10-31 (Europe/Moscow) — universal object-local Anchor/Pivot, transform compensation, native UI/transition integration; partial audit |
+| Last Updated | 2026-10-31 (Europe/Moscow) — incremental inertia admission, compact effect patch and validated idempotent ensure; partial audit |
 | Last Full Audit | 2026-10-13; unchanged, this update is not a full renderer/provider audit |
-| Git Commit | Checkpoint `44c1cbf` (verified MP4 export + incremental inertia baseline). Anchor/Pivot changes are uncommitted. |
+| Git Commit | Checkpoint `b291fcc` (Anchor/Pivot baseline verified by 502 tests). Current incremental patch changes are uncommitted. |
 | Git Branch | `temporal-recovery-loop`, local only |
-| Working Tree Status | Anchor source/tests/docs modified after checkpoint44c1cbf; original project sources/motion are not changed by this task. |
-| Documentation Version | 1.1.21 |
-| Scope of Last Update | Object-local anchors, shared matrix math, explicit compensation scope, logical/scene/time ownership, incremental typed patches, Native Preview handle and Full/Draft video. |
+| Working Tree Status | Incremental patch source/tests/docs modified after checkpoint b291fcc; original project sources/motion are not changed by this task. |
+| Documentation Version | 1.1.22 |
+| Scope of Last Update | Exact INVALID_OUTPUT root cause, local inertia ADD admission, compact effect wire contract, bounded schema repair and source-repair routing. |
 | Code snapshot SHA-256 | NOT RECALCULATED; refer to component digests and final source commit. |
 
 Git 2.54.0 (Apple Git-157): локальная история, текущая ветка указана в Document Status, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
@@ -21,6 +21,22 @@ Snapshot вычислен над отсортированными файлами
 
 Источник технической истины — код. Исторические docs используются только как дополнительные материалы. Статусы: **IMPLEMENTED**, **PARTIAL**, **UNUSED IN PRIMARY FLOW**, **NOT IMPLEMENTED**. Описание реализованного механизма не доказывает качество всех возможных результатов.
 
+
+## Incremental inertia admission / compact effect patch — 2026-10-31 (partial audit)
+
+**Verified cause.** Run `2c68aef4-c7f2-4b11-8ba6-a399f7610230`, test44: exact «добавь к звезда 1, звезда 2, звезда 3 эффект затухающих колебаний после движения». Three saved semantic responses were valid JSON with `edits: []`, `queries: []` (or optional null) and assumptions explaining that all three stars already had enabled inertia. The actual failure was root path `[]`, code `custom`, message `Expected edits or bounded context queries`. The runtime Zod refinement was absent from the JSON output schema; this was not wrong scalar typing or SDK corruption. The local fully-consumed grammar also omitted «затухающих», routing an otherwise supported ADD into AI. Historical cost: four calls, 68910 input / 831 output tokens, 47435.559ms reported latency; no changes. Saved raw/validation evidence is copied into ignored `data/harness/reports/incremental-patch-2026-10-31/`.
+
+**Existing router/compiler reused.** `motion/incremental-edit.ts` admits the damped qualifier locally and marks effect-only compact contexts. `motion/rules.ts` retains the existing rule materializer as the compiler for ordinary source-bound inertial expressions, with no implicit persistent rule. It preserves existing IDs/parameters, re-enables only disabled direct effects matching the admitted scene/time/phase, creates missing movement tails and uses the actual terminal keyframe of a returning keyframe movement. Existing rule-owned inertia is ensured without replacing its owning rule or parameters. No matching base movement is a precise failure, not fabricated inertia. Source-based incoming velocity, bounded tail, settling and subsequent movement scheduling remain the existing engine implementation. Zero-velocity/unavailable-base cases are not silently replaced by wiggle.
+
+**One compact wire boundary.** New `motion/incremental-patch.ts:incrementalMotionPatchSchema` has PATCH (nonempty typed effect edits), NO_OP (effect, canonical targets, current enabled expression IDs) and bounded QUERY. It is lowered into the existing SemanticEdit/compiler, not a second state/planner/engine. `intent/planner.ts` sends only this schema for incremental effect requests, with the same schema during bounded disclosure and structural recovery. Historical response shapes remain runtime-readable for compatibility, but are not advertised in this wire contract. NO_OP is not authority: current admitted IDs, effect type, all target references and unqualified ADD intent are checked, then canonical ADD checks every suitable movement. Parameter modifications and explicitly scoped commands require PATCH. A stale or incomplete no-op claim is rejected. The measured compact schema is 8644 UTF-8 bytes; this is not a live token measurement.
+
+**Failure routing.** `motion/provider.ts` preserves INVALID_OUTPUT and bounded leaf contract issues for focused correction. The compact recovery uses one structural correction rather than recursively repeating a third identical full-plan request. `harness/recovery/supervisor.ts` does not infer a source-code defect from INVALID_OUTPUT/NO_OP contract failures and provider.ts stack alone. Explicit implementation-defect evidence still permits Code Repair. Technical/QA/transaction checks remain in place. `harness/versions.ts` fingerprints the new contract.
+
+**Actual project evidence.** Two isolated test44 copies used the exact prompt and production execution, without any model calls. As-is: 3 existing star inertias retained, no duplicates, 2974.745ms total including first warm-up. Missing-effects copy: only these three effects removed before replay, 3 source-bound effects created, 850.180ms total; selective native render QA passed and numerical peak offset was 0.610427px per star. Base animations, FPS/settings, dependencies and unrelated existing effects were unchanged in both; original motion SHA-256 was unchanged. Both copies independently rendered native frame275. These are separate local observations, not a statistically valid latency benchmark. Existing project wiggles were preserved, not created or substituted by this task. MP4 encoding and fresh live-provider semantics are NOT VERIFIED for this update.
+
+**Regression scope.** `tests/native-incremental-patch.test.ts`: eight production-path/mock-parser tests cover three logical objects across two scenes and twelve movement tails; repeat/disabled/rule-owned idempotency, amplitude+frequency edits, scoped removal, unchanged bases, native continuity, Undo/Redo, returning keyframes, bounded compact repair, stale NO_OP rejection and no source-repair invocation for ordinary invalid output. Focused suite: 8/8 PASS. Final `npm run check`: TypeScript PASS, 510/510 tests PASS (374 compatibility/base, 2 browser placement, 134 native), build PASS. Existing Preview/FFmpeg regressions passed; no fresh exact-request MP4 or external-provider call was made. The first full attempt found an obsolete test expectation of three calls including source investigation; the final test expects two bounded interpretation attempts and still verifies unchanged revision/state/successful-action history. Mock provider tests prove contract handling/execution, not live model accuracy. Arbitrary artistic language still uses the existing compact AI fallback; this change does not promise universal zero-call interpretation.
+
+Architecture Change History: v1.1.22 — corrected local damped-inertia admission; explicit compact PATCH/NO_OP/QUERY contract with current-state evidence; idempotent direct/rule-owned effect lifecycle; bounded structural feedback and implementation-evidence gate for Code Repair. No stored project schema migration, original scene mutation or motion-math rewrite.
 
 ## Universal existing-motion edits / context admission — 2026-10-31 (partial audit)
 

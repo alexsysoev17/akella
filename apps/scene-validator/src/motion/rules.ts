@@ -103,8 +103,9 @@ export function materializeRules(state: MotionState, project: LoadedProject) {
         };
         const moves: Move[] = state.animations.filter(a => a.enabled && logical(a.sceneId, a.targetId) === o.logicalObjectId).flatMap(a => {
             const values = evaluateAnimation(a, a.startFrame), end = evaluateAnimation(a, a.startFrame + a.durationFrames);
-            const properties = (['x', 'y'] as const).filter(p => values[p] !== undefined && values[p] !== end[p]);
-            return properties.length ? [{ id: a.animationId, sceneId: a.sceneId, targetId: a.targetId, start: a.startFrame, end: a.startFrame + a.durationFrames, properties: [...properties], entrance: a.effect.startsWith('slide') && 'mode' in a.parameters && a.parameters.mode === 'in' }] : [];
+            const properties = (['x', 'y'] as const).filter(p => values[p] !== undefined && (values[p] !== end[p] || a.effect==='keyframes'&&a.parameters.property===p&&a.parameters.points.some(k=>k.value!==values[p])));
+            const movementEnd=a.startFrame+(a.effect==='keyframes'?a.parameters.points.at(-1)!.frame:a.durationFrames);
+            return properties.length ? [{ id: a.animationId, sceneId: a.sceneId, targetId: a.targetId, start: a.startFrame, end: movementEnd, properties: [...properties], entrance: a.effect.startsWith('slide') && 'mode' in a.parameters && a.parameters.mode === 'in' }] : [];
         });
         for (const t of state.objectTransitions ?? [])
             if (t.logicalObjectId === o.logicalObjectId) {
@@ -168,7 +169,7 @@ export function compileSemanticEdit(project: LoadedProject, state: MotionState, 
     if(edit.expressionIds?.some(id=>!state.expressions?.some(e=>e.expressionId===id&&e.type===edit.effect&&own(e.sceneId,e.targetId))))throw Error('EDIT_TARGET_OUTSIDE_SCOPE');
     if(edit.expressionIds?.some(id=>state.ruleMaterializations?.some(m=>m.entity==='expression'&&m.id===id)))throw Error('RULE_OWNED_EFFECT: edit the scoped motion rule instead');
     const trackEdit=compileTrackEdit(state,edit,own);if(trackEdit)return trackEdit;
-    if(edit.effectStorage==='expression'&&edit.operation==='ADD_EFFECT'){
+    if(edit.effectStorage==='expression'&&edit.operation==='ADD_EFFECT'&&edit.effect!=='inertialOvershoot'){
       if(edit.effect!=='wiggle')throw Error('UNSUPPORTED_EFFECT_STORAGE: use the supported creation contract');
       return objects.flatMap(o=>{const ref=o.sourceInstances.find(i=>!edit.scope.sceneId||i.sceneId===edit.scope.sceneId);if(!ref)throw Error('EDIT_TARGET_OUTSIDE_SCOPE');return compileWiggle(project,state,{sceneId:ref.sceneId,kind:'objectAnimation',targetScope:edit.scope.sceneId?'instance':'logicalObject',target:{sourceNodeId:ref.sourceNodeId,logicalObjectId:o.logicalObjectId},timing:{startSeconds:null,anchorRequirementId:null,delaySeconds:0},parameters:{...edit.parameters,lifetime:edit.scope.sceneId?'scene':'project'}},0,state.settings.durationFrames);});
     }
@@ -250,11 +251,20 @@ export function compileSemanticEdit(project: LoadedProject, state: MotionState, 
     if(edit.operation==='ADD_EFFECT'&&edit.effect==='inertialOvershoot'){
         // Reuse the rule materializer as a compiler, without persisting an implicit rule.
         // Plain ADD effects retain the ordinary expression lifecycle and dependent removal.
-        const candidate=structuredClone(state);candidate.motionRules=[...(candidate.motionRules??[]),rule];materializeRules(candidate,project);
+        const candidate=structuredClone(state);for(const e of candidate.expressions??[])if(e.type==='inertialOvershoot'&&!e.enabled&&own(e.sceneId,e.targetId)&&['x','y'].includes(e.property)&&!state.ruleMaterializations?.some(m=>m.entity==='expression'&&m.id===e.expressionId)){
+            const base=state.animations.find(a=>a.animationId===e.sourceAnimationId),transition=state.objectTransitions?.find(t=>t.transitionId===e.transitionId),start=base?.startFrame??transition?.startFrame;
+            if(start!==undefined&&(scope.startSeconds===undefined||start>=scope.startSeconds*state.settings.fps)&&(scope.endSeconds===undefined||start<scope.endSeconds*state.settings.fps)&&(scope.phase!=='entrance'||base&&entranceTrack(base)))e.enabled=true;
+        }candidate.motionRules=[...(candidate.motionRules??[]),rule];materializeRules(candidate,project);
         const ids=new Set(state.expressions?.map(e=>e.expressionId));
         const created=(candidate.expressions??[]).filter(e=>!ids.has(e.expressionId));
         const retained=(state.expressions??[]).filter(e=>e.type==='inertialOvershoot'&&own(e.sceneId,e.targetId)&&!state.ruleMaterializations?.some(m=>m.entity==='expression'&&m.id===e.expressionId));
-        return [...created,...retained].map(expression=>({type:'setExpression' as const,expression}));
+        const expressions=[...created,...retained.map(e=>candidate.expressions?.find(c=>c.expressionId===e.expressionId)??e)];
+        if(!expressions.length){
+            const ownedIds=new Set((state.expressions??[]).filter(e=>e.type==='inertialOvershoot'&&own(e.sceneId,e.targetId)).map(e=>e.expressionId)),ruleIds=new Set(state.ruleMaterializations?.filter(m=>m.entity==='expression'&&ownedIds.has(m.id)).map(m=>m.ruleId));
+            const existingRules=(state.motionRules??[]).filter(r=>ruleIds.has(r.ruleId));if(existingRules.length)return existingRules.map(rule=>({type:'setMotionRule' as const,rule}));
+            throw Error('NO_MATCHING_BASE_MOVEMENTS_FOR_INERTIA');
+        }
+        return expressions.map(expression=>({type:'setExpression' as const,expression}));
     }
     ops.push({ type: 'setMotionRule', rule });
     if (edit.operation === 'REMOVE_EFFECT') {
