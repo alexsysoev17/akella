@@ -90,6 +90,7 @@ export async function inspectorRuns(root: string) {
       createdAt: run.createdAt,
       executionRole: run.executionRole ?? "direct",
       productionId: run.productionId ?? null,
+      directCheckpointId:run.directCheckpointId??null,
       status: run.status,
       failure: run.failure ?? null,
       calls: run.calls,
@@ -115,6 +116,12 @@ export async function inspectorRun(root: string, id: string, raw = false) {
       ? Object.fromEntries(["productionId", "status", "planRevision", "checkpoint", "plan", "tasks", "models", "events", "parentRunIds", "reason"].map(key => [key, checkpoint[key]]))
       : checkpoint;
   } else if (full) production = await saved(root, `motion/ai/${id}/production.json`);
+  let directCheckpoint:unknown="NOT_AVAILABLE";
+  if(full&&z.uuid().safeParse(run.directCheckpointId).success){
+    const record=await saved(root,`motion/direct-runs/${run.directCheckpointId}/checkpoint.json`) as Data;
+    if(record&&typeof record==='object'&&record.version){const snapshot=record.snapshot as Data;directCheckpoint={version:record.version,runId:record.runId,status:record.status,updatedAt:record.updatedAt,model:record.model,attemptRunIds:record.attemptRunIds,publication:record.publication,reason:record.reason,candidateDigest:snapshot.candidateDigest,batches:(snapshot.batches as unknown[]).length,operations:(snapshot.batches as unknown[][]).reduce((n,b)=>n+b.length,0),observations:record.observations,schemaReferences:(record.schemas as unknown[][]).map(e=>e[0]),candidatePreview:'NOT_IMPLEMENTED_PUBLIC_PREVIEW_UNCHANGED'};}
+    else directCheckpoint=record;
+  }
   const trace = await saved(root, `${base}/trace.json`);
   const tasks = full
     ? await saved(root, `motion/ai/${id}/tasks.json`)
@@ -307,6 +314,7 @@ export async function inspectorRun(root: string, id: string, raw = false) {
           requirementCountStatus:Array.isArray(plannedRequirements)?"PLANNED":"NOT_PLANNED",
         }))
       : "NOT_AVAILABLE",
+    directCheckpoint,
     production: production && typeof production === "object" && "tasks" in production
       ? { ...production, tasks: Object.fromEntries(Object.entries((production as Data).tasks as Data).map(([key, value]) => {
           const task = value as Data;
@@ -442,6 +450,7 @@ export async function inspectorRun(root: string, id: string, raw = false) {
               createdAt: run.createdAt,
       executionRole: run.executionRole ?? "direct",
       productionId: run.productionId ?? null,
+      directCheckpointId:run.directCheckpointId??null,
               privacy: run.privacy,
             }
           : "NOT_AVAILABLE: RESPONSE_SIZE_LIMIT";

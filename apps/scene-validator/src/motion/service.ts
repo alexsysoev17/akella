@@ -1198,9 +1198,9 @@ export async function executeMotion(
   }
   if((options.executionRuntime??process.env.AKELLA_MOTION_RUNTIME??"agent")==="agent"&&!options.resumeContract){
     const request=await prepareMotionRequest(project,input);if(request.settings.provider!=="manual-response"){await saveProviderSettings(project,request.settings,"execution");
-    const {executeProduction}=await import('./production-runtime.js');if(options.executionMode==='production')return await executeProduction(project,request,onStage,{...options,requestFingerprint:editRequestFingerprint(request)}) as unknown as Awaited<ReturnType<typeof proposeMotion>>;
-    const result=await executeAgentMotion(project,request,onStage,{...options,allowProduction:options.executionMode!=='direct',requestFingerprint:editRequestFingerprint(request)});
-    if('handoff'in result&&result.handoff==='MOTION_PRODUCTION')return await executeProduction(project,{...request,editId:request.editId??result.id},onStage,{...options,requestFingerprint:editRequestFingerprint(request),intake:{runId:result.id,metrics:result.intakeMetrics!}}) as unknown as Awaited<ReturnType<typeof proposeMotion>>;
+    if(options.executionMode==='production'){const {executeProduction}=await import('./production-runtime.js');return await executeProduction(project,request,onStage,{...options,requestFingerprint:editRequestFingerprint(request)}) as unknown as Awaited<ReturnType<typeof proposeMotion>>;}
+    const result=await executeAgentMotion(project,request,onStage,{...options,allowProduction:false,requestFingerprint:editRequestFingerprint(request)});
+
     return result as unknown as Awaited<ReturnType<typeof proposeMotion>>;}
   }
   onStage("generating");

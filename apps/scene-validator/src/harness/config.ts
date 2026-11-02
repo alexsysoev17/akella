@@ -38,6 +38,8 @@ export const harnessConfigSchema = z
     repairBudgetMs: z.number().int().min(1000).max(300000).default(60000),
     minimumRetryBudgetMs: z.number().int().min(1).max(180000).default(15000),
     executionReserveMs: z.number().int().min(0).max(60000).default(10000),
+    directTimeoutRetries: z.number().int().min(0).max(2).default(1),
+    directContinuationBudgetMs: z.number().int().min(1000).max(600000).default(180000),
     providerTimeoutMs: z.number().int().min(1000).max(300000).default(180000),
     maxEstimatedCost: z.number().positive().nullable().default(null),
     privacy: z.enum(["full", "metadata", "off"]).default("full"),

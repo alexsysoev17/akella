@@ -58,6 +58,7 @@ export class HarnessRun {
     [];
   executionRole: 'direct'|'production'|'worker' = 'direct';
   productionId?: string;
+  directCheckpointId?:string;
   references: unknown[] = [];
   techniques: string[] = [];
   failures: string[] = [];
@@ -445,6 +446,7 @@ export class HarnessRun {
         projectId: this.project.config.projectId,
         executionRole: this.executionRole,
         productionId: this.productionId,
+        directCheckpointId:this.directCheckpointId,
         ownerPid: process.pid,
         ownerHost: hostname(),
         sourceFingerprint: this.project.inspection.fingerprint,
@@ -520,7 +522,7 @@ export class HarnessRun {
   ) {
     if (this.finished) return;
     const verified=status==="SUCCESS" && (result?.reconciliation as {status?:string}|undefined)?.status==="SUCCESS";
-    if(!["SUCCESS","HANDOFF","STAGED_VERIFIED","TASK_CONTRACT_CONFLICT"].includes(status)&&!this.supervisor.report.events.length)await this.supervisor.settle(Error("UNVERIFIED_RESULT: "+status),"final-reconciliation",{}, {evidence:[result?.reconciliation]});
+    if(!["SUCCESS","HANDOFF","STAGED_VERIFIED","TASK_CONTRACT_CONFLICT","PAUSED_RESUMABLE","CANCELLED"].includes(status)&&!this.supervisor.report.events.length)await this.supervisor.settle(Error("UNVERIFIED_RESULT: "+status),"final-reconciliation",{}, {evidence:[result?.reconciliation]});
     await this.supervisor.complete(verified,result?.reconciliation);
     if(!this.scratch&&this.config.privacy==="full")await rememberSupervisor(this.project.root,this.supervisor.report,digest(this.references)).catch(error=>console.warn("Recovery experience persistence failed:",String(error)));
     this.finished = true;

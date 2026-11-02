@@ -194,6 +194,14 @@ export class WorkingRevision {
         throw Error('RESULT_CHECK_FAILED'); return checks; }
     authorizeContextTargets(ids:string[]){if(!agentPolicy(this.validationMode).declaredScopeIsBoundary)this.scope=[...new Set([...this.scope,...ids])];}
     async observeChecks(checks:ResultCheck[],signal?:AbortSignal,beforeRender?:()=>void){const previous=this.checks;try{this.checks=checks;signal?.throwIfAborted();this.validateIntegrity();return checks.some(c=>c.assertion.kind==='renderedDelta')?(await this.validate(signal,beforeRender)).checks:this.evaluate();}finally{this.checks=previous;}}
+    checkpointState(){return {revision:this.revision,original:structuredClone(this.original),batches:structuredClone(this.batches),candidateDigest:digest(this.state),checks:structuredClone(this.checks),scope:[...this.scope],allowTimeline:this.allowTimeline,dependencyPolicy:this.dependencyPolicy,readTargets:this.observedTargets(),receipts:[...this.receipts.entries()],scopeExpansions:structuredClone(this.scopeExpansions)};}
+    restoreCheckpoint(snapshot:ReturnType<WorkingRevision['checkpointState']>){
+        if(this.batches.length||digest(this.original)!==digest(snapshot.original))throw Error('DIRECT_CHECKPOINT_BASE_MISMATCH');
+        this.checks=snapshot.checks;this.scope=snapshot.scope;this.allowTimeline=snapshot.allowTimeline;this.dependencyPolicy=snapshot.dependencyPolicy;
+        for(const [index,batch] of snapshot.batches.entries())this.apply(batch,'checkpoint-replay-'+index);
+        if(digest(this.state)!==snapshot.candidateDigest)throw Error('DIRECT_CHECKPOINT_DIGEST_MISMATCH');
+        this.receipts=new Map(snapshot.receipts);this.observeTargets(snapshot.readTargets);this.scopeExpansions.splice(0,this.scopeExpansions.length,...snapshot.scopeExpansions);this.validateIntegrity();
+    }
     observedTargets(){return [...this.readTargets];}
     observeTargets(ids:string[]){for(const id of ids)this.readTargets.add(id);}
     /** One bounded rebase; any changed read dependency is a real conflict. */

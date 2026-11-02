@@ -340,9 +340,9 @@ export async function mountMotion(
   }
   function offerProductionResume(){
     container.querySelector('#m-production-resume')?.remove();
-    const records=(data.productions??[]).filter(p=>['PAUSED','RUNNING','PLANNING','CANCELLED'].includes(p.status));if(!records.length)return;
+    const records=(data.directCheckpoints??[]).filter(p=>['PAUSED_RESUMABLE','RUNNING','CANCELLED'].includes(p.status));if(!records.length)return;
     const wrap=document.createElement('div');wrap.id='m-production-resume';
-    for(const p of records.slice(0,3)){const button=document.createElement('button');button.type='button';button.textContent=p.phase==='planning'?`Продолжить планирование (${p.total} задач описано)`:`Продолжить сохранённую задачу (${p.completed}/${p.total})`;button.onclick=guarded(async()=>{if(busy)return;busy=true;button.disabled=true;try{const job=await api('production-resume',{productionId:p.productionId});activeJobId=job.jobId;$('m-cancel').hidden=false;showExecution(await poll(job.jobId));}finally{busy=false;activeJobId=null;if(alive)$('m-cancel').hidden=true;button.disabled=false;}});wrap.append(button);}
+    for(const p of records.slice(0,3)){const button=document.createElement('button');button.type='button';button.textContent=`Продолжить (${p.operations} операций сохранено)`;button.onclick=guarded(async()=>{if(busy)return;busy=true;button.disabled=true;try{const job=await api('direct-resume',{runId:p.runId});activeJobId=job.jobId;$('m-cancel').hidden=false;showExecution(await poll(job.jobId));}finally{busy=false;activeJobId=null;if(alive)$('m-cancel').hidden=true;button.disabled=false;}});wrap.append(button);}
     $('m-proposal').after(wrap);
   }
   async function poll(jobId) {
@@ -365,6 +365,7 @@ export async function mountMotion(
         $("m-job").textContent =
           {
             'production-planning':'Планируем анимацию…',
+            'direct-resuming':'Продолжаем сохранённое исполнение…',
             'production-resuming':'Продолжаем с сохранённого этапа…',
             'production-finalizing':'Сохраняем готовую анимацию…',
             understanding: "Разбираем полный запрос…",
@@ -383,8 +384,8 @@ export async function mountMotion(
   }
   function showExecution(result) {
     if(!alive)return;
-    if(result.productionId&&result.status==='applied'){data.productions=(data.productions??[]).filter(p=>p.productionId!==result.productionId);offerProductionResume();}
-    if(result.status==='paused'){executionMessage=result.summary??'Готовые этапы сохранены. Можно продолжить.';$('m-proposal').textContent=executionMessage;void api('').then(next=>{data=next;offerProductionResume();});return;}
+    if(result.status==='applied'){data.directCheckpoints=(data.directCheckpoints??[]).filter(p=>p.runId!==result.id);offerProductionResume();}
+    if(['paused','PAUSED_RESUMABLE','CANCELLED'].includes(result.status)){executionMessage=result.summary??'Готовые этапы сохранены. Можно продолжить.';$('m-proposal').textContent=executionMessage;void api('').then(next=>{data=next;offerProductionResume();});return;}
 
     if (result.manual) {
       manualId = result.id;
@@ -513,7 +514,7 @@ export async function mountMotion(
       <dialog id="m-settings-dialog" class="motion-settings"><div class="settings-heading"><h2>Настройки проекта</h2><a href="#skills">Библиотека анимаций</a><button id="m-close-settings" class="quiet" aria-label="Закрыть настройки">Закрыть</button></div>
       <label>Тема<select id="m-theme"><option value="dark">Тёмная</option><option value="light">Светлая</option></select></label><h3>Видео</h3><div class="settings"><label>Длительность, с<input id="m-seconds" type="number" min="0.1" step="0.1"></label><label>FPS<input id="m-fps" type="number" min="1" max="60"></label><label>Ширина<input id="m-width" type="number" min="2" max="4096"></label><label>Высота<input id="m-height" type="number" min="2" max="4096"></label></div><button id="m-settings" class="secondary">Сохранить параметры видео</button>
       <div class="settings"><label>Текущий кадр<input id="m-frame" type="number" min="0" value="0"></label><label class="check-label"><input id="m-loop" type="checkbox" checked> Повторять видео</label></div><h3>Выбранный объект</h3><p id="m-selected"></p><label class="check-label"><input id="m-visible" type="checkbox"> Показывать объект</label>
-      <details class="curve-inspector"><summary>Кривая движения</summary><label>Анимация<select id="m-curves"></select></label><svg id="m-curve" viewBox="0 0 260 124" role="img" aria-label="Кривая easing: время слева направо, прогресс снизу вверх"></svg><p id="m-curve-label"></p></details><h3>AI-агент</h3><p id="m-provider-status">Проверяем подключение…</p><label>Подключение<select id="m-provider"><option value="" disabled>Выберите подключение</option>${(data.availableProviders ?? ["codex-sdk", "codex-cli"]).map((id) => `<option value="${esc(id)}">${esc(PROVIDER_LABELS[id] ?? id)}</option>`).join("")}<option value="manual-response">Ручной обмен с Codex</option></select></label><label>Модель<input id="m-model" placeholder="По умолчанию провайдера"></label>
+      <details class="curve-inspector"><summary>Кривая движения</summary><label>Анимация<select id="m-curves"></select></label><svg id="m-curve" viewBox="0 0 260 124" role="img" aria-label="Кривая easing: время слева направо, прогресс снизу вверх"></svg><p id="m-curve-label"></p></details><h3>AI-агент</h3><p id="m-provider-status">Проверяем подключение…</p><label>Подключение<select id="m-provider"><option value="" disabled>Выберите подключение</option>${(data.availableProviders ?? ["codex-sdk", "codex-cli"]).map((id) => `<option value="${esc(id)}">${esc(PROVIDER_LABELS[id] ?? id)}</option>`).join("")}<option value="manual-response">Ручной обмен с Codex</option></select></label><label>Модель<input id="m-model" placeholder="Codex: gpt-6.1-sol, либо выберите модель"></label>
       <div id="m-manual" hidden><label>Запрос для Codex<textarea id="m-manual-request" readonly></textarea></label><label>Ответ JSON<textarea id="m-manual-response"></textarea></label><button id="m-read-response">Загрузить ответ</button></div>
       <details><summary>Диагностика Motion Agent</summary><button id="m-debug-load" class="secondary">Последняя проверка</button><pre id="m-debug" style="white-space:pre-wrap;max-height:400px;overflow:auto"></pre><div id="m-debug-tasks"></div><img id="m-debug-sheet" style="width:100%" hidden alt="Контрольные кадры QA"></details><h3>Диагностика композиции</h3><ul>${(data.diagnostics ?? []).map((d) => `<li>${esc(d)}</li>`).join("") || "<li>Нет замечаний</li>"}</ul><h3>История запросов</h3><ol id="m-history"></ol><h3>Готовые видео</h3><div id="m-videos"></div><h3>История изменений</h3><div class="actions"><button id="m-undo">Отменить изменение</button><button id="m-redo">Повторить изменение</button></div><h3>Исходный дизайн</h3><button id="update" class="secondary">Обновить из Figma</button></dialog></div>`;
     $("m-theme").value = document.documentElement.dataset.theme ?? "dark";

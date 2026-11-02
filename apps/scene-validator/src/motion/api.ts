@@ -1,3 +1,5 @@
+import {listDirectCheckpoints} from './direct-checkpoint.js';
+import {resumeDirectMotion} from './agent-runtime.js';
 import {executeProduction,listProductions,readProduction} from './production-runtime.js';
 import {commitAnchorChange} from './anchor-service.js';
 import {exportReports,exportReport} from './export-reports.js';
@@ -179,7 +181,7 @@ export async function motionApi(
         return null;
       })();
       const deferred=(await recoveryJobs(project)).find(j=>["PENDING","RUNNING"].includes(j.status));
-      json({ ...(await projectMotion(project)), productions:await listProductions(project), activeJob:activeJob??(deferred?{id:deferred.id,stage:"recovering-project"}:null) });
+      json({ ...(await projectMotion(project)), productions:await listProductions(project), directCheckpoints:await listDirectCheckpoints(project), activeJob:activeJob??(deferred?{id:deferred.id,stage:"recovering-project"}:null) });
       return true;
     }
     if (action === "inspector") {
@@ -572,7 +574,14 @@ export async function motionApi(
       }
       return true;
     }
+    if(action==='direct-resume'){
+      const {runId}=z.object({runId:z.uuid()}).strict().parse(input);
+      if([...jobs.values()].some(j=>j.projectId===project.config.projectId&&j.status==='running'))throw Error('Дождитесь завершения текущего задания');
+      const id=randomUUID(),controller=new AbortController();controllers.set(id,controller);jobs.set(id,{projectId:project.config.projectId,status:'running',stage:'direct-resuming'});json({jobId:id},202);
+      void resumeDirectMotion(project,runId,stage=>jobs.set(id,{projectId:project.config.projectId,status:'running',stage}),{signal:controller.signal}).then(result=>jobs.set(id,{projectId:project.config.projectId,status:'completed',result})).catch(error=>jobs.set(id,{projectId:project.config.projectId,status:'failed',error:String(error)})).finally(()=>controllers.delete(id));return true;
+    }
     if(action==='production-resume'){
+      if(process.env.AKELLA_ENABLE_EXPERIMENTAL_PRODUCTION!=='1')throw Error('EXPERIMENTAL_PRODUCTION_DISABLED: Direct runtime is the default');
       const value=z.object({productionId:z.string().uuid()}).strict().parse(input),saved=await readProduction(project,value.productionId);
       if([...jobs.values()].some(j=>j.projectId===project.config.projectId&&j.status==='running'))throw Error('Дождитесь завершения текущего задания');
       const id=randomUUID(),controller=new AbortController();controllers.set(id,controller);jobs.set(id,{projectId:project.config.projectId,status:'running',stage:'production-resuming'});json({jobId:id},202);

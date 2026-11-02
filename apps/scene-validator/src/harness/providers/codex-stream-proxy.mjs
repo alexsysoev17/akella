@@ -13,5 +13,6 @@ child.stdout.on('end', () => process.stdout.write(encode(decoder.end())));
 process.stdin.pipe(child.stdin);
 child.stdin.on('error', () => {});
 child.on('error', error => { process.stderr.write(String(error)); process.exitCode = 1; });
-child.on('close', (code, signal) => { process.exitCode = code ?? (signal ? 1 : 0); });
-for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => { child.kill(signal); });
+let killTimer;
+child.on('close', (code, signal) => { clearTimeout(killTimer); process.exitCode = code ?? (signal ? 1 : 0); });
+for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => { child.kill(signal); if(!killTimer){killTimer=setTimeout(()=>child.kill('SIGKILL'),1000);killTimer.unref();} });

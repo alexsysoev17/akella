@@ -46,3 +46,9 @@ test('persistent event corruption stops after one transport retry, preserves roo
  const report=await run.supervisor.settle(error,'provider-call');assert.equal(report.status,'RECOVERY_EXHAUSTED');assert.match(report.finalReason!,/one budgeted retry/);assert.equal(report.originalFailure?.errorCode,'PROVIDER_EVENT_PARSE_ERROR');assert.equal(report.attempts.length,1);
  }finally{await run.finish('FAILED');await f.cleanup();}
 });
+test('SDK proxy and CLI abort terminate a non-cooperative local process; no model or network call',async()=>{
+ const dir=await mkdtemp(path.join(os.tmpdir(),'codex-abort-')),old=process.env.MOTION_CODEX_BIN;
+ try{const binary=path.join(dir,'fake-codex'),pidFile=path.join(dir,'child.pid');await writeFile(binary,`#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(pidFile)},String(process.pid));process.on('SIGTERM',()=>{});process.stdin.resume();setInterval(()=>{},1000);`,{mode:0o700});process.env.MOTION_CODEX_BIN=binary;
+ for(const id of ['codex-sdk','codex-cli'] as const){const controller=new AbortController(),pending=new CodexAdapter(id,dir).generate({...request,signal:controller.signal});let pid=0;for(let i=0;i<100;i++){try{pid=Number(await readFile(pidFile,'utf8'));if(pid)break;}catch{}await new Promise(r=>setTimeout(r,10));}assert.ok(pid);controller.abort();await assert.rejects(pending,e=>(e as ProviderError).code==='CANCELLED');let alive=true;for(let i=0;i<150;i++){try{process.kill(pid,0);}catch{alive=false;break;}await new Promise(r=>setTimeout(r,10));}assert.equal(alive,false,'Aborted child must not remain running');await rm(pidFile,{force:true});}
+ }finally{if(old===undefined)delete process.env.MOTION_CODEX_BIN;else process.env.MOTION_CODEX_BIN=old;await rm(dir,{recursive:true,force:true});}
+});

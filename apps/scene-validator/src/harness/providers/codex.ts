@@ -291,7 +291,8 @@ function cli(
     const decoder = new StringDecoder("utf8");
     let output = "",
       error = "";
-    const abort = () => child.kill("SIGTERM");
+    let killTimer:ReturnType<typeof setTimeout>|undefined;
+    const abort = () => {child.kill("SIGTERM");killTimer=setTimeout(()=>child.kill("SIGKILL"),1000);killTimer.unref();};
     signal.addEventListener("abort", abort, { once: true });
     child.stdout.on("data", (b) => {
       output += decoder.write(b);
@@ -304,6 +305,7 @@ function cli(
     child.on("error", reject);
     child.on("close", (code) => {
       signal.removeEventListener("abort", abort);
+      clearTimeout(killTimer);
       output += decoder.end();
       if (code !== 0) return reject(new Error(`Codex CLI ${code}: ${error}`));
       try {
