@@ -121,7 +121,7 @@ export function evaluateAnimation(a: Animation, frame: number): Values {
     }
   }
 }
-export function evaluateMotion(state: MotionState, frame: number, presentation: StatePresentation = {}) {
+export function evaluateMotion(state: MotionState, frame: number, presentation: StatePresentation = {}, samplingTracks:Animation[]=state.animations) {
   frame = safeFrame(Math.floor(frame));
   const nodes: Record<string, Values> = {};
   const tracks = new Map<string, Animation[]>();
@@ -169,9 +169,10 @@ export function evaluateMotion(state: MotionState, frame: number, presentation: 
   composeExpressions(
     {
       ...state,
+      animations:samplingTracks,
       expressions: (state.expressions ?? []).filter(
         (e) =>
-          !("sourceAnimationId" in e) || !segmented.has(e.sourceAnimationId),
+          !(e.textBinding?.animationId&&segmented.has(e.textBinding.animationId))&&(!("sourceAnimationId" in e) || !segmented.has(e.sourceAnimationId)),
       ),
     },
     frame,

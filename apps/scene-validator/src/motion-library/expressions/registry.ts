@@ -14,6 +14,7 @@ export const propertySchema = z.enum([
 ]);
 const common = {
   expressionId: id,
+  textBinding: z.object({animationId:id,phase:z.enum(["withTrack","afterTrack"])}).strict().optional(),
   transitionId: id.optional(),
   ownership: z.object({ scope: z.enum(["sceneInstance", "transition", "logicalObject"]), logicalObjectId: id.optional() }).strict().optional(),
   sceneId: id,

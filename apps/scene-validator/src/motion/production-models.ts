@@ -1,0 +1,11 @@
+import {readFile} from 'node:fs/promises';
+import {homedir} from 'node:os';
+import path from 'node:path';
+export type ModelRole='director'|'worker'|'lightweight'|'general';
+export async function resolveProductionModels(settings:{provider:string;model:string},config:Partial<Record<ModelRole,string[]>>={},excluded:string[]=[],environment:{codexHome?:string;now?:number}={}){
+ let catalog:string[]=[],configured=settings.model,source='explicit provider configuration; availability requires successful inference';
+ if(['codex-sdk','codex-cli'].includes(settings.provider))try{const root=environment.codexHome??process.env.CODEX_HOME??path.join(homedir(),'.codex');if(!configured)configured=(await readFile(path.join(root,'config.toml'),'utf8')).split(/^\[/m)[0].match(/^model\s*=\s*"([\w.:-]+)"/m)?.[1]??'';const cache=JSON.parse(await readFile(path.join(root,'models_cache.json'),'utf8'));const age=(environment.now??Date.now())-Date.parse(cache.fetched_at);if(age>=0&&age<7*86400000){catalog=(cache.models??[]).filter((m:any)=>m.visibility!=='hide'&&m.visibility!=='hidden').map((m:any)=>m.slug).filter((s:unknown):s is string=>typeof s==='string');source='local cached Codex catalogue; not an entitlement guarantee';}}catch{}
+ const preferred:Record<ModelRole,string[]>={general:['gpt-6.1-sol'],director:['gpt-6-astra','gpt-6.1-sol'],worker:['gpt-6.1-terra','gpt-6.1-sol'],lightweight:['gpt-6-luna','gpt-6.1-terra','gpt-6.1-sol']};
+ const pick=(role:ModelRole)=>{const requested=config[role]??preferred[role];const candidates=[...(!['codex-sdk','codex-cli'].includes(settings.provider)?config[role]??[]:requested.filter(id=>catalog.includes(id))),...(configured?[configured]:[]),...catalog.filter(id=>['gpt-6.1-sol','gpt-6.1-terra'].includes(id))].filter(id=>!excluded.includes(id));const model=candidates[0];if(!model&&excluded.includes(configured))throw Error('PRODUCTION_MODEL_FALLBACK_UNAVAILABLE');return {role,provider:settings.provider,model:model??'',provenance:source,availability:catalog.includes(model??'')?'CATALOG_NOT_ENTITLEMENT':'UNVERIFIED_CONFIGURED',fallback:requested[0]!==model,diagnostics:requested[0]!==model?['Preferred model unavailable/unverified; using '+(model||'provider default')]:[]};};
+ return {general:pick('general'),director:pick('director'),worker:pick('worker'),lightweight:pick('lightweight')};
+}

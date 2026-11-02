@@ -88,6 +88,8 @@ export async function inspectorRuns(root: string) {
     const row = clean({
       runId: id,
       createdAt: run.createdAt,
+      executionRole: run.executionRole ?? "direct",
+      productionId: run.productionId ?? null,
       status: run.status,
       failure: run.failure ?? null,
       calls: run.calls,
@@ -106,6 +108,13 @@ export async function inspectorRun(root: string, id: string, raw = false) {
   if (!run || typeof run !== "object" || !run.runId)
     throw new Error("Agent Run not found");
   const full = run.privacy === "full";
+  let production: unknown = "NOT_AVAILABLE";
+  if (full && z.uuid().safeParse(run.productionId).success) {
+    const checkpoint = await saved(root, `motion/productions/${run.productionId}/production.json`) as Data;
+    production = checkpoint && typeof checkpoint === "object" && checkpoint.productionId
+      ? Object.fromEntries(["productionId", "status", "planRevision", "checkpoint", "plan", "tasks", "models", "events", "parentRunIds", "reason"].map(key => [key, checkpoint[key]]))
+      : checkpoint;
+  } else if (full) production = await saved(root, `motion/ai/${id}/production.json`);
   const trace = await saved(root, `${base}/trace.json`);
   const tasks = full
     ? await saved(root, `motion/ai/${id}/tasks.json`)
@@ -298,6 +307,12 @@ export async function inspectorRun(root: string, id: string, raw = false) {
           requirementCountStatus:Array.isArray(plannedRequirements)?"PLANNED":"NOT_PLANNED",
         }))
       : "NOT_AVAILABLE",
+    production: production && typeof production === "object" && "tasks" in production
+      ? { ...production, tasks: Object.fromEntries(Object.entries((production as Data).tasks as Data).map(([key, value]) => {
+          const task = value as Data;
+          return [key, Object.fromEntries(["status", "attempts", "error", "failure", "model", "runIds", "verification"].map(field => [field, task[field]]))];
+        })) }
+      : production,
     agentRuntime: full ? await saved(root,`motion/ai/${id}/agent-runtime.json`) : "NOT_AVAILABLE",
     incrementalEdit: full ? await saved(root,`motion/ai/${id}/incremental-edit.json`) : Array.isArray(trace)?trace.filter(e=>e.stage==='incremental-edit').map(e=>({route:e.data?.route,llmCalls:e.data?.llmCalls,objectResolutionMs:e.data?.objectResolutionMs,patchConstructionMs:e.data?.patchConstructionMs,applyMs:e.data?.applyMs,qaMs:e.data?.qaMs})):"NOT_AVAILABLE",
     contextComposition: Array.isArray(trace) ? trace.filter(e=>e.stage==="semantic-diagnostic" && e.data?.phase==="reference-context").map(e=>e.data.report) : "NOT_AVAILABLE",
@@ -425,6 +440,8 @@ export async function inspectorRun(root: string, id: string, raw = false) {
               runId: run.runId,
               status: run.status,
               createdAt: run.createdAt,
+      executionRole: run.executionRole ?? "direct",
+      productionId: run.productionId ?? null,
               privacy: run.privacy,
             }
           : "NOT_AVAILABLE: RESPONSE_SIZE_LIMIT";

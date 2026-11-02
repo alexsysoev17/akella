@@ -1,3 +1,4 @@
+import {executeProduction,listProductions,readProduction} from './production-runtime.js';
 import {commitAnchorChange} from './anchor-service.js';
 import {exportReports,exportReport} from './export-reports.js';
 import {handoffOperations,prepareHandoff} from "../motion-library/skills/runtime.js";
@@ -178,7 +179,7 @@ export async function motionApi(
         return null;
       })();
       const deferred=(await recoveryJobs(project)).find(j=>["PENDING","RUNNING"].includes(j.status));
-      json({ ...(await projectMotion(project)), activeJob:activeJob??(deferred?{id:deferred.id,stage:"recovering-project"}:null) });
+      json({ ...(await projectMotion(project)), productions:await listProductions(project), activeJob:activeJob??(deferred?{id:deferred.id,stage:"recovering-project"}:null) });
       return true;
     }
     if (action === "inspector") {
@@ -366,6 +367,7 @@ export async function motionApi(
       json(job);
       return true;
     }
+    if (action === 'productions') {json(segments[5]?await readProduction(project,segments[5]):await listProductions(project));return true;}
     if (action === "thumbnail") {
       const sceneId = decodeURIComponent(segments[5] ?? "");
       const scene = project.inspection.document.scenes.find(
@@ -570,6 +572,12 @@ export async function motionApi(
       }
       return true;
     }
+    if(action==='production-resume'){
+      const value=z.object({productionId:z.string().uuid()}).strict().parse(input),saved=await readProduction(project,value.productionId);
+      if([...jobs.values()].some(j=>j.projectId===project.config.projectId&&j.status==='running'))throw Error('Дождитесь завершения текущего задания');
+      const id=randomUUID(),controller=new AbortController();controllers.set(id,controller);jobs.set(id,{projectId:project.config.projectId,status:'running',stage:'production-resuming'});json({jobId:id},202);
+      void executeProduction(project,{request:saved.request,settings:saved.settings as import('./provider.js').ProviderSettings,expectedRevision:(await readMotion(project)).revision},stage=>jobs.set(id,{projectId:project.config.projectId,status:'running',stage}),{productionId:value.productionId,signal:controller.signal}).then(result=>jobs.set(id,{projectId:project.config.projectId,status:'completed',result})).catch(error=>jobs.set(id,error.resumable?{projectId:project.config.projectId,status:'completed',result:{status:'paused',productionId:value.productionId,resumable:true,summary:'Этапы сохранены. Продолжение доступно.'}}:{projectId:project.config.projectId,status:'failed',error:String(error)})).finally(()=>controllers.delete(id));return true;
+    }
     if (action === "cancel") {
       const { jobId } = z.object({ jobId: z.uuid() }).strict().parse(input);
       const job = jobs.get(jobId);
@@ -696,6 +704,7 @@ export async function motionApi(
           }),
         )
         .catch(async(e) => {
+          if(e.resumable&&e.productionId){jobs.set(id,{projectId:project.config.projectId,status:'completed',result:{status:'paused',productionId:e.productionId,resumable:true,summary:'Соединение с моделью прервалось или этап требует продолжения. Выполненные этапы сохранены.'}});return;}
           const deferredId=(e as {deferredJobId?:string}).deferredJobId;
           if(deferredId){
             deferredAliases.set(id,deferredId);jobs.set(id,{projectId:project.config.projectId,status:"running",stage:"recovering-project"});

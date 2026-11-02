@@ -338,6 +338,13 @@ export async function mountMotion(
     $("m-proposal").textContent = "Изменения сохранены.";
     refresh(reload);
   }
+  function offerProductionResume(){
+    container.querySelector('#m-production-resume')?.remove();
+    const records=(data.productions??[]).filter(p=>['PAUSED','RUNNING','PLANNING','CANCELLED'].includes(p.status));if(!records.length)return;
+    const wrap=document.createElement('div');wrap.id='m-production-resume';
+    for(const p of records.slice(0,3)){const button=document.createElement('button');button.type='button';button.textContent=p.phase==='planning'?`Продолжить планирование (${p.total} задач описано)`:`Продолжить сохранённую задачу (${p.completed}/${p.total})`;button.onclick=guarded(async()=>{if(busy)return;busy=true;button.disabled=true;try{const job=await api('production-resume',{productionId:p.productionId});activeJobId=job.jobId;$('m-cancel').hidden=false;showExecution(await poll(job.jobId));}finally{busy=false;activeJobId=null;if(alive)$('m-cancel').hidden=true;button.disabled=false;}});wrap.append(button);}
+    $('m-proposal').after(wrap);
+  }
   async function poll(jobId) {
     for (;;) {
       if (!alive)
@@ -357,6 +364,9 @@ export async function mountMotion(
       if (job.stage)
         $("m-job").textContent =
           {
+            'production-planning':'Планируем анимацию…',
+            'production-resuming':'Продолжаем с сохранённого этапа…',
+            'production-finalizing':'Сохраняем готовую анимацию…',
             understanding: "Разбираем полный запрос…",
             generating: "Создаём движение…",
             checking: "Проверяем движение…",
@@ -365,13 +375,17 @@ export async function mountMotion(
             "investigating-recovery": "Проверяем причину сбоя и готовим исправление…",
             "code-repair-proposed": "Готовим предложение ремонта кода…",
             applying: "Сохраняем изменения…",
-          }[job.stage] ?? "Понимаем запрос…";
+          }[job.stage] ?? (job.stage.startsWith('production-task:')?'Создаём этап '+job.stage.slice(16)+'…':'Понимаем запрос…');
       if (job.total)
         $("m-job").textContent = `Рендер: ${job.progress}/${job.total} кадров`;
       await new Promise((r) => setTimeout(r, 1000));
     }
   }
   function showExecution(result) {
+    if(!alive)return;
+    if(result.productionId&&result.status==='applied'){data.productions=(data.productions??[]).filter(p=>p.productionId!==result.productionId);offerProductionResume();}
+    if(result.status==='paused'){executionMessage=result.summary??'Готовые этапы сохранены. Можно продолжить.';$('m-proposal').textContent=executionMessage;void api('').then(next=>{data=next;offerProductionResume();});return;}
+
     if (result.manual) {
       manualId = result.id;
       $("m-manual").hidden = false;
@@ -568,6 +582,7 @@ export async function mountMotion(
       timelineObserver.disconnect();
       previousStop();
     };
+    offerProductionResume();
     if (data.activeJob?.id) {
       activeJobId = data.activeJob.id;
       busy = true;
@@ -575,7 +590,7 @@ export async function mountMotion(
       $("m-generate").disabled = true;
       $("m-cancel").hidden = false;
       $("m-job").textContent = "Восстанавливаем подключение к выполняющемуся заданию…";
-      pollJob(data.activeJob.id)
+      poll(data.activeJob.id)
         .then(showExecution)
         .catch(error)
         .finally(() => {

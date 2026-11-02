@@ -1,3 +1,4 @@
+import {supportsSegmentedTextAnimation} from './text-segment.js';
 import {buildRegistry} from './registry.js';
 import {materializeRules} from "./rules.js";
 import {textLayoutContract} from "../motion-library/techniques/text.js";
@@ -76,14 +77,7 @@ export function validateMotion(
       if (o.type !== "TEXT") throw new Error("TEXT_NATIVE_LAYOUT_REQUIRED");
       if (
         a.text.segmentation !== "block" &&
-        ![
-          "slideUp",
-          "slideDown",
-          "slideLeft",
-          "slideRight",
-          "fadeIn",
-          "fadeOut",
-        ].includes(a.effect)
+        !supportsSegmentedTextAnimation(a)
       )
         throw new Error("TEXT_SEGMENT_EFFECT_UNSUPPORTED: " + a.effect);
     }
@@ -512,7 +506,7 @@ export function applyOperations(
   if (
     state.expressions?.some(
       (e) =>
-        "sourceAnimationId" in e &&
+        (e.textBinding&&!state.animations.some(a=>a.animationId===e.textBinding!.animationId))||"sourceAnimationId" in e &&
         !state.animations.some((a) => a.animationId === e.sourceAnimationId) &&
         !(e.type === "inertialOvershoot" && state.objectTransitions?.some(t => t.transitionId === e.transitionId && t.transitionId === e.sourceAnimationId)),
     )

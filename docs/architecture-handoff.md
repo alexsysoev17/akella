@@ -4,13 +4,13 @@
 
 | Поле | Значение |
 |---|---|
-| Last Updated | 2026-11-01 (Europe/Moscow) — Agent-First minimal/strict policy, dependency closure and progress-based execution; partial update |
+| Last Updated | 2026-11-02 (Europe/Moscow) — resumable Motion Production, model roles, segmented motion and transition groups; partial update |
 | Last Full Audit | 2026-10-13; unchanged, this update is not a full renderer/provider audit |
-| Git Commit | Checkpoint `c9bc4ac` (agent-native baseline verified by 530 tests). Agent-First policy changes are uncommitted. |
+| Git Commit | Checkpoint `e1d5334` (Agent-First baseline verified by 538 tests). Production changes described below are uncommitted. |
 | Git Branch | `temporal-recovery-loop`, local only |
-| Working Tree Status | Agent policy/runtime/store/tests/docs modified after checkpoint c9bc4ac; original user projects are untouched. |
-| Documentation Version | 1.1.24 |
-| Scope of Last Update | Agent-First validation modes, automatic transaction scope, observable QA, model-call lifecycle/context compaction; legacy parity remains partial. |
+| Working Tree Status | Production/runtime/engine integration/tests/docs modified after checkpoint e1d5334; original user projects are untouched. |
+| Documentation Version | 1.1.25 |
+| Scope of Last Update | Dual Direct/Production execution, persistent drafts/task graph, bounded worker pool, safe merge/resume, canonical source mapping, segmented keyframes/expressions and coordinated transitions; legacy parity remains partial. |
 | Code snapshot SHA-256 | NOT RECALCULATED; refer to component digests and final source commit. |
 
 Git 2.54.0 (Apple Git-157): локальная история, текущая ветка указана в Document Status, без remote/network/push. В первоначальном P0 A01–A03 update были изменены context, semantic compiler/checks и coverage. Последующие text updates меняют текстовую часть applyFrame/renderer и техническую QA; общий математический evaluator инерции в quality repair не изменён. До этого обновления отсутствие Git было фактом на момент полного аудита. Source/config/tests/docs отслеживаются; пользовательские проекты, оригинальные экспорты, artifacts, зависимости и сборки исключены.
@@ -21,6 +21,45 @@ Snapshot вычислен над отсортированными файлами
 
 Источник технической истины — код. Исторические docs используются только как дополнительные материалы. Статусы: **IMPLEMENTED**, **PARTIAL**, **UNUSED IN PRIMARY FLOW**, **NOT IMPLEMENTED**. Описание реализованного механизма не доказывает качество всех возможных результатов.
 
+
+## Motion Production — 2026-11-01 (partial update, v1.1.25)
+
+**IMPLEMENTED**, alongside the existing Direct Agent loop. This is an application-level pool of bounded provider sessions, not additional canonical Motion States or another Motion Engine.
+
+```mermaid
+flowchart TD
+  U[User request] --> D[Existing Direct Agent / local typed edits]
+  D -->|ordinary edit| T[Existing Motion Tools]
+  D -->|startProduction before changes| P[Director: durable draft and task DAG]
+  P --> W[Reusable pool: default 2, maximum 4 workers]
+  W --> C[Isolated canonical candidates / focused task context]
+  C --> V[Technical checks and task outcome observations]
+  V --> M[Read-set-aware serial merge and durable checkpoint]
+  M -->|remaining tasks| W
+  M -->|all verified| A[Existing atomic changeMotion / Undo-Redo]
+  T --> A
+  A --> N[Existing Motion Engine / Skia / FFmpeg]
+```
+
+**Contracts and ownership.** `apps/scene-validator/src/motion/production-contract.ts` defines version-1 `productionPlanSchema`, drafts, tasks, progress and durable records. Tasks hold stable IDs, exact source text, canonical logical targets, scene/timing scope, prerequisites and expected checks. Director output may group work, but canonical operations remain the existing `Operation` union. A draft accepts at most eight task additions/updates per response and up to 500 total tasks; this is a chunk size, not an eight-step workflow cap. `production-plan.ts` validates targets/scenes, DAG cycles and timing, deterministically orders dependencies and resolves unique source-instance checks. `production-source.ts` maps exact, normalized or composite source excerpts to authoritative clause IDs and spans; unresolved/ambiguous provenance remains explicit diagnostics. It is not inferred from task array position and does not veto a mathematically valid graph merely because real source fragments are nonadjacent. User prompt stays immutable.
+
+**Execution and resume.** `production-runtime.ts` owns scheduling, not animation mathematics. Work-conserving workers take the next ready task. Shared target and global timeline scopes serialize; independent tasks run concurrently. Each worker reuses `MotionAgentSession`/`WorkingRevision` and the normal typed tools on an isolated candidate. Progress contains canonical operation batches plus read targets and digest. Safe patches merge serially against current candidate with read-set revalidation; conflicts pause without overwriting unrelated edits. Verified tasks are never replayed on continuation. Plan drafts and task progress survive cancellation, provider failure and dead process recovery. A live-owner lease prevents two coordinators from executing the same production; dead owner recovery uses existing project locking. Final publication uses **one** existing atomic `changeMotion`, source fingerprint/revision guards and transaction receipt; Undo/Redo remains authoritative. A completed-but-undone receipt is not silently reapplied.
+
+**Storage and API.** Project-local `motion/productions/<productionId>/production.json` stores versioned request, base/candidate state, batches, draft/plan, task statuses, real child run IDs, actual models, checkpoints and call metrics. These files are private runtime data, ignored by Git. `motion/harness/production-config.json` configures workers (1–4), transient retries (default 1), backoff and model preferences. Existing `motion/harness/runs/<runId>/` retains parent/child traces. GET `/api/projects/:id/motion/productions`, GET `.../productions/:productionId`, POST `.../production-resume` reuse existing server/jobs/cancel lifecycle. Main motion response lists compact continuation entries; corrupt optional checkpoints are diagnosed without preventing project opening. Inspector resolves `run.productionId` to the authoritative record and excludes full base/candidate/progress snapshots from the normal projection. Parent and worker run summaries include roles and production IDs.
+
+**Model roles.** `production-models.ts` resolves configured provider/model and local Codex catalog metadata: general `gpt-6.1-sol`, Director `gpt-6-astra`, worker `gpt-6.1-terra`, lightweight `gpt-6-luna`, with explicit preference fallback. Catalog presence is **not entitlement**. Actual model/call/fallback is recorded. Astra, Terra and Sol were called successfully during this implementation; Luna was catalog-checked only. Same provider adapter is used across roles; adding API/local adapters remains possible through existing interfaces, but those backends and heterogeneous-provider productions are **NOT VERIFIED**. SDK timeout is recovered from application checkpoints/fresh focused sessions, not an assumed resumable timed-out SDK turn.
+
+**Checks and efficiency.** Ordinary local edits retain zero-provider behavior. Existing Direct Agent chooses `startProduction` semantically using compact complexity evidence from `task-complexity.ts`; routing quality for arbitrary language is **NOT VERIFIED**. Workers receive task objectives, relevant state and prerequisite summaries, not the whole Director request/history. Tool schemas are cached/disclosed on demand. Scalar checks use numerical engine evaluation; only rendered checks request native frames. `renderedDelta` distinguishes baseline/candidate basis; a current-state hold must compare candidate frames, not the original unanimated baseline. A narrow typed check-repair mechanism preserves required actor/property/frame/predicate/tolerance; it cannot weaken a legitimate numeric requirement. Source-format repair can recover a saved valid Director response without another model call. No fixed three-call or whole-run token cap; cancellation, per-call provider/context limits, no-progress detection, bounded transient retries and existing canonical transaction size limits remain. Metrics aggregate child usage once, excluding worker runs from top-level request rates.
+
+**Rendering integration.** `text-segment.ts` rescales keyframe point times to actual compressed stagger intervals without modifying stored tracks. Shared `Expression.textBinding` identifies a source segmented track with `withTrack` or `afterTrack` phase. Validation, dependency inspection/removal, retiming, evaluation and native rendering all consume that binding. Native cached text units support fractional translation/opacity/scale/rotation and per-segment expressions; evaluator sampling of base tracks does not double-apply them. Browser compatibility explicitly rejects unsupported segmented scale/rotation instead of pretending parity. Word/grapheme slicing can split ligatures or connected scripts; exposed warnings remain. `transition-groups.ts` compiles coordinated same-pair intervals/switches, optional quadratic paths and per-member easing into **existing** state-transition operations. Real overlapping-pair compositor invariants remain; arbitrary conflicting scene pairs are not newly supported.
+
+**Verified failures.** Reference run `6760b185-9a6b-4b5c-bd7f-6868ce10fe8c` had 23 staged batches and no committed motion file; call five timed out after 180.028 seconds with 144145 message bytes. Segmented keys were not rescaled and group members disagreed on transition interval/switch. Isolated archived replay restored 23 batches, repaired four segmented tracks and compiled six coordinated transitions, rendered four native frames and committed only the copy. This is **not** full completion of the original advertisement. Real synthetic live attempts additionally exposed malformed outcome-check coordinates and a strict source substring veto; all failures are retained separately from the successful continuation.
+
+**Actual verification.** Full check before final Inspector projection: 565 PASS, 2 historical private-fixture SKIP, zero failures; typecheck/build passed. Final full check: **566 PASS, 2 historical private-fixture SKIP, zero failures**, including the production-parent Inspector regression; TypeScript/build PASS. Deterministic/provider-scripted tests cover 50 tasks across 15 scenes, 2/4-worker bounds, concurrent scheduling, target conflicts, draft/task timeout, dead-process restart, cancellation, idempotency, Undo/Redo, native rendering and FFmpeg. These are **not live language benchmarks**. Real Codex continuation on a synthetic two-object/two-scene project recovered an existing Director response with zero new Director calls, used five Terra calls and committed both tasks in 22.533 seconds; this excludes earlier failed planning attempts. Independent x+10/y+15 checks passed; MP4 decoded as 60 frames at 30 FPS, 200×120. Preview/encoder-input RGBA matched at frames 0/30/59; this does not claim lossless H264 pixels. Reports and evidence: `data/harness/reports/production-2026-11-01/` (ignored private artifacts).
+
+**Remaining limits.** No freshly completed live full client advertisement, no 30–50-case live qualification or p95/cost claim; model task interpretation may still be incomplete. Existing 500-operation atomic transaction limit remains. Large snapshot retention/memory stress and Windows are NOT VERIFIED. Outcome samples are not formal continuous-time proofs; artistic/Vision quality is NOT_TESTED. Shared source/revision conflicts can require explicit resolution. No new dependencies, no Figma source migration, no second renderer/library/store.
+
+Architecture Change History: v1.1.25 — durable Direct/Production handoff, bounded model-role pool, task/DAG checkpoints and safe merge/resume; canonical source provenance, outcome-check basis, segmented keyframe/expression binding and transition-group compiler; tests and real synthetic continuation/render evidence as distinguished above. Changes uncommitted after local checkpoint e1d5334; partial audit only.
 
 ## Agent-First execution policy — 2026-11-01 (partial update)
 

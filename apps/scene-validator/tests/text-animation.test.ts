@@ -467,7 +467,7 @@ test("word/grapheme snapshots retain Unicode, wrapping, repeated spaces and mixe
   }
 });
 
-test("text effects reject non-native targets, incompatible segment contracts and unsupported sliced transforms", async () => {
+test("text effects reject non-native targets/incompatible contracts and admit executable native sliced transforms", async () => {
   const f = await identityFixture(1);
   try {
     const a: Animation = {
@@ -513,7 +513,7 @@ test("text effects reject non-native targets, incompatible segment contracts and
       parameters: { from: 0, to: 1 },
       text: settings,
     };
-    assert.throws(
+    assert.doesNotThrow(
       () =>
         applyOperations(
           native.state,
@@ -529,7 +529,6 @@ test("text effects reject non-native targets, incompatible segment contracts and
           ],
           native.project,
         ),
-      /TEXT_SEGMENT_EFFECT_UNSUPPORTED/,
     );
     assert.throws(
       () =>

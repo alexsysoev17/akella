@@ -183,7 +183,7 @@ async function lockOwner(lock: string): Promise<LockOwner | null> {
     return null;
   }
 }
-export async function lockProject(root: string): Promise<() => Promise<void>> {
+export async function lockProject(root: string, options: {neverExpireLiveOwner?:boolean} = {}): Promise<() => Promise<void>> {
   const lock = path.join(root, ".project-lock");
   const owner: LockOwner = {
     token: randomUUID(),
@@ -223,10 +223,10 @@ export async function lockProject(root: string): Promise<() => Promise<void>> {
           ? Date.now() - new Date(old.createdAt).getTime()
           : statAgeMs;
         const canReclaim =
-          dead ||
+          dead || (!options.neverExpireLiveOwner && (
           (isSameHost && lockAgeMs > 60000) ||
           (!old && statAgeMs > 30000) ||
-          lockAgeMs > 300000;
+          lockAgeMs > 300000));
         if (!canReclaim) {
           if (!old || !isSameHost)
             throw new Error(

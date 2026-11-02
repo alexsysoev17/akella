@@ -16,6 +16,7 @@ export function validateExpressions(
     const target = objects.get(`${e.sceneId}/${e.targetId}`);
     if (!target || target.mask)
       throw new Error("Expression target missing or is a mask");
+    if(e.textBinding){const a=state.animations.find(a=>a.animationId===e.textBinding!.animationId);if(!a||!a.enabled||!a.text||a.text.segmentation==='block'||a.sceneId!==e.sceneId||a.targetId!==e.targetId||e.transitionId||e.ownership&&e.ownership.scope!=='sceneInstance')throw Error('TEXT_EXPRESSION_BINDING_INVALID');if('sourceAnimationId'in e&&e.sourceAnimationId!==a.animationId)throw Error('TEXT_EXPRESSION_SOURCE_MISMATCH');if(e.type==='inertialOvershoot'&&e.textBinding.phase!=='afterTrack')throw Error('TEXT_INERTIA_REQUIRES_MOVEMENT_ENDPOINT');}
     if(e.type==="procedural"){validateProgram(e.program);for(const i of e.program.instructions)if(i.op==="sample"&&!state.animations.some(a=>a.animationId===i.animationId))throw Error("PROGRAM_DEPENDENCY_MISSING");}
     if (e.transitionId) {
       const t = state.objectTransitions?.find(t => t.transitionId === e.transitionId);

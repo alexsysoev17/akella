@@ -105,7 +105,7 @@ export function lowerMotionTool(project: LoadedProject, state: MotionState, inpu
       const a = state.animations.find(a => a.animationId === command.animationId);
       const t = state.objectTransitions?.find(t => t.transitionId === command.animationId);
       if (!a && !t) return fail("ANIMATION_NOT_FOUND", "Animation identity no longer exists", { animationId: command.animationId });
-      const dependent = (state.expressions ?? []).filter(e => e.transitionId === command.animationId || "sourceAnimationId" in e && e.sourceAnimationId === command.animationId || e.type==="procedural"&&e.program.instructions.some(i=>i.op==="sample"&&i.animationId===command.animationId));
+      const dependent = (state.expressions ?? []).filter(e => e.textBinding?.animationId===command.animationId||e.transitionId === command.animationId || "sourceAnimationId" in e && e.sourceAnimationId === command.animationId || e.type==="procedural"&&e.program.instructions.some(i=>i.op==="sample"&&i.animationId===command.animationId));
       if (dependent.length && command.dependentPolicy !== "removeDependents") return fail("DEPENDENT_EFFECTS_REQUIRE_POLICY", "Choose explicit dependent deletion or preserve the base", { expressionIds: dependent.map(e => e.expressionId) }, ["removeAnimation:removeDependents", "inspectDependencies"]);
       return [
         ...dependent.map(e => ({ type: "removeExpression" as const, expressionId: e.expressionId })),
@@ -160,7 +160,7 @@ export const motionToolCatalog = ["findObject", "inspectObject", "inspectTimelin
 export const inspectObject = findObject;
 export const inspectTimeline = (state: MotionState) => structuredClone({ settings: state.settings, blocks: state.blocks });
 export function inspectDependencies(state: MotionState, animationId: string) {
-  return structuredClone({ expressions: state.expressions?.filter(e => e.transitionId === animationId || "sourceAnimationId" in e && e.sourceAnimationId === animationId || e.type==="procedural"&&e.program.instructions.some(i=>i.op==="sample"&&i.animationId===animationId)) ?? [], timing: state.timingDependencies?.filter(d => d.animationId === animationId || d.anchorAnimationId === animationId) ?? [] });
+  return structuredClone({ expressions: state.expressions?.filter(e => e.textBinding?.animationId===animationId||e.transitionId === animationId || "sourceAnimationId" in e && e.sourceAnimationId === animationId || e.type==="procedural"&&e.program.instructions.some(i=>i.op==="sample"&&i.animationId===animationId)) ?? [], timing: state.timingDependencies?.filter(d => d.animationId === animationId || d.anchorAnimationId === animationId) ?? [] });
 }
 // Aliases deliberately reuse canonical tools and candidate admission.
 export const validateChanges = prepareMotionTools;

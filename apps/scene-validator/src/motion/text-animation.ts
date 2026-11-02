@@ -1,3 +1,5 @@
+import {segmentExpression,segmentExpressionSource} from './text-segment.js';
+import {segmentAnimation, segmentSchedule} from './text-segment.js';
 import {textViewportOffset} from "./text-clearance.js";
 import { configureTextPlane } from "./text-transport.js";
 import { snapshotText, type TextLayout, type TextUnit } from "./text-layout.js";
@@ -32,21 +34,7 @@ export function invalidateTextLayouts(root: Document) {
     clearTextAnimation(node);
   snapshots = new WeakMap();
 }
-export function textSchedule(
-  total: number,
-  count: number,
-  settings: NonNullable<Animation["text"]>,
-) {
-  const step =
-    settings.timing === "simultaneous"
-      ? 0
-      : settings.timing === "sequential"
-        ? total / Math.max(1, count)
-        : settings.staggerFrames;
-  const duration = total - step * (count - 1);
-  if (duration < 1) throw new Error("TEXT_STAGGER_EXCEEDS_DURATION");
-  return { step, duration };
-}
+export const textSchedule = segmentSchedule;
 export function clearTextAnimation(node: SVGGElement) {
   const entry = cache.get(node);
   if (entry) {
@@ -156,6 +144,8 @@ export function applyTextAnimation(
   evaluate: (
     state: MotionState,
     frame: number,
+    presentation?: import("./transition-runtime.js").StatePresentation,
+    samplingTracks?:Animation[],
   ) => { nodes: Record<string, Values> },
 ) {
   const begin = performance.now();
@@ -172,7 +162,7 @@ export function applyTextAnimation(
   );
   const selectedIds = new Set(selected.map((a) => a.animationId));
   const expressions = (state.expressions ?? []).filter(
-    (e) => "sourceAnimationId" in e && selectedIds.has(e.sourceAnimationId),
+    (e) => Boolean(segmentExpressionSource(e)&&selectedIds.has(segmentExpressionSource(e)!)),
   );
   const end = Math.max(
     ...selected.map((a) => a.startFrame + a.durationFrames),
@@ -187,18 +177,7 @@ export function applyTextAnimation(
   entry.evaluations = [];
   entry.units.forEach((unit, index) => {
     const tracks = selected.map((a) => {
-      const schedule = textSchedule(
-        a.durationFrames,
-        entry.units.length,
-        a.text!,
-      );
-      const order = a.text!.reverse ? entry.units.length - 1 - index : index;
-      const copy = {
-        ...a,
-        startFrame: a.startFrame + order * schedule.step,
-        durationFrames: schedule.duration,
-        text: undefined,
-      } as Animation;
+      const copy = segmentAnimation(a, entry.units.length, index);
       if (
         a.text!.origin === "outsideViewport" &&
         a.effect.startsWith("slide")
@@ -234,18 +213,12 @@ export function applyTextAnimation(
     const localExpressions = expressions.map((e) => {
       const source = tracks.find(
         (a) =>
-          "sourceAnimationId" in e && a.animationId === e.sourceAnimationId,
+          a.animationId === segmentExpressionSource(e),
       )!;
       const original = selected.find(
         (a) => a.animationId === source.animationId,
       )!;
-      return {
-        ...e,
-        startFrame:
-          source.startFrame +
-          source.durationFrames +
-          (e.startFrame - original.startFrame - original.durationFrames),
-      };
+      return segmentExpression(e,source,original);
     });
     const v =
       evaluate(
@@ -255,7 +228,7 @@ export function applyTextAnimation(
           expressions: localExpressions,
           objectTransitions: [],
         },
-        frame,
+        frame,undefined,[...tracks,...state.animations.filter(a=>!selectedIds.has(a.animationId)&&localExpressions.some(e=>e.type==='procedural'&&e.program.instructions.some(i=>i.op==='sample'&&i.animationId===a.animationId)))],
       ).nodes[JSON.stringify([entry.track.sceneId, entry.track.targetId])] ??
       {};
     entry.evaluations!.push({
@@ -272,6 +245,8 @@ export function placeTextUnit(
   unit: { mover: SVGGElement; sliceRect: SVGRectElement; bounds: TextUnit },
   v: Values,
 ) {
+  if ((v.rotation ?? 0) !== 0 || (v.scaleX ?? v.scale ?? 1) !== 1 || (v.scaleY ?? v.scale ?? 1) !== 1)
+    throw Error('TEXT_SEGMENT_TRANSFORM_REQUIRES_NATIVE_RENDERER');
   const dx = v.x ?? 0,
     dy = v.y ?? 0;
   // Chromium uses a shaped HTML plane for subpixel transport. WebKit must keep
@@ -300,6 +275,8 @@ export function textDiagnostics(
   evaluate: (
     state: MotionState,
     frame: number,
+    presentation?: import("./transition-runtime.js").StatePresentation,
+    samplingTracks?:Animation[],
   ) => { nodes: Record<string, Values> },
 ) {
   return [

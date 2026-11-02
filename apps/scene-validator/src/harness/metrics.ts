@@ -1,5 +1,8 @@
 export interface MetricRun {
   status: string;
+  executionRole?:string;
+  productionId?:string;
+  createdAt?:string;
   calls?: { mode?: string }[];
   metrics?: {
     latencyMs?: number;
@@ -18,19 +21,20 @@ const percentile = (values: number[], p: number) =>
       ]
     : null;
 export function harnessMetrics(input: MetricRun[], includeMocks = false) {
+  const latest=new Map<string,MetricRun>();for(const r of input)if(r.executionRole==='production'&&r.productionId){const old=latest.get(r.productionId);if(!old||String(r.createdAt??'')>String(old.createdAt??''))latest.set(r.productionId,r);}
   const rows = input.filter(
       (r) =>
-        r.status !== "RUNNING" &&
+        r.status !== "RUNNING" && r.status!=='HANDOFF' && r.executionRole!=='worker' && (r.executionRole!=='production'||!r.productionId||latest.get(r.productionId)===r) &&
         (includeMocks || r.calls?.some((c) => c.mode === "live")),
     ),
     ok = rows.filter((r) => r.status === "SUCCESS"),
     repaired = rows.filter(
       (r) =>
-        (r.metrics?.llmCalls ?? 0) > 1 || (r.metrics?.repairAttempts ?? 0) > 0,
+        (r.executionRole!=='production'&&(r.metrics?.llmCalls ?? 0) > 1) || (r.metrics?.repairAttempts ?? 0) > 0,
     ),
     first = ok.filter(
       (r) =>
-        typeof r.metrics?.llmCalls === "number" && r.metrics.llmCalls <= 1 && !(r.metrics?.repairAttempts ?? 0),
+        typeof r.metrics?.llmCalls === "number" && (r.executionRole==='production'||r.metrics.llmCalls <= 1) && !(r.metrics?.repairAttempts ?? 0),
     );
   const latency = rows
     .map((r) => r.metrics?.latencyMs)

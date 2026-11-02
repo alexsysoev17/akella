@@ -81,10 +81,11 @@ export function reanchorExpressions(state: MotionState, before: MotionState, ski
   const tracks = (s: MotionState) => new Map<string, {startFrame:number;durationFrames:number}>([...s.animations.map(a=>[a.animationId,a] as const), ...(s.objectTransitions ?? []).map(t=>[t.transitionId,t] as const)]);
   const oldTracks=tracks(before), nextTracks=tracks(state);
   for (const e of state.expressions ?? []) {
-    if (!("sourceAnimationId" in e) || skip.has(e.expressionId)) continue;
+    const sourceId=e.textBinding?.animationId??("sourceAnimationId"in e?e.sourceAnimationId:undefined);if(!sourceId||skip.has(e.expressionId))continue;
     const old = before.expressions?.find(x=>x.expressionId===e.expressionId);
-    const from=oldTracks.get(e.sourceAnimationId), to=nextTracks.get(e.sourceAnimationId);
+    const from=oldTracks.get(sourceId), to=nextTracks.get(sourceId);
     if (!old || !from || !to) continue;
+    if(e.textBinding){const ratio=to.durationFrames/from.durationFrames;if(e.textBinding.phase==='withTrack'){e.startFrame=Math.round(to.startFrame+(old.startFrame-from.startFrame)*ratio);e.durationFrames=Math.max(1,Math.round(old.durationFrames*ratio));}else e.startFrame=old.startFrame+to.startFrame-from.startFrame+to.durationFrames-from.durationFrames;continue;}
     const endAnchor=e.type==="inertialOvershoot" && old.startFrame>=from.startFrame+from.durationFrames;
     e.startFrame=old.startFrame + to.startFrame-from.startFrame + (endAnchor?to.durationFrames-from.durationFrames:0);
   }

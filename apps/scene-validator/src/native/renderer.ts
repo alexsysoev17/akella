@@ -1,3 +1,4 @@
+import {segmentAnimation,segmentExpression,segmentExpressionSource} from '../motion/text-segment.js';
 import {anchorBinding,anchorLocal,anchoredMotion,transformPoint,motionTransform} from '../motion/anchor.js';
 import {transitionOffsetMatrix} from "../motion/geometry.js";
 import {textViewportOffset} from "../motion/text-clearance.js";
@@ -98,7 +99,7 @@ export interface NativeFrame {
     sceneId: string;
     lines: TextUnit[];
     units: number;
-    offsets: { x: number; y: number; opacity: number }[];
+    offsets: { x: number; y: number; opacity: number; scaleX?: number; scaleY?: number; rotation?: number; segmentId?: string }[];
   }[];
   paths: {
     targetId: string;
@@ -770,31 +771,13 @@ export class NativeRenderer {
               ),
               ids = new Set(tracks.map((a) => a.animationId)),
               expressions = (state.expressions ?? []).filter(
-                (e) => "sourceAnimationId" in e && ids.has(e.sourceAnimationId),
+                (e) => Boolean(segmentExpressionSource(e)&&ids.has(segmentExpressionSource(e)!)),
               ),
               offsets: NativeFrame["text"][number]["offsets"] = [];
             for (let i = 0; i < units.length; i++) {
               const bounds = units[i],
                 copies = tracks.map((a) => {
-                  const step =
-                      a.text!.timing === "simultaneous"
-                        ? 0
-                        : a.text!.timing === "sequential"
-                          ? a.durationFrames / Math.max(1, units.length)
-                          : a.text!.staggerFrames,
-                    duration = a.durationFrames - step * (units.length - 1);
-                  if (duration < 1)
-                    throw new NativeRenderError(
-                      "TEXT_STAGGER_EXCEEDS_DURATION",
-                      a.animationId,
-                    );
-                  const order = a.text!.reverse ? units.length - 1 - i : i,
-                    copy = {
-                      ...a,
-                      startFrame: a.startFrame + order * step,
-                      durationFrames: duration,
-                      text: undefined,
-                    } as Animation;
+                  const copy = segmentAnimation(a, units.length, i);
                   if (
                     a.text!.origin === "outsideViewport" &&
                     a.effect.startsWith("slide")
@@ -822,21 +805,12 @@ export class NativeRenderer {
               const localExpressions = expressions.map((e) => {
                 const source = copies.find(
                     (a) =>
-                      "sourceAnimationId" in e &&
-                      a.animationId === e.sourceAnimationId,
+                      a.animationId === segmentExpressionSource(e),
                   )!,
                   original = tracks.find(
                     (a) => a.animationId === source.animationId,
                   )!;
-                return {
-                  ...e,
-                  startFrame:
-                    source.startFrame +
-                    source.durationFrames +
-                    e.startFrame -
-                    original.startFrame -
-                    original.durationFrames,
-                };
+                return segmentExpression(e,source,original);
               });
               const values =
                   evaluateMotion(
@@ -846,12 +820,16 @@ export class NativeRenderer {
                       expressions: localExpressions,
                       objectTransitions: [],
                     },
-                    frame,
+                    frame,{},[...copies,...state.animations.filter(a=>!ids.has(a.animationId)&&localExpressions.some(e=>e.type==='procedural'&&e.program.instructions.some(i=>i.op==='sample'&&i.animationId===a.animationId)))],
                   ).nodes[key] ?? {},
                 offset = {
                   x: values.x ?? 0,
                   y: values.y ?? 0,
                   opacity: values.opacity ?? 1,
+                  scaleX: values.scaleX ?? values.scale ?? 1,
+                  scaleY: values.scaleY ?? values.scale ?? 1,
+                  rotation: values.rotation ?? 0,
+                  segmentId: `${sceneId}/${n.figmaNodeId}/${settings.segmentation}/${i}`,
                 };
               offsets.push(offset);
               canvas.save();
@@ -867,6 +845,13 @@ export class NativeRenderer {
                   true,
                 );
               canvas.translate(offset.x, offset.y);
+              if(offset.rotation!==0||offset.scaleX!==1||offset.scaleY!==1){
+                const cx=bounds.x+bounds.width/2,cy=bounds.y+bounds.height/2;
+                canvas.translate(cx,cy);
+                canvas.rotate(offset.rotation,0,0);
+                canvas.scale(offset.scaleX,offset.scaleY);
+                canvas.translate(-cx,-cy);
+              }
               layer(offset.opacity, () =>
                 drawTextPlane(
                   k,

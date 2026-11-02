@@ -125,7 +125,7 @@ export function validateObjectTransitions(
           (e) =>
             e.enabled && e.sceneId === s.sceneId && related.has(e.targetId) &&
             !(s.sceneId===t.fromSceneId&&!e.transitionId&&e.type==="inertialOvershoot"&&e.startFrame+e.durationFrames<=t.startFrame) &&
-            !((e.transitionId === t.transitionId || Boolean(e.transitionId&&ts.some(owner=>owner.transitionId===e.transitionId&&owner.logicalObjectId===t.logicalObjectId)) || e.ownership?.scope === "logicalObject" && e.ownership.logicalObjectId === t.logicalObjectId) && e.targetId === s.sourceNodeId && ["wiggle", "inertialOvershoot"].includes(e.type)),
+            !((e.transitionId === t.transitionId || Boolean(e.transitionId&&ts.some(owner=>owner.transitionId===e.transitionId&&owner.logicalObjectId===t.logicalObjectId)) || e.ownership?.scope === "logicalObject" && e.ownership.logicalObjectId === t.logicalObjectId) && e.targetId === s.sourceNodeId && ["procedural", "wiggle", "inertialOvershoot"].includes(e.type)),
         )
       )
         throw new Error(
