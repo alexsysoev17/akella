@@ -1,3 +1,8 @@
+import { FigmaDrafts } from "./figma-drafts.js";
+import {skillsCatalog} from "./motion-library/skills/registry.js";
+import {skillDemoFrame} from "./motion-library/skills/demo.js";
+import {runtimeCode} from "./runtime-code.js";
+import {resumeProjectRecoveries} from "./motion/service.js";
 import { recoverInterruptedRuns } from "./harness/runtime.js";
 import { motionApi } from "./motion/api.js";
 import { diagnosticRu } from "./localization.js";
@@ -43,6 +48,8 @@ export async function servePlatform(projectsRoot: string, port = 4173) {
   await noSymlinkPath(projectsRoot, projectsRoot);
   for (const project of (await discoverProjects(projectsRoot)).projects)
     await recoverInterruptedRuns(project.root);
+  const drafts = new FigmaDrafts(projectsRoot, process.cwd());
+  await drafts.recover();
   const pending = new Map<
     string,
     {
@@ -76,6 +83,11 @@ export async function servePlatform(projectsRoot: string, port = 4173) {
         throw new Error("Foreign origin forbidden");
       const url = new URL(request.url ?? "/", `http://${host}`);
       const segments = url.pathname.split("/").filter(Boolean);
+      if(request.method==="GET" && url.pathname==="/api/runtime")return json(runtimeCode.status());
+      if(request.method==="GET"&&url.pathname==="/api/skills")return json(skillsCatalog());
+      if(request.method==="GET"&&url.pathname==="/api/skills/text.handoff.no-overlap/demo/frame"){
+        const image=await skillDemoFrame(Number(url.searchParams.get("frame")??0));response.writeHead(200,{"Content-Type":"image/png","Cache-Control":"no-store"});response.end(image.png);return;
+      }
       const sendFile = async (file: string, mime: string) => {
         const bytes = await readFile(file);
         response.writeHead(200, {
@@ -87,6 +99,17 @@ export async function servePlatform(projectsRoot: string, port = 4173) {
         });
         response.end(bytes);
       };
+      const brandFiles: Record<string, string> = {
+        "/brand/akella.svg": "image/svg+xml",
+        "/brand/akella_photo.png": "image/png",
+        "/brand/Inter-Regular.ttf": "font/ttf",
+        "/brand/Inter-Bold.ttf": "font/ttf",
+        "/brand/Inter-Light.ttf": "font/ttf",
+        "/brand/Inter-Medium.ttf": "font/ttf",
+      };
+      if (request.method === "GET" && Object.hasOwn(brandFiles, url.pathname)) {
+        return await sendFile(fileURLToPath(new URL(`./web${url.pathname}`, import.meta.url)), brandFiles[url.pathname]);
+      }
       if (
         request.method === "GET" &&
         [
@@ -95,6 +118,8 @@ export async function servePlatform(projectsRoot: string, port = 4173) {
           "/styles.css",
           "/motion.js",
           "/inspector.js",
+          "/anchor-inspector.js",
+          "/skills.js",
           "/motion.css",
           "/easing-runtime.js",
           "/mentions.js",
@@ -112,10 +137,11 @@ export async function servePlatform(projectsRoot: string, port = 4173) {
               : "text/html",
         );
       }
+      if (request.method === "POST" && url.pathname === "/api/projects") return json(await drafts.create(),201);
       if (request.method === "GET" && url.pathname === "/api/projects") {
         const result = await discoverProjects(projectsRoot);
         return json({
-          projects: result.projects.map(summary),
+          projects: [...result.projects.map(summary), ...(await drafts.list()).filter(d=>!result.projects.some(p=>p.config.projectId===d.projectId))],
           errors: result.errors,
         });
       }
@@ -235,6 +261,12 @@ export async function servePlatform(projectsRoot: string, port = 4173) {
         }
       }
       if (segments[0] === "api" && segments[1] === "projects" && segments[2]) {
+        const draft = await drafts.get(segments[2]);
+        if (request.method === "POST" && segments[3] === "import-from-figma" && segments.length === 4) {
+          const input = JSON.parse((await body(request, 32000)).toString());
+          return json(await drafts.start(segments[2], input.prompt),202);
+        }
+        if (request.method === "GET" && segments.length === 3 && draft && draft.status !== "ready") return json(draft);
         const project = await findProject(projectsRoot, segments[2]);
         if (await motionApi(project, request, response, segments, body)) return;
         if (request.method === "GET" && segments.length === 3) {
@@ -244,6 +276,7 @@ export async function servePlatform(projectsRoot: string, port = 4173) {
           );
           return json({
             ...summary(project),
+            importMessages: draft?.messages ?? [],
             scenes: project.inspection.document.scenes.map((s) => ({
               ...s,
               objects: countNodes(s.children),
@@ -368,6 +401,7 @@ export async function servePlatform(projectsRoot: string, port = 4173) {
       resolve();
     });
   });
+  for(const project of (await discoverProjects(projectsRoot)).projects)void resumeProjectRecoveries(project).catch(error=>console.warn("Recovery continuation:",String(error)));
   return server;
 }
 function countNodes(children: unknown[]): number {

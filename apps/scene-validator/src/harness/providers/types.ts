@@ -15,10 +15,13 @@ export interface ProviderUsage {
   cachedInputTokens?: number;
 }
 export interface ProviderRequest {
-  purpose?: "semantic-planning" | "semantic-repair" | "motion-repair";
+  purpose?: "agent-execution" | "semantic-planning" | "semantic-repair" | "semantic-recovery" | "project-recovery" | "code-repair" | "motion-repair";
   messages: { role: "system" | "user" | "assistant"; content: string }[];
+  /** Server-generated render artifacts, never arbitrary model-supplied paths. */
+  images?: string[];
   responseSchema: unknown;
   model?: string;
+  reasoningEffort?: "low" | "medium" | "high";
   signal?: AbortSignal;
   timeoutMs: number;
   maxOutputTokens: number;
@@ -44,6 +47,7 @@ export interface ProviderAdapter {
   capabilities(): ProviderCapabilities;
   health?(): Promise<ProviderHealth>;
   estimateInputTokens?(request: ProviderRequest): number;
+  contextProfile?(model?:string):Promise<{provider:string;model:string;contextWindowTokens:number;maxOutputTokens:number;transportOverheadTokens:number;reasoningReserveTokens?:number;source?:string}|undefined>;
   generate(request: ProviderRequest): Promise<ProviderResponse>;
 }
 export class ProviderError extends Error {
@@ -54,11 +58,19 @@ export class ProviderError extends Error {
       | "TIMEOUT"
       | "CANCELLED"
       | "INVALID_OUTPUT"
+      | "OUTPUT_TRUNCATED"
       | "TRANSPORT"
       | "AUTH_REQUIRED"
       | "RATE_LIMITED"
       | "OVERLOADED"
-      | "CONTEXT_EXHAUSTED",
+      | "CONTEXT_EXHAUSTED"
+      | "PROVIDER_SCHEMA_INVALID"
+      | "PROVIDER_UNAVAILABLE"
+      | "PROVIDER_AUTH_FAILED"
+      | "PROVIDER_TIMEOUT"
+      | "PROVIDER_TRANSPORT_ERROR"
+      | "PROVIDER_EVENT_PARSE_ERROR"
+      | "PROVIDER_JSON_INVALID",
     message: string,
   ) {
     super(`${code}: ${message}`);
@@ -93,6 +105,12 @@ export function providerIds() {
 
 /** HTTP-compatible adapters retain actionable transport categories without retrying blindly. */
 export function transportErrorCode(error: unknown): ProviderError["code"] {
+  const message = String(error);
+  if (/usage limit|quota.{0,30}(?:exceed|exhaust)|insufficient_quota|rate.?limit|too many requests/i.test(message)) return "RATE_LIMITED";
+  if (/max_output_tokens|incomplete.*(?:output|response)|finish_reason.{0,15}length/i.test(message)) return "OUTPUT_TRUNCATED";
+  if (/invalid_json_schema|invalid.*(?:output|response).*schema|schema must be.*object/i.test(message)) return "PROVIDER_SCHEMA_INVALID";
+  if (/401|403|unauthori[sz]ed|authentication|not logged in/i.test(message)) return "PROVIDER_AUTH_FAILED";
+  if (/ENOENT|ECONNREFUSED|ENOTFOUND/.test(message)) return "PROVIDER_UNAVAILABLE";
   const e =
     error && typeof error === "object"
       ? (error as { status?: number; statusCode?: number; code?: string })
@@ -109,4 +127,10 @@ export function transportErrorCode(error: unknown): ProviderError["code"] {
   if (status === 503) return "OVERLOADED";
   if (status === 408 || status === 504) return "TIMEOUT";
   return "TRANSPORT";
+}
+
+/** DOM AbortSignal deadlines have numeric .code; do not mistake that for validation. */
+export function providerAbortCode(error:unknown): 'PROVIDER_TIMEOUT'|'CANCELLED'|undefined {
+ const e=error as {name?:string;message?:string};
+ return e?.name==='TimeoutError'?'PROVIDER_TIMEOUT':e?.name==='AbortError'?'CANCELLED':undefined;
 }

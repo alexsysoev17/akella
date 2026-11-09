@@ -118,9 +118,10 @@ test("local UI workflow: import 1/3/15 scenes, browse, edit notes, update, archi
     const list = await call("/api/projects");
     assert.equal(list.projects.length, 3);
     await page.goto(base);
-    await page.waitForSelector("a.card");
-    assert.equal(await page.locator("a.card").count(), 3);
-    await page.locator("a.card").filter({ hasText: "Project 15" }).click();
+    await page.locator("#start").click();
+    await page.waitForSelector("#project-list a");
+    assert.equal(await page.locator("#project-list a").count(), 3);
+    await page.locator("#project-list a").filter({ hasText: "Project 15" }).click();
     await page.waitForSelector("[data-scene-button]");
     assert.equal(await page.locator("#m-scenes option").count(), 15);
     assert.equal(await page.locator(".scene-thumb").count(), 15);
@@ -252,8 +253,9 @@ test("local UI workflow: import 1/3/15 scenes, browse, edit notes, update, archi
     const zipPath = path.join(root, "browser.zip");
     await writeFile(zipPath, await exportZip(1, png));
     await page.goto(base);
+    await page.locator("#start").click();
     await page
-      .getByRole("button", { name: "+ НОВЫЙ ПРОЕКТ", exact: true })
+      .getByRole("button", { name: "Новый проект", exact: true })
       .click();
     await page.locator("#name").fill("Browser import");
     await page.locator("#zip").setInputFiles(zipPath);

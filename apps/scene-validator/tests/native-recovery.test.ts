@@ -1,0 +1,63 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { identityFixture, node } from "./identity-fixture.js";
+import { registerProvider } from "../src/harness/providers/index.js";
+import { executeMotion } from "../src/motion/service.js";
+import { changeMotion, readMotion } from "../src/motion/store.js";
+import { closeNativeRenderer } from "../src/native/client.js";
+import { inspectorRun } from "../src/harness/inspector.js";
+process.env.AKELLA_RENDERER = "native";
+const graph = (prompt: string, techniques: string[], kind = "objectAnimation", extra: object = {}) => ({ schemaVersion: "semantic-graph/1.0", clauses: [{ clauseId: "c", text: prompt }], actions: [{ actionId: "a", clauseId: "c", kind, targets: ["Product"], scene: "s0", techniques, parameters: [], constraints: [], unresolvedReason: null, ...extra }], assumptions: [] });
+test("production recovery inspects canonical dependencies, deletes permitted motion atomically, persists report and Undo", async () => {
+    const f = await identityFixture(1, s => { s[0].children = [node("p", "Product", 50, 40), node("other", "Other", 100, 50)]; });
+    let output: unknown, calls = 0;
+    const purposes: string[] = [];
+    const stop = registerProvider("native-recovery-fixture", () => ({ id: "native-recovery-fixture", mode: "mock", capabilities: () => ({ structuredOutput: true, nativeToolCalling: false, cancellation: true, usage: true, nativeOutputTokenLimit: true }), generate: async (req) => { calls++; purposes.push(req.purpose ?? ""); const value = typeof output === "function" ? output(req) : output; const wrapped = !!(req.responseSchema as {properties?:{response?:unknown}}).properties?.response; return { output: wrapped ? {response:value} : value, usage: { inputTokens: 200, outputTokens: 80 }, estimatedCost: null, latencyMs: 1, diagnostics: ["prepared semantics; production tools/QA/commit"], toolCalls: [] }; } }));
+    const turn = async (prompt: string) => { const d = await readMotion(f.project); return executeMotion(f.project, { mode: "edit", request: prompt, expectedRevision: d.revision, settings: { provider: "native-recovery-fixture", model: "" } }, () => { }, { config: { maxLLMCalls: 3, maxRepairAttempts: 2 } }); };
+    try {
+        const doc = await readMotion(f.project);
+        f.state.settings.durationFrames = 60;
+        f.state.blocks[0].durationFrames = 60;
+        await changeMotion(f.project.root, { expectedRevision: doc.revision, request: "fixture", operations: [{ type: "setProjectSettings", settings: f.state.settings }, { type: "setBlocks", blocks: f.state.blocks }] });
+        const prompt = "Product появляется снизу линейно с затухающей инерцией.";
+        output = graph(prompt, ["slideUp", "inertialOvershoot"], "objectAnimation", { parameters: [{ key: "durationSeconds", value: .5 }, { key: "easing", value: "linear" }] });
+        const created = await turn(prompt);
+        assert.equal(created.reconciliation?.status, "SUCCESS");
+        assert.equal(calls, 1, "no recovery call on a successful request");
+        const before = await readMotion(f.project);
+        const base = before.state.animations.find(a => a.targetId === "p")!;
+        assert.ok(before.state.expressions?.length);
+        const remove = "Удали движение Product вместе с его инерцией, остальные объекты не меняй.";
+        let local = 0;
+        output = () => ++local === 1 ? graph(remove, ["slideUp"], "editAnimation", { effectOperation: { storage: "animation", action: "remove" } }) : local === 2 ? { action: "inspect", queries: [{ tool: "inspectDependencies", id: base.animationId }], reason: "Inspect actual dependent effects" } : { action: "apply", commands: [{ tool: "removeAnimation", animationId: base.animationId, dependentPolicy: "removeDependents" }], reason: "User authorized removal of movement with inertia" };
+        const result = await turn(remove);
+        assert.equal(result.reconciliation?.status, "SUCCESS", JSON.stringify(result));
+        assert.equal(local, 3);
+        const after = await readMotion(f.project);
+        assert.equal(after.cursor, before.cursor + 1);
+        assert.equal(after.state.animations.length, 0);
+        assert.equal(after.state.expressions?.length ?? 0, 0);
+        const recovery = JSON.parse(await readFile(path.join(f.project.root, "motion/ai", result.id, "recovery.json"), "utf8"));
+        assert.equal(recovery.status, "Project Recovered");
+        assert.equal(recovery.attempts.length, 2);
+        const runReport = JSON.parse(await readFile(path.join(f.project.root,"motion/harness/runs",result.id,"run.json"),"utf8"));
+        assert.equal(runReport.metrics.repairAttempts, 2, "preflight repairs are not overwritten by empty task repair history");
+        const inspector = await inspectorRun(f.project.root, result.id);
+        assert.ok("recovery" in inspector);
+        const undo = await changeMotion(f.project.root, { expectedRevision: after.revision, request: "undo", action: "undo" });
+        assert.deepEqual(undo.document.state, before.state);
+        const preserve = "Удали только движение Product.";
+        let refusedCalls = 0;
+        output = () => ++refusedCalls === 1 ? graph(preserve, ["slideUp"], "editAnimation", { effectOperation: { storage: "animation", action: "remove" }, dependentPolicy: "reject" }) : { action: "apply", commands: [{ tool: "removeAnimation", animationId: base.animationId, dependentPolicy: "removeDependents" }], reason: "invalid attempt to override explicit preserve constraint" };
+        await assert.rejects(() => turn(preserve), /RECOVERY_DEPENDENT_DELETE_NOT_AUTHORIZED/);
+        assert.equal(refusedCalls, 2);
+        assert.deepEqual((await readMotion(f.project)).state, before.state, "failed recovery rolls back the whole candidate");
+    }
+    finally {
+        stop();
+        await closeNativeRenderer();
+        await f.cleanup();
+    }
+});

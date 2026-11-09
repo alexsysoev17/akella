@@ -535,7 +535,7 @@ test("P0 actual local renderer verifies wiggle/spring/customCurve created throug
     await f.cleanup();
   }
 });
-test("P0 normal user execution via mock provider uses ONE call, persists new technique, runs genuine local QA", async () => {
+test("P0 unusual effect wording uses ONE compact mock call, persists technique and genuine local QA", async () => {
   const f = await fixture();
   let calls = 0;
   const unregister = registerProvider("p0-fixture", () => ({
@@ -551,7 +551,7 @@ test("P0 normal user execution via mock provider uses ONE call, persists new tec
     generate: async () => {
       calls++;
       const r = requirement("wiggle");
-      r.sourceText = "Добавь QR wiggle";
+      r.sourceText = "Добавь QR мягкий wiggle";
       return {
         output: planFor(r),
         usage: { inputTokens: 100, outputTokens: 50 },
@@ -578,7 +578,7 @@ test("P0 normal user execution via mock provider uses ONE call, persists new tec
     ).document;
     const result = await executeMotion(f.project, {
       mode: "create",
-      request: "Добавь QR wiggle",
+      request: "Добавь QR мягкий wiggle",
       settings: { provider: "p0-fixture", model: "" },
       expectedRevision: doc.revision,
       selectedSceneId: "s0",

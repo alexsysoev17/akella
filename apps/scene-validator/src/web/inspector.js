@@ -12,13 +12,14 @@ export function attachInspector(container, url) {
   panel.className = "agent-inspector";
   panel.hidden = true;
   panel.setAttribute("aria-label", "Agent Inspector");
-  panel.innerHTML = `<div class="inspector-resize" role="separator" aria-label="Ширина Inspector" tabindex="0"></div><header><strong>Agent Inspector</strong><button data-close aria-label="Закрыть">×</button></header><select aria-label="История запусков"></select><div class="inspector-tabs" role="tablist">${["Обзор", "Понимание", "Действия", "QA", "Данные"].map((t, i) => `<button role="tab" data-tab="${i}">${t}</button>`).join("")}</div><div class="inspector-body"></div><footer><button data-copy>Скопировать отчёт</button><button data-zip>Скачать ZIP</button><button data-project-zip>Диагностика проекта</button><span role="status"></span></footer>`;
+  panel.innerHTML = `<div class="inspector-resize" role="separator" aria-label="Ширина Inspector" tabindex="0"></div><header><strong>Agent Inspector</strong><button data-close aria-label="Закрыть">Закрыть</button></header><select aria-label="История запусков"></select><div class="inspector-tabs" role="tablist">${["Обзор", "Понимание", "Действия", "QA", "Данные", "Кадр", "Экспорт"].map((t, i) => `<button role="tab" data-tab="${i}">${t}</button>`).join("")}</div><div class="inspector-body"></div><footer><button data-copy>Скопировать отчёт</button><button data-zip>Скачать ZIP</button><button data-project-zip>Диагностика проекта</button><span role="status"></span></footer>`;
   container.append(panel);
   const select = panel.querySelector("select"),
     body = panel.querySelector(".inspector-body"),
     status = panel.querySelector("[role=status]");
   const values = new Map();
   let valueId = 0;
+  let frameData, frameNumber=0;
   let rawData,
     manualSelection = false,
     lastVersion;
@@ -37,8 +38,8 @@ export function attachInspector(container, url) {
     const id = String(++valueId);
     values.set(id, value);
     if (value && typeof value === "object")
-      return `<details data-value="${id}"><summary>${esc(key)} <small>${Array.isArray(value) ? value.length + " элементов" : Object.keys(value).length + " полей"}</small><button data-copy-value="${id}" title="Копировать значение">⧉</button></summary><div data-children></div></details>`;
-    return `<div class="inspector-value"><span>${esc(key)}</span>: <code>${esc(value)}</code><button data-copy-value="${id}" title="Копировать значение">⧉</button></div>`;
+      return `<details data-value="${id}"><summary>${esc(key)} <small>${Array.isArray(value) ? value.length + " элементов" : Object.keys(value).length + " полей"}</small><button data-copy-value="${id}" title="Копировать значение">Копировать</button></summary><div data-children></div></details>`;
+    return `<div class="inspector-value"><span>${esc(key)}</span>: <code>${esc(value)}</code><button data-copy-value="${id}" title="Копировать значение">Копировать</button></div>`;
   }
   body.addEventListener(
     "toggle",
@@ -61,6 +62,36 @@ export function attachInspector(container, url) {
       copy(pretty(values.get(b.dataset.copyValue)));
     }
   });
+  body.addEventListener("click", async (e) => {
+    const button = e.target.closest("[data-review-repair]");
+    if (!button) return;
+    button.disabled = true;
+    const payload = { runId: selectedId, patchIdentity: data.codeRepair.patchIdentity };
+    const post = async (action, value) => {
+      const response = await fetch(url + "/" + action, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(value)});
+      const result = await response.json(); if(!response.ok)throw Error(result.error); return result;
+    };
+    try {
+      const review = await post("code-repair-review", payload);
+      const dialog = document.createElement("dialog");
+      dialog.innerHTML = `<h3>Изменение исходного кода</h3><p>Проверяются точный патч, чистота Git и повтор исходного сценария в изолированной копии. После успешного применения проверенный результат исходного запроса будет записан в проект, если его версия не менялась. Если сохранённого ответа нет, повтор использует настроенный AI Provider и может расходовать его лимит. Для загрузки нового кода потребуется перезапуск сервера.</p><pre style="max-height:50vh;overflow:auto">${esc(review.patchText)}</pre><button data-approve>Подтвердить этот патч</button> <button data-dismiss>Отмена</button>`;
+      panel.append(dialog); dialog.showModal();
+      dialog.querySelector("[data-dismiss]").onclick=()=>dialog.close();
+      dialog.addEventListener("close",()=>dialog.remove(),{once:true});
+      dialog.querySelector("[data-approve]").onclick=async()=>{
+        dialog.close();status.textContent="Проверка исходного сценария…";
+        try {
+          const job=await post("code-repair-approve",{...payload,approvalToken:review.approvalToken,allowLiveReplay:true});
+          while(!disposed){
+            await new Promise(resolve=>setTimeout(resolve,1000));
+            const response=await fetch(url+"/jobs/"+job.jobId);const result=await response.json();
+            if(!response.ok||result.status==="failed")throw Error(result.error);
+            if(result.status==="completed"){status.textContent=result.result?.resume?.status==="APPLIED"?"Патч применён, исходный запрос восстановлен. Перезапустите сервер для загрузки нового кода.":"Патч применён. Повтор остановлен: "+(result.result?.resume?.reason??"см. диагностику")+". Перезапустите сервер.";break;}
+          }
+        }catch(error){status.textContent=error.message;}
+      };
+    } catch(error){status.textContent=error.message;} finally{button.disabled=false;}
+  });
   function cards(items) {
     return items
       .map(
@@ -72,6 +103,7 @@ export function attachInspector(container, url) {
   function block(title, value) {
     return `<section><h3>${esc(title)}</h3>${tree(value, title)}</section>`;
   }
+  let exportsData=[];
   function render() {
     if (disposed) return;
     panel.querySelectorAll("[data-tab]").forEach((b) => {
@@ -79,6 +111,13 @@ export function attachInspector(container, url) {
       b.classList.toggle("active", active);
       b.setAttribute("aria-selected", String(active));
     });
+    if(tab===6){values.clear();body.innerHTML='<p>Экспорт: сохранённая диагностика, включая ошибки до кодирования. Художественная оценка: NOT_TESTED.</p>'+exportsData.map(r=>block(`${r.exportPreset} · ${r.status} · ${r.stage}`,r)).join('');return;}
+    if(tab===5){
+      values.clear();
+      body.innerHTML=`<form data-frame-form><label>Кадр <input name="frame" type="number" min="0" step="1" value="${frameNumber}" required></label><button>Показать и сравнить с предыдущим</button></form><p>Текущее сохранённое состояние проекта, фактический Native Renderer. Исторический запуск не воспроизводится автоматически.</p>${frameData?`<img style="width:100%" alt="Кадр ${frameNumber}" src="${url}/frame?frame=${frameNumber}&scale=0.25&revision=${encodeURIComponent(frameData.revision)}">${tree(frameData,"Вычисленная композиция и соседний кадр")}`:""}`;
+      body.querySelector('form').onsubmit=async event=>{event.preventDefault();frameNumber=Number(new FormData(event.currentTarget).get('frame'));status.textContent='Вычисляем кадр…';try{const r=await fetch(url+'/inspect-frame?frame='+frameNumber+'&compare='+Math.max(0,frameNumber-1));const v=await r.json();if(!r.ok)throw Error(v.error);frameData=v;status.textContent='Кадр вычислен';render();}catch(e){status.textContent=e.message;}};
+      return;
+    }
     if (!data) {
       body.textContent =
         "Нет сохранённых запусков. Выполните запрос с включённой историей Harness.";
@@ -92,7 +131,7 @@ export function attachInspector(container, url) {
         run.result?.requirements ??
         "NOT_AVAILABLE";
     if (tab === 0)
-      body.innerHTML = `<p class="inspector-status">${esc(run.status)}</p><p>Статус исполнения операций. Художественная оценка: NOT_TESTED.</p><p>${esc(data.prompt)}</p><div class="inspector-metrics"><span>Длительность: ${run.metrics?.latencyMs != null ? (run.metrics.latencyMs / 1000).toFixed(2) + " с" : "NOT_AVAILABLE"}</span><span>Задач: ${tasks.length}</span><span>Выполнено: ${tasks.filter((t) => ["PASSED", "SUCCESS", "applied"].includes(t.status)).length}</span><span>Ошибок: ${tasks.filter((t) => ["FAILED", "UNSUPPORTED", "BLOCKED"].includes(t.status)).length}</span><span>Ремонтов: ${esc(run.metrics?.repairAttempts)}</span></div><p>${(run.calls ?? []).map((c) => esc(c.provider) + " · " + esc(c.model) + " · " + esc(c.status)).join("<br>") || "Provider: NOT_AVAILABLE"}</p><h3>Задачи</h3>${cards(tasks)}${run.status === "RUNNING" ? `<p>Текущий этап: ${esc(data.trace?.at(-1)?.stage)}</p>` : ""}${block("Итоговая сверка требований", run.outcome)}${block("Производительность", run.metrics)}${block("Знания и версии", run.knowledgeReferences)}${block("Ошибки", run.failures) + block("Настройки провайдера — валидация и источник", data.providerSettingsValidation) + block("Semantic — причины повторных вызовов и проверки", data.semanticDiagnostics)}`;
+      body.innerHTML = `<p class="inspector-status">${esc(({SUCCESS:"Операции сохранены — качество ролика не подтверждено",NEEDS_USER_INPUT:"Нужно уточнение",TECHNICAL_BLOCKED:"Техническое ограничение",RESOURCE_LIMIT_REACHED:"Лимит выполнения",CANCELLED:"Отменено"})[run.failure?.agentDisposition]??run.status)}</p>${run.failure ? `<div role="alert"><strong>${esc(run.failure.failureStage)} · ${esc(run.failure.errorCode)}</strong><p>${esc(run.failure.errorMessage)}</p><p>Провайдер: ${esc(run.failure.providerInitializationStatus)}</p></div>` : run.status === "FAILED" && !run.calls?.length ? `<p role="alert">Сбой до вызова модели. Причина этого старого запуска не была сохранена.</p>` : ""}<p>Статус исполнения операций. Художественная оценка: NOT_TESTED.</p><p>${esc(data.prompt)}</p><div class="inspector-metrics"><span>Длительность: ${run.metrics?.latencyMs != null ? (run.metrics.latencyMs / 1000).toFixed(2) + " с" : "NOT_AVAILABLE"}</span><span>Задач: ${tasks.length}</span><span>Выполнено: ${tasks.filter((t) => ["PASSED", "SUCCESS", "applied"].includes(t.status)).length}</span><span>Ошибок: ${tasks.filter((t) => ["FAILED", "UNSUPPORTED", "BLOCKED"].includes(t.status)).length}</span><span>Ремонтов: ${esc(run.metrics?.repairAttempts)}</span></div><p>${(run.calls ?? []).map((c) => esc(c.provider) + " · " + esc(c.model) + " · reasoning: " + esc(c.reasoningEffort ?? "PROVIDER_DEFAULT_LEGACY") + " · " + esc(c.status)).join("<br>") || "Provider: NOT_AVAILABLE"}</p><h3>Задачи</h3>${cards(tasks)}${run.status === "RUNNING" ? `<p>Текущий этап: ${esc(data.trace?.at(-1)?.stage)}</p>` : ""}${block("Итоговая сверка требований", run.outcome)}${block("Direct: сохранённая работа и публикация", data.directCheckpoint)}${block("Motion Production: задачи, модели и контрольные точки", data.production)}${block("Агент: инструменты, проверки и рабочая ревизия", data.agentRuntime)}${block("Маршрут и производительность правки", data.incrementalEdit) + block("Производительность", run.metrics)}${block("Знания и версии", run.knowledgeReferences)}${block("Ошибки", run.failures) + block("Настройки провайдера — валидация и источник", data.providerSettingsValidation) + block("Контекст — размер, бюджет и сохранность данных", data.contextAdmission) + block("Состав контекста по категориям (байты)", data.contextComposition) + block("Direct: контекст по вызовам (байты)", data.directContextProjection) + block("Semantic — причины повторных вызовов и проверки", data.semanticDiagnostics)}`;
     if (tab === 1)
       body.innerHTML =
         "<h3>Требования и привязки объектов</h3>" +
@@ -109,6 +148,14 @@ export function attachInspector(container, url) {
           : "<p>NOT_AVAILABLE</p>");
     if (tab === 2)
       body.innerHTML =
+        block("Область Semantic Repair: разрешённые требования, поля и причины отказа",data.repairSourceScope??"NOT_AVAILABLE") +
+        block("Автоматическое восстановление — решения и проверки",data.globalRecovery) +
+        `<h3>Уровень 1 — восстановление проекта</h3><p>${esc(data.recovery?.status ?? "Не запускалось")}</p>` +
+        block("Исходная и текущая ошибка, операции и попытки", data.recovery) +
+        `<h3>Уровень 2 — ремонт кода в изоляции</h3><p>${esc(data.codeRepair?.status ?? "Не запускалось")}</p>` +
+        (data.codeRepair?.status === "AWAITING_APPROVAL" ? "<p>Патч подготовлен и проверен. Приложение не изменено. Автоматическое применение отключено; можно просмотреть точный diff и подтвердить применение. Перед изменением кода исходный сценарий проверяется в копии проекта.</p><button data-review-repair>Просмотреть и применить исправление</button>" : "") +
+        block("Code Repair — причина, файлы, тесты и риски", data.codeRepair) +
+        (data.codeRepair?.patchPreview ? `<details><summary>Предложенный diff${data.codeRepair.patchPreviewTruncated ? " (сокращён; полный файл в экспорте)" : ""}</summary><pre>${esc(data.codeRepair.patchPreview)}</pre></details>` : "") +
         cards(tasks) +
         block(
           "Предварительная проверка полного плана",
@@ -140,6 +187,9 @@ export function attachInspector(container, url) {
           : tree("NOT_AVAILABLE"));
     if (tab === 3)
       body.innerHTML =
+        block("Правила движения, источники и объектные исключения",data.motionRules??"NOT_AVAILABLE") +
+        block("Motion Skills: применение, коррекция, пиксельная QA до/после",data.skills??"NOT_AVAILABLE") +
+        (Array.isArray(data.skills)&&data.commitEvidence?.status==="COMMITTED"?data.skills.map(s=>{const frame=s.before.collisionFrames?.[0]??s.before.samples?.[Math.floor(s.before.samples.length/2)]?.frame??0;const base=url+'/skill-frame?applicationId='+encodeURIComponent(s.application.applicationId)+'&frame='+frame;return `<section><h3>${esc(s.skill)} · ${esc(s.strategy)}</h3><p>Кадр ${frame}. Слева: текущее состояние без сохранённой коррекции времени. Справа: текущий результат.</p><div style="display:flex"><img style="width:50%" alt="До коррекции" src="${base}&phase=before"><img style="width:50%" alt="После коррекции" src="${base}&phase=after"></div></section>`;}).join(''):"") +
         block("Текст: строки, локальное время и непрерывность", data.textMotion ?? "NOT_AVAILABLE") +
         `<p>Художественная оценка: NOT_TESTED</p><p>Доступность сохранённых QA: ${esc(data.qaAvailability)}</p>` +
         (data.qa.length
@@ -204,6 +254,7 @@ export function attachInspector(container, url) {
     loading = true;
     try {
       const runs = await fetchJSON("");
+      if(tab===6){const response=await fetch(url+'/export-reports');if(!response.ok)throw Error('Не удалось прочитать отчёты экспорта');const next=await response.json();if(pretty(next)!==pretty(exportsData)||!body.querySelector('section')){exportsData=next;render();}}
       const old = selectedId;
       select.innerHTML = runs
         .map(
@@ -222,7 +273,7 @@ export function attachInspector(container, url) {
         lastVersion = version;
         rawData = null;
         data = selectedId ? await fetchJSON("/" + selectedId) : null;
-        render();
+        if(tab!==6) render();
       }
       status.textContent = "";
     } catch (e) {
@@ -254,6 +305,7 @@ export function attachInspector(container, url) {
         tab = Number(b.dataset.tab);
         localStorage.setItem("agent-inspector-tab", String(tab));
         render();
+        if(tab===6) update();
       }),
   );
   panel.querySelector("[data-copy]").onclick = async () => {

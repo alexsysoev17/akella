@@ -259,7 +259,7 @@ test("invalid compound expression is atomic; unsupported expression combination 
       });
       p.requirements = p.requirements.slice(0, 1);
       p.coverage[0].requirementIds = ["r0"];
-      if (invalidAmplitude) p.requirements[0].parameters.amplitude = 99;
+      if (invalidAmplitude) p.requirements[0].parameters.amplitude = -1;
       else p.requirements[0].techniques = ["slideUp", "wiggle"];
       let repairs = 0,
         commits = 0,

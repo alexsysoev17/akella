@@ -1,8 +1,25 @@
+import {evaluateAnimation, evaluateMotion} from "./evaluation.js";
+import { intervalConflict } from "./intervals.js";
 import type { LoadedProject } from "../types.js";
-import type { MotionState } from "./schema.js";
+import type { MotionState,Animation } from "./schema.js";
 import { buildRegistry, resolveState } from "./registry.js";
 import { canvasMatrix, decompose, inverse, multiply } from "./geometry.js";
 import type { StatePresentation } from "./transition-runtime.js";
+import {expressionValue} from './expressions.js';
+export class TransitionCompositionError extends Error {
+  readonly code='TRANSITION_COMPOSITION_CONFLICT';
+  readonly issue;
+  constructor(details:Record<string,unknown>){super('TRANSITION_COMPOSITION_CONFLICT: анимация конфликтует с владельцем state-transition subtree');this.issue={code:this.code,message:this.message,details,allowedActions:['inspectAnimations','inspectDependencies','editTransitionGroup','edit']};}
+}
+const neutralValues=(values:Record<string,number|undefined>)=>Object.entries(values).every(([key,value])=>Number.isFinite(value)&&Math.abs(value!-( ["opacity","scale","scaleX","scaleY","trim"].includes(key)?1:0))<1e-9);
+/** A converted base may hold its neutral endpoint through the old tail duration.
+ * Equal keyframe endpoints prove a constant segment for every supported easing. */
+function neutralSourceTrack(a:Animation,start:number){
+ if(a.text&&a.text.segmentation!=='block')return false;
+ if(a.startFrame+a.durationFrames<=start)return neutralValues(evaluateAnimation(a,a.startFrame+a.durationFrames));
+ if(a.effect!=='keyframes'||!neutralValues(evaluateAnimation(a,start)))return false;
+ return a.parameters.points.filter(p=>a.startFrame+p.frame>start).every(p=>neutralValues({[a.parameters.property]:p.value}));
+}
 export function statePresentation(
   project: LoadedProject,
   state: MotionState,
@@ -51,6 +68,11 @@ export function validateObjectTransitions(
 ) {
   const ts = state.objectTransitions ?? [],
     registry = buildRegistry(project.inspection.document,project.inspection.fingerprint);
+  for (const e of state.expressions ?? []) {
+    if (e.ownership?.scope !== "logicalObject") continue;
+    const owner = registry.objects.find(o => o.logicalObjectId === e.ownership!.logicalObjectId);
+    if (!owner?.sourceInstances.some(i => i.sceneId === e.sceneId && i.sourceNodeId === e.targetId)) throw new Error("EFFECT_OWNER_MISMATCH: logical owner must contain the source reference");
+  }
   if (!ts.length) return;
   const presentation = statePresentation(project, state),
     ids = new Set<string>();
@@ -81,28 +103,15 @@ export function validateObjectTransitions(
       throw new Error("Переход требует ненулевых размеров и обратимых матриц");
     const fromBlocks = state.blocks.filter((b) => b.sceneId === t.fromSceneId),
       toBlocks = state.blocks.filter((b) => b.sceneId === t.toSceneId);
-    if (fromBlocks.length !== 1 || toBlocks.length !== 1)
-      throw new Error("Состояние должно иметь ровно один блок на timeline");
+    if (t.timelinePolicy === "referenceStates" ? fromBlocks.length > 1 || toBlocks.length > 1 : fromBlocks.length !== 1 || toBlocks.length !== 1)
+      throw new Error(t.timelinePolicy === "referenceStates" ? "AMBIGUOUS_PRESENTATION: несколько video blocks ссылаются на одно reference state" : "Состояние должно иметь ровно один блок на timeline");
     const a = fromBlocks[0],
       b = toBlocks[0],
       end = t.startFrame + t.durationFrames;
     const blocks = [...state.blocks].sort(
       (a, b) => a.startFrame - b.startFrame,
     );
-    if (blocks.indexOf(b) !== blocks.indexOf(a) + 1)
-      throw new Error(
-        "Переходы поддерживают соседние состояния timeline; разбейте длинный путь на последовательные переходы",
-      );
-    if (
-      t.startFrame < a.startFrame ||
-      t.startFrame >= a.startFrame + a.durationFrames ||
-      end < b.startFrame ||
-      end >= b.startFrame + b.durationFrames ||
-      end >= state.settings.durationFrames
-    )
-      throw new Error(
-        "Переход начинается в исходном блоке и заканчивается в целевом, включая его первый кадр. Конечный кадр должен существовать.",
-      );
+    intervalConflict(t, state.settings.durationFrames, "transition");
     if (
       Math.sign(
         decompose(presentation[t.logicalObjectId][t.fromSceneId].normalized)
@@ -126,25 +135,38 @@ export function validateObjectTransitions(
         ...descendants(s.node),
         ...s.ancestors.map((n) => n.figmaNodeId),
       ]);
-      if (
-        (state.expressions ?? []).some(
+      const conflictingExpression = (state.expressions ?? []).find(
           (e) =>
-            e.enabled && e.sceneId === s.sceneId && related.has(e.targetId),
-        )
-      )
-        throw new Error(
-          "Expression on a state-transition subtree is not yet supported; use transition proceduralEffects or a non-overlapping instance workflow",
+            e.enabled && e.sceneId === s.sceneId && related.has(e.targetId) &&
+            !(s.sceneId===t.fromSceneId&&!e.transitionId&&e.startFrame+e.durationFrames<=t.startFrame) &&
+            !(s.sceneId===t.toSceneId&&!e.transitionId&&e.startFrame>=end&&Math.abs(expressionValue(e,end,state.settings.fps,state.animations,evaluateAnimation))<1e-9) &&
+            !((e.transitionId === t.transitionId || Boolean(e.transitionId&&ts.some(owner=>owner.transitionId===e.transitionId&&owner.logicalObjectId===t.logicalObjectId)) || e.ownership?.scope === "logicalObject" && e.ownership.logicalObjectId === t.logicalObjectId) && e.targetId === s.sourceNodeId),
         );
-      if (
-        state.animations.some(
+      if(conflictingExpression)throw new TransitionCompositionError({transitionId:t.transitionId,expressionId:conflictingExpression.expressionId,targetId:conflictingExpression.targetId,sceneId:s.sceneId,property:conflictingExpression.property,ownership:conflictingExpression.ownership??{scope:'sceneInstance'},transitionInterval:[t.startFrame,end],expressionInterval:[conflictingExpression.startFrame,conflictingExpression.startFrame+conflictingExpression.durationFrames],overlap:[Math.max(t.startFrame,conflictingExpression.startFrame),Math.min(end,conflictingExpression.startFrame+conflictingExpression.durationFrames)],resolution:'End source effects before departure; begin neutral destination effects after arrival; or explicitly bind a supported transform effect to the transition/logical root.'});
+      // Destination tracks may take over after arrival, but must begin at the
+      // unmodified reference state. Evaluate the track (not every later phase)
+      // so a grow/return sequence can retain its non-neutral second phase.
+      const destinationTracks = state.animations.filter(a => a.enabled &&
+        a.sceneId === t.toSceneId && related.has(a.targetId));
+      const destinationValues = evaluateMotion({ ...state, animations: destinationTracks,
+        expressions: [], objectTransitions: [] }, end).nodes;
+      const destinationHandoff = destinationTracks.every(a => a.startFrame >= end && (!a.text || a.text.segmentation === "block")) &&
+        Object.values(destinationValues).every(neutralValues);
+      const conflictingAnimation=state.animations.find(
           (a) =>
-            a.enabled && a.sceneId === s.sceneId && related.has(a.targetId),
-        )
-      )
-        throw new Error(
-          `«${object.name}»: отдельная анимация экземпляра/родителя/потомка конфликтует с переходом; перенесите характер движения в proceduralEffects`,
+            a.enabled && a.sceneId === s.sceneId && related.has(a.targetId) &&
+            !(s.sceneId === t.toSceneId && destinationHandoff) &&
+            !(s.sceneId===t.fromSceneId&&neutralSourceTrack(a,t.startFrame)),
         );
+      if(conflictingAnimation)throw new TransitionCompositionError({transitionId:t.transitionId,animationId:conflictingAnimation.animationId,targetId:conflictingAnimation.targetId,sceneId:s.sceneId,transitionInterval:[t.startFrame,end],animationInterval:[conflictingAnimation.startFrame,conflictingAnimation.startFrame+conflictingAnimation.durationFrames],resolution:'Source subtree tracks must hold neutral values before departure; destination subtree tracks must start at/after arrival with neutral initial values. Otherwise choose an explicit transition-owned transform.'});
     }
+  }
+  for (const e of state.expressions ?? []) {
+    if (!e.transitionId) continue;
+    const t = ts.find(t => t.transitionId === e.transitionId)!;
+    const object = registry.objects.find(o => o.logicalObjectId === t.logicalObjectId)!;
+    const ref = resolveState(project.inspection.document, object, e.sceneId);
+    if (ref.sourceNodeId !== e.targetId) throw new Error("EFFECT_TARGET_MISMATCH: transition-bound expression must target its logical object root");
   }
   for (let i = 0; i < ts.length; i++)
     for (let j = i + 1; j < ts.length; j++) {

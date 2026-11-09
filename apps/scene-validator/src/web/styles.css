@@ -4,8 +4,8 @@
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
-  color: #242426;
-  background: #f7f7f9;
+  color: #1a1a1a;
+  background: #f2f2f2;
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
 }
@@ -31,30 +31,30 @@ header,
 header {
   height: 68px;
   justify-content: space-between;
-  border-bottom: 1px solid #e9e9ed;
+  border-bottom: 1px solid #f2f2f2;
 }
 header a {
-  color: #343438;
-  font-weight: 600;
+  color: #1a1a1a;
+  font-weight:700;
   font-size: 12px;
-  letter-spacing: 1.3px;
+  letter-spacing: normal;
 }
 header span,
 p,
 small {
-  color: #818186;
+  color: #f2f2f2;
 }
 header span {
   font-size: 12px;
 }
 a {
-  color: #0071e3;
+  color: #1a1a1a;
   text-decoration: none;
 }
 h1 {
   font-size: 28px;
-  font-weight: 600;
-  letter-spacing: -0.8px;
+  font-weight:700;
+  letter-spacing: normal;
 }
 .heading {
   justify-content: space-between;
@@ -62,8 +62,8 @@ h1 {
 }
 button {
   font: inherit;
-  background: #0071e3;
-  color: #fff;
+  background: #1a1a1a;
+  color: #f2f2f2;
   border: 0;
   border-radius: 9px;
   padding: 10px 16px;
@@ -73,7 +73,8 @@ button {
     box-shadow 0.15s;
 }
 button:hover {
-  background: #087ce8;
+  background: var(--accent);
+  opacity: 0.85;
 }
 button:disabled {
   opacity: 0.35;
@@ -81,7 +82,7 @@ button:disabled {
 }
 button:focus-visible,
 a:focus-visible {
-  outline: 3px solid #a8cdfb;
+  outline: 3px solid #f2f2f2;
   outline-offset: 2px;
 }
 .grid {
@@ -91,46 +92,46 @@ a:focus-visible {
   margin: 24px 0;
 }
 .card {
-  background: #fff;
-  border: 1px solid #e6e6eb;
+  background: #f2f2f2;
+  border: 1px solid #f2f2f2;
   border-radius: 14px;
   padding: 24px;
   text-align: left;
   color: inherit;
-  box-shadow: 0 2px 6px #00000003;
+  box-shadow: 0 2px 6px #1a1a1a;
 }
 .card h2 {
   font-size: 18px;
   font-weight: 550;
 }
 .card:hover {
-  border-color: #c8d8ee;
-  background: #fff;
+  border-color: #f2f2f2;
+  background: #f2f2f2;
 }
 .card p {
   font-size: 13px;
 }
 dialog {
-  background: #fff;
+  background: #f2f2f2;
   color: inherit;
-  border: 1px solid #e6e6eb;
+  border: 1px solid #f2f2f2;
   border-radius: 20px;
   max-width: 580px;
   width: calc(100% - 32px);
   padding: 28px;
-  box-shadow: 0 24px 100px #0002;
+  box-shadow: 0 24px 100px #1a1a1a;
   max-height: 85vh;
   overflow: auto;
 }
 dialog::backdrop {
-  background: #25252b42;
+  background: #1a1a1a;
   backdrop-filter: blur(6px);
 }
 label {
   display: block;
   margin: 16px 0;
   font-size: 13px;
-  color: #66666e;
+  color: #1a1a1a;
 }
 input,
 textarea,
@@ -141,15 +142,15 @@ select {
   width: 100%;
   padding: 10px 12px;
   margin-top: 7px;
-  border: 1px solid #dedee4;
-  background: #fafafb;
-  color: #242426;
+  border: 1px solid #f2f2f2;
+  background: #f2f2f2;
+  color: #1a1a1a;
   border-radius: 8px;
 }
 input:focus,
 textarea:focus,
 select:focus {
-  outline: 2px solid #b7d7fa;
+  outline: 2px solid #f2f2f2;
   outline-offset: 1px;
 }
 textarea {
@@ -159,7 +160,7 @@ textarea {
 pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  color: #66666e;
+  color: #1a1a1a;
   font-size: 12px;
 }
 iframe {
@@ -173,7 +174,7 @@ iframe {
   display: none;
 }
 .warning {
-  color: #9a6600;
+  color: #1a1a1a;
 }
 [hidden] {
   display: none !important;
@@ -203,7 +204,7 @@ iframe {
 
 @font-face {
   font-family: Inter;
-  src: local("Inter Regular"), local("Inter-Regular");
+  src: url('/brand/Inter-Regular.ttf') format('truetype');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -218,34 +219,34 @@ iframe {
 :root {
   --bg: #1a1a1a;
   --text: #f2f2f2;
-  --surface: #202020;
-  --soft: #292929;
-  --border: #333;
-  --muted: #929292;
-  --accent: #ff2b2f;
-  --selection: #343030;
+  --surface: #1a1a1a;
+  --soft: #1a1a1a;
+  --border: #1a1a1a;
+  --muted: #f2f2f2;
+  --accent: var(--text);
+  --selection: #1a1a1a;
   font-family: Inter, sans-serif;
   font-weight: 400;
   line-height: 1.2;
-  letter-spacing: -0.05em;
+  letter-spacing: normal;
   background: var(--bg);
   color: var(--text);
 }
 :root[data-theme="light"] {
   --bg: #f2f2f2;
   --text: #1a1a1a;
-  --surface: #fff;
-  --soft: #e6e6e6;
-  --border: #dedede;
-  --muted: #858585;
-  --selection: #f4e2e2;
+  --surface: #f2f2f2;
+  --soft: #f2f2f2;
+  --border: #f2f2f2;
+  --muted: #f2f2f2;
+  --selection: #f2f2f2;
 }
 button,
 input,
 textarea,
 select {
   font-family: Inter, sans-serif;
-  letter-spacing: inherit;
+  letter-spacing: normal;
   line-height: 1.2;
 }
 header {
@@ -254,7 +255,7 @@ header {
 header a {
   color: var(--text);
   font-weight: 500;
-  letter-spacing: -0.05em;
+  letter-spacing: normal;
 }
 p,
 small,
@@ -266,16 +267,18 @@ a {
 }
 button {
   background: var(--accent);
+  color: var(--bg);
 }
 button:hover {
-  background: #e92529;
+  background: var(--accent);
+  opacity: 0.85;
 }
 h1,
 h2,
 h3,
 .card h2 {
   font-weight: 500;
-  letter-spacing: -0.05em;
+  letter-spacing: normal;
 }
 .card,
 dialog {
@@ -305,7 +308,7 @@ a:focus-visible,
 input:focus,
 textarea:focus,
 select:focus {
-  outline-color: #ff2b2f55;
+  outline-color: #1a1a1a;
 }
 
 .state-count {
@@ -325,14 +328,14 @@ select:focus {
   z-index: 80;
   background: var(--bg, #1a1a1a);
   color: var(--text, #f2f2f2);
-  border-left: 1px solid #8884;
+  border-left: 1px solid #f2f2f2;
   display: flex;
   flex-direction: column;
-  box-shadow: -8px 0 40px #0002;
+  box-shadow: -8px 0 40px #1a1a1a;
   padding: 20px;
   box-sizing: border-box;
   font-size: 12px;
-  letter-spacing: -0.03em;
+  letter-spacing: normal;
 }
 .agent-inspector[hidden] {
   display: none;
@@ -358,8 +361,8 @@ select:focus {
   font-size: 12px;
 }
 .agent-inspector .inspector-tabs .active {
-  background: #ff2b2f;
-  color: #f2f2f2;
+  background: var(--text);
+  color: var(--bg);
 }
 .inspector-body {
   overflow: auto;
@@ -369,7 +372,7 @@ select:focus {
   overflow-wrap: anywhere;
 }
 .inspector-body section {
-  border-bottom: 1px solid #8883;
+  border-bottom: 1px solid #f2f2f2;
   padding-bottom: 12px;
 }
 .inspector-body h3 {
@@ -467,6 +470,188 @@ select:focus {
   color: var(--text);
 }
 .agent-inspector .inspector-tabs button.active {
-  background: #ff2b2f;
-  color: #f2f2f2;
+  background: var(--text);
+  color: var(--bg);
 }
+
+/* AKELLA: two-tone interface; the artwork and rendered project content retain their colors. */
+@font-face {
+  font-family: Inter;
+  src: url('/brand/Inter-Light.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+}
+@font-face {
+  font-family: Inter;
+  src: url('/brand/Inter-Medium.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+:root {
+  --bg: #1a1a1a;
+  --text: #f2f2f2;
+  --surface: var(--bg);
+  --soft: var(--bg);
+  --border: var(--text);
+  --muted: var(--text);
+  --accent: var(--text);
+  --selection: var(--bg);
+  color-scheme: dark;
+}
+:root[data-theme='light'] {
+  --bg: #f2f2f2;
+  --text: #1a1a1a;
+  --surface: var(--bg);
+  --soft: var(--bg);
+  --border: var(--text);
+  --muted: var(--text);
+  --accent: var(--text);
+  --selection: var(--bg);
+  color-scheme: light;
+}
+body, body * {
+  font-family: Inter, sans-serif;
+  font-weight: 300 !important;
+}
+body button, body a, body summary, body button * {
+  font-weight: 300 !important;
+}
+body button:hover, body button:hover *, body a:hover, body a:hover *,
+body summary:hover, body button:focus-visible, body a:focus-visible {
+  font-weight: 500 !important;
+}
+body button, body button:hover, body button:active,
+body .agent-inspector .inspector-tabs button,
+body .agent-inspector .inspector-tabs button.active {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--text);
+  opacity: 1;
+}
+body button:disabled { opacity: .35; }
+body button:focus-visible, body a:focus-visible, body summary:focus-visible {
+  outline: 1px solid var(--text);
+  outline-offset: 5px;
+}
+body .card, body dialog, body .agent-inspector { box-shadow: none; border-radius: 0; }
+body dialog::backdrop { background: var(--bg); opacity: .8; backdrop-filter: none; }
+body input, body textarea, body select { border-radius: 0; }
+body [type='file']::file-selector-button {
+  font: inherit; color: var(--text); background: var(--bg);
+  border: 0; padding: 4px 12px 4px 0; cursor: pointer;
+}
+body [type='file']::file-selector-button:hover { font-weight: 500; }
+body input:focus, body textarea:focus, body select:focus { outline: 1px solid var(--text); }
+body details > summary { list-style: none; }
+body details > summary::-webkit-details-marker { display: none; }
+body[data-page='welcome'] { background:var(--bg);color:var(--text); }
+body[data-page='welcome'] > main { max-width: none; padding: 0; }
+body[data-page='welcome'] main > header { display: none; }
+body[data-page='welcome'] #message:not(:empty) { position: fixed; bottom: 12px; left: 24px; max-width: 70vw; }
+.welcome {
+  display: grid;
+  grid-template-columns: 26.1vw 30.3vw;
+  column-gap: 22.1vw;
+  margin-left: 18.2vw;
+  padding-top: 18.75vh;
+  padding-bottom: 10vh;
+  min-height: 100vh;
+  align-items: start;
+}
+.welcome-brand { width: 100%; min-width: 0; }
+.welcome-photo { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+.welcome-logo { width: 100%; height: auto; display: block; margin-top: 2vw; }
+.welcome-tagline { display: block; width: 100%; height: auto; margin-top: .7vw; overflow: visible; }
+body .welcome-tagline span {
+  display: inline-block;
+  white-space: nowrap;
+  font-size: 2.4vw;
+  font-weight: 500 !important;
+  letter-spacing: -.1em;
+  line-height: 1;
+}
+.welcome-panel { padding-top: 11.05vw; min-width: 0; }
+.welcome-title {
+  display: flex; align-items: center; gap: .55vw; margin: 0;
+  font-size: 2.8vw; line-height: 1; letter-spacing: normal; white-space: nowrap;
+}
+.welcome-title img { display: block; min-width: 0; flex: 1; width: 53%; height: auto; }
+.welcome-actions { margin-top: 2.05vw; padding-left: .35vw; font-size: 1.38vw; line-height: 1.05; }
+.welcome-actions button, .welcome-projects a {
+  display: block; text-align: left; padding: 0; margin: 0 0 .5vw; width: fit-content;
+  font-size: inherit; line-height: inherit; letter-spacing: normal; color: var(--text);
+}
+.welcome-projects { display: flex; flex-direction: column; align-items: flex-start; margin-top: 1vw; max-height: 27vh; overflow: auto; padding: 0 8px 5px 0; scrollbar-width: thin; }
+.welcome-projects a { margin-bottom: 0; max-width: 100%; overflow-wrap: anywhere; }
+.welcome-projects p { margin: 0; }
+@media (max-width: 760px) {
+  .welcome { margin: 0; padding: 8vh 8vw; grid-template-columns: minmax(0, 1fr); gap: 48px; }
+  .welcome-brand { width: min(68vw, 360px); }
+  .welcome-logo { margin-top: 20px; }
+  .welcome-tagline { margin-top: 10px; }
+  .welcome-panel { padding: 0; width: min(84vw, 480px); }
+  .welcome-title { font-size: clamp(24px, 6.5vw, 42px); gap: 8px; }
+  .welcome-actions { font-size: 21px; margin-top: 26px; padding: 0; }
+  .welcome-actions button { margin-bottom: 8px; }
+  .welcome-projects { margin-top: 20px; max-height: none; }
+}
+body button, body button:hover, body button:active {
+  background: transparent !important;
+  color: var(--text) !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+body input[type='number'] { appearance: textfield; }
+body input::-webkit-inner-spin-button, body input::-webkit-outer-spin-button { appearance: none; margin: 0; }
+body select { appearance: none; }
+
+/* Reference typography and welcome composition. */
+body {font-family:Inter,sans-serif;font-weight:400;}
+body button:hover,body a:hover {font-weight:700!important;}
+body[data-page='welcome'] .welcome {grid-template-columns:26.1vw 23vw;column-gap:31.1vw;padding-top:19.7vh;}
+body[data-page='welcome'] .welcome-panel {padding-top:15.1vw;}
+body[data-page='welcome'] .welcome-title {display:block;font:400 25px/1 Inter,sans-serif;letter-spacing: normal;white-space:normal;}
+body[data-page='welcome'] .welcome-actions {font:400 25px/1 Inter,sans-serif;letter-spacing: normal;margin-top:1em;padding:0;text-transform:uppercase;}
+body[data-page='welcome'] .welcome-actions button,body[data-page='welcome'] .welcome-actions a {font:inherit;letter-spacing: normal;margin:0;}
+body[data-page='welcome'] .welcome-actions > a {display:none;}
+body[data-page='welcome'] .welcome-projects {margin-top:1em;max-height:30vh;}
+body[data-page='welcome'] .welcome-tagline span {font-weight:500!important;}
+::selection {background:var(--text);color:var(--bg);}
+@media(max-width:760px){body[data-page='welcome'] .welcome{grid-template-columns:1fr;gap:40px;padding:8vh 8vw;margin:0}body[data-page='welcome'] .welcome-panel{padding:0}}
+body[data-page='welcome'] .welcome-panel *,body[data-page='project'] .director :is(button,a,select,textarea,span,summary,label,p) {font-weight:400!important;}
+body[data-page='welcome'] .welcome-actions :is(button,a),body[data-page='project'] .director :is(button,a,summary,label) {text-transform:uppercase;}
+body[data-page='project'] .director .object {text-transform:none;}
+body[data-page='welcome'] .welcome-panel :is(button,a):hover,body[data-page='project'] .director :is(button,a,summary):hover,body[data-page='project'] .director :is(button,a):hover span,body[data-page='project'] .director .object.selected span,body[data-page='project'] .director .scene-row.active .scene-title {font-weight:700!important;}
+/* Reference artwork uses 25px on a 3024px-wide canvas (16.93px at 2048px). */
+body,body * {font-weight:400!important;}
+body[data-page='welcome'] .welcome-title,body[data-page='welcome'] .welcome-actions,body[data-page='project'] .director {font-size:clamp(14px,.827vw,25px);}
+body :is(button,a,summary):hover,body :is(button,a,summary):hover *,body button[aria-expanded='true'],body button[aria-pressed='true'],body button.is-selected {font-weight:700!important;}
+body[data-page='project'] .director button[aria-expanded='true'],body[data-page='project'] .director button[aria-pressed='true'],body[data-page='project'] .director button.is-selected {font-weight:700!important;}
+body:has(.agent-inspector:not([hidden])) #m-inspector {font-weight:700!important;}
+
+/* Explicit Bold face: no dependence on installed fonts or synthetic weight. */
+@font-face {font-family:Inter;src:url('/brand/Inter-Bold.ttf') format('truetype');font-weight:700;font-style:normal;font-display:swap;}
+
+/* Source-free workspace: only the conversation is mounted until import commits. */
+.empty-project{min-height:calc(100vh - 48px);padding:28px 40px;box-sizing:border-box}
+.empty-project header{display:flex;justify-content:space-between;gap:24px;font-size:16px}
+.empty-project header a{color:inherit}
+.empty-chat{max-width:780px;margin:12vh auto 40px}
+.empty-chat h1{font-size:36px;font-weight:400;margin-bottom:12px}
+.empty-chat>p{opacity:.6;font-size:17px;line-height:1.5}
+#import-conversation{margin:32px 0;max-height:42vh;overflow:auto}
+.import-message{font-size:16px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;margin:12px 0}
+.import-message.from-user{padding:14px 18px;background:color-mix(in srgb,var(--text) 5%,var(--bg));border-radius:16px;margin-left:32px;color:var(--text)}
+.import-message[data-stage=failed]{color:#b33}
+#figma-prompt-form{display:flex;flex-direction:column;gap:12px}
+#figma-prompt{box-sizing:border-box;width:100%;min-height:110px;resize:vertical;padding:18px;font:inherit;border:1px solid #aaa;border-radius:16px;background:transparent;color:inherit}
+#figma-submit{align-self:flex-end;padding:12px 24px}
+.import-transcript{max-height:180px;overflow:auto;font-size:14px;padding:8px 0}
+@media(max-width:600px){.empty-project{padding:20px}.empty-chat{margin-top:8vh}.empty-chat h1{font-size:28px}}
+
+:root[data-theme='dark'] .welcome-logo {filter:invert(1);}

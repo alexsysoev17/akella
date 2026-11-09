@@ -8,7 +8,7 @@ export const techniques = [
       "Explicit non-destructive text clipping reveal; never added to ordinary slide/fade",
     queries: ["mask reveal text", "текст через маску"],
     implementation:
-      "Cached SVG clip wrapper sized from source bounds and loaded HTML line boxes",
+      "Native shaped-text clip coverage in Skia; explicit browser compatibility uses SVG wrappers",
     properties: ["reveal"],
     parameters: ["from", "to", "direction"],
     limits: [
@@ -47,7 +47,7 @@ export const techniques = [
       "incomingImpulse",
     ],
     limits: [
-      "Needs source base track",
+      "Needs a finite Position track or a unique cross-scene transition; transition inertia supports canvas-space X/Y and anchors to its endpoint",
       "incomingImpulse is explicit additive velocity, not silently invented",
       "frame rate must resolve frequency",
     ],
@@ -72,7 +72,7 @@ export const techniques = [
     description: "Native path-length mask reveal preserving source paint",
     queries: ["Trim Paths", "прорисуй линию вдоль траектории", "path reveal"],
     implementation:
-      "getTotalLength + stroke-dasharray/dashoffset on centerline mask",
+      "Native CanvasKit PathMeasure contour segments on immutable centerline geometry; browser compatibility uses SVG dash masks",
     properties: ["trim"],
     parameters: ["from", "to", "direction", "durationFrames", "easing"],
     limits: [
@@ -99,12 +99,12 @@ export const techniques = [
     id: "wiggle",
     name: "Процедурное покачивание",
     implementationId: "wiggle",
-    description: "Seeded smooth noise",
+    description: "Deterministic smooth seeded additive X/Y noise. Continuous until scene end when requested; no settling endpoint. Existing expressions are parameter edits, not duplicates.",
     queries: ["wiggle", "случайное покачивание"],
     implementation: "seeded analytic noise",
     properties: ["x", "y", "rotation", "scaleX", "scaleY"],
     parameters: ["amplitude", "frequency", "seed"],
-    limits: ["finite interval"],
+    limits: ["bounded interval; continuous effects may reach final project frame"],
     examples: ["setExpression wiggle"],
     technicalChecks: ["seed", "finite evaluation"],
     visualChecks: ["visible contribution"],

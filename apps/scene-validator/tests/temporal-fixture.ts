@@ -1,0 +1,7 @@
+import {identityFixture,node} from './identity-fixture.js';
+import {objectRequirement} from './intent-fixture.js';
+import {intentPlanSchema} from '../src/motion/intent/schema.js';
+const names=['лого','500б','700б','салат','телефон','груша'];
+export const request='на 5 секунде лого уходит влево с колебаниями и встает как в сцене 2, 500б и 700б и салат и телефон и груша встают в положение как на сцене 2 причем в данной анимации у них колебания потом затухающие';
+export async function parallelFixture(){return identityFixture(2,scenes=>scenes.forEach((s,j)=>{s.width=320;s.height=180;s.properties={width:320,height:180,clipsContent:true,fills:[]};s.children=names.map((name,i)=>({...node('n'+j+i,name,15+i*42+j*8,30+j*25,20,20),properties:{width:20,height:20,fills:[{type:'SOLID',color:{r:1,g:1,b:1}}]}}));}));}
+export function parallelPlan(){const p=intentPlanSchema.parse({schemaVersion:'1.0.0',requirements:names.map((name,i)=>{const r=objectRequirement('r'+i,'s0','n0'+i,name,['objectStateTransition','inertialOvershoot'],request);r.timing.startSeconds=5;r.parameters.fromSceneId='s0';r.parameters.toSceneId='s1';r.parameters.durationSeconds=.5;r.parameters.easing='linear';r.sourceClauseId='paragraph';return r;}),sourceClauses:[{clauseId:'paragraph',text:request,start:0,end:request.length}],coverage:[{sourceText:request,requirementIds:names.map((_,i)=>'r'+i),classification:'executable',explanation:'independent transitions'}],assumptions:[]});return p;}

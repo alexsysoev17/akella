@@ -17,12 +17,14 @@ const original = path.resolve(arg("project")),
 const request = JSON.parse(
   await readFile(path.join(saved, "request.json"), "utf8"),
 );
-const response = JSON.parse(
+const live=args.includes("--live-original-provider");
+const response = live?undefined:JSON.parse(
   await readFile(
-    path.join(saved, "semantic-interpret/raw-response.json"),
+    args.includes("--response-file") ? path.resolve(arg("response-file")) : path.join(saved, "semantic-interpret/raw-response.json"),
     "utf8",
   ),
 );
+const resolution = args.includes("--resolution-file") ? JSON.parse(await readFile(path.resolve(arg("resolution-file")), "utf8")) : undefined;
 const root = await mkdtemp(
   path.join(process.env.TMPDIR ?? "/tmp", "akella-replay-"),
 );
@@ -35,12 +37,16 @@ await cp(original, root, {
     ].some((pattern) => pattern.test(src)),
 });
 if (args.includes("--recorded-state")) {
-  const context = JSON.parse(
-    await readFile(path.join(saved, "context.json"), "utf8"),
-  );
-  const doc = JSON.parse(
-    await readFile(path.join(root, "motion/motion.json"), "utf8"),
-  );
+  const context = await readFile(path.join(saved,"context.json"),"utf8").then(JSON.parse).catch(async error=>{
+    if(error.code!=="ENOENT")throw error;
+    const doc=await readMotion(await loadProject(root));
+    if(doc.revision!==request.revision)throw Error("RECORDED_STATE_UNAVAILABLE_FOR_CHANGED_PROJECT");
+    return {motion:doc.state,projectRevision:doc.revision,scenes:(await loadProject(root)).inspection.document.scenes.map(s=>({sceneId:s.sceneId,objects:[]})),unprojectedStartup:true};
+  });
+  const doc = await readFile(path.join(root,"motion/motion.json"),"utf8").then(JSON.parse).catch(async error=>{
+    if(error.code!=="ENOENT"||request.revision!=="initial")throw error;
+    return readMotion(await loadProject(root));
+  });
   const scenes = new Set(
     context.scenes?.map((s: { sceneId: string }) => s.sceneId),
   );
@@ -51,7 +57,7 @@ if (args.includes("--recorded-state")) {
       s.objects.map((o) => o.targetId),
     ),
   );
-  const projectState = (state: MotionState) =>
+  const projectState = (state: MotionState) => context.unprojectedStartup?state:
     JSON.parse(
       JSON.stringify({
         ...state,
@@ -97,7 +103,7 @@ if (args.includes("--recorded-state")) {
 const project = await loadProject(root),
   before = await readMotion(project);
 let calls = 0;
-const stop = registerProvider("saved-run-reference", () => ({
+const stop = live?()=>{}:registerProvider("saved-run-reference", () => ({
   id: "saved-run-reference",
   mode: "mock",
   capabilities: () => ({
@@ -107,10 +113,11 @@ const stop = registerProvider("saved-run-reference", () => ({
     usage: false,
     nativeOutputTokenLimit: false,
   }),
-  generate: async () => {
+  generate: async (providerRequest) => {
+    if(providerRequest.purpose!=="semantic-planning"&&!resolution)throw Error("REPLAY_RECOVERY_RESPONSE_UNAVAILABLE: saved semantic answer cannot impersonate a recovery response");
     calls++;
     return {
-      output: response,
+      output: calls === 1 || !resolution ? response : resolution,
       usage: null,
       estimatedCost: null,
       latencyMs: 0,
@@ -126,10 +133,10 @@ try {
       {
         ...request.request,
         expectedRevision: before.revision,
-        settings: { provider: "saved-run-reference", model: "" },
+        settings: live?request.request.settings:{ provider: "saved-run-reference", model: "" },
       },
       () => {},
-      { config: { maxLLMCalls: 1, maxRepairAttempts: 0 } },
+      { config: { maxLLMCalls: resolution ? 2 : 1, maxRepairAttempts: resolution ? 1 : 0 } },
     );
   await writeFile(
     path.join(root, "replay-result.json"),
@@ -140,7 +147,7 @@ try {
       {
         copy: root,
         sourceRun: run,
-        providerMode: "saved-output-replay",
+        providerMode: live?"live-original-provider":"saved-output-replay",
         llmFixtureCalls: calls,
         latencyMs: performance.now() - started,
         reconciliation: result.reconciliation,
@@ -149,7 +156,12 @@ try {
       2,
     ),
   );
+  if(args.includes("--report-file"))await writeFile(path.resolve(arg("report-file")),JSON.stringify({copy:root,resultFile:path.join(root,"replay-result.json"),sourceRun:run,reconciliation:result.reconciliation,providerMode:live?"live-original-provider":"saved-output-replay"}),{flag:"wx"});
   if (result.reconciliation?.status !== "SUCCESS") process.exitCode = 1;
+} catch(error) {
+  const report={copy:root,sourceRun:run,providerMode:live?'live-original-provider':'saved-output-replay',llmFixtureCalls:calls,error:String(error),recoveryReport:(error as {recoveryReport?:unknown}).recoveryReport??null,completed:false};
+  if(args.includes('--report-file'))await writeFile(path.resolve(arg('report-file')),JSON.stringify(report,null,2),{flag:'wx'});
+  console.error(JSON.stringify(report,null,2));process.exitCode=1;
 } finally {
   stop();
 }

@@ -75,7 +75,7 @@ test("timeline hover stays fixed; captured click/drag syncs preview, clamps, rel
     assert.equal(Number(await frame()), last);
     await page.locator("#m-play").click();
     await page.waitForFunction(
-      () => document.querySelector("#m-play")?.textContent === "❚❚ Пауза",
+      () => document.querySelector("#m-play")?.textContent === "Пауза",
     );
     await page.locator("#m-play").click();
     for(const fps of [24,60]){

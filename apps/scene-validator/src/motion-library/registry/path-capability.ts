@@ -1,5 +1,9 @@
 /** Eligibility shared by context, technical validation and renderer. */
-export function pathCapability(type: string, p: Record<string, unknown>) {
+export function pathCapability(
+  type: string,
+  p: Record<string, unknown>,
+  renderer: "native" | "browser-compat" = "native",
+) {
   const visible = (v: unknown) =>
     Array.isArray(v)
       ? v.filter(
@@ -30,7 +34,10 @@ export function pathCapability(type: string, p: Record<string, unknown>) {
       reason:
         "Missing source centerline geometry; outlined fill cannot determine original stroke trajectory",
     };
-  if (paths.some((p) => (p.data?.match(/[Mm]/g)?.length ?? 0) > 1))
+  if (
+    renderer === "browser-compat" &&
+    paths.some((p) => (p.data?.match(/[Mm]/g)?.length ?? 0) > 1)
+  )
     return {
       supported: false,
       reason: "Compound subpaths must be exported as separate vectorPaths",

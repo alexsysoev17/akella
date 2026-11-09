@@ -61,6 +61,7 @@ export async function selectorContext(
         logicalObjectId: o.logicalObjectId,
         name: o.name,
         aliases: objectAliases(o.name),
+        existingTransitions: (doc.state.objectTransitions ?? []).filter(t => t.logicalObjectId === o.logicalObjectId).map(t => ({ transitionId: t.transitionId, fromSceneId: t.fromSceneId, toSceneId: t.toSceneId, startFrame: t.startFrame, durationFrames: t.durationFrames, easing: t.easing })),
         existingAnimations: doc.state.animations
           .filter(
             (a) => a.sceneId === i.sceneId && a.targetId === i.sourceNodeId,
@@ -149,7 +150,7 @@ export async function selectorContext(
       };
     }),
     lifecycleCatalog: capabilityCatalog()
-      .filter((c) => c.kind === "animation" || c.kind === "expression")
+      .filter((c) => c.kind === "animation" || c.kind === "expression" || c.kind === "transition")
       .map((c) => ({
         id: c.id,
         kind: c.kind,

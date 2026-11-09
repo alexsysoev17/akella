@@ -88,7 +88,11 @@ export async function inspectorRuns(root: string) {
     const row = clean({
       runId: id,
       createdAt: run.createdAt,
+      executionRole: run.executionRole ?? "direct",
+      productionId: run.productionId ?? null,
+      directCheckpointId:run.directCheckpointId??null,
       status: run.status,
+      failure: run.failure ?? null,
       calls: run.calls,
       metrics: run.metrics,
     });
@@ -105,6 +109,19 @@ export async function inspectorRun(root: string, id: string, raw = false) {
   if (!run || typeof run !== "object" || !run.runId)
     throw new Error("Agent Run not found");
   const full = run.privacy === "full";
+  let production: unknown = "NOT_AVAILABLE";
+  if (full && z.uuid().safeParse(run.productionId).success) {
+    const checkpoint = await saved(root, `motion/productions/${run.productionId}/production.json`) as Data;
+    production = checkpoint && typeof checkpoint === "object" && checkpoint.productionId
+      ? Object.fromEntries(["productionId", "status", "planRevision", "checkpoint", "plan", "tasks", "models", "events", "parentRunIds", "reason"].map(key => [key, checkpoint[key]]))
+      : checkpoint;
+  } else if (full) production = await saved(root, `motion/ai/${id}/production.json`);
+  let directCheckpoint:unknown="NOT_AVAILABLE";
+  if(full&&z.uuid().safeParse(run.directCheckpointId).success){
+    const record=await saved(root,`motion/direct-runs/${run.directCheckpointId}/checkpoint.json`) as Data;
+    if(record&&typeof record==='object'&&record.version){const snapshot=record.snapshot as Data;directCheckpoint={version:record.version,runId:record.runId,status:record.status,updatedAt:record.updatedAt,model:record.model,attemptRunIds:record.attemptRunIds,publication:record.publication,reason:record.reason,candidateDigest:snapshot.candidateDigest,batches:(snapshot.batches as unknown[]).length,operations:(snapshot.batches as unknown[][]).reduce((n,b)=>n+b.length,0),observations:record.observations,schemaReferences:(record.schemas as unknown[][]).map(e=>e[0]),candidatePreview:'NOT_IMPLEMENTED_PUBLIC_PREVIEW_UNCHANGED'};}
+    else directCheckpoint=record;
+  }
   const trace = await saved(root, `${base}/trace.json`);
   const tasks = full
     ? await saved(root, `motion/ai/${id}/tasks.json`)
@@ -123,6 +140,7 @@ export async function inspectorRun(root: string, id: string, raw = false) {
   const history = Array.isArray(doc.history)
     ? doc.history.filter(
         (h: Data) =>
+          h.transactionId === (run.directCheckpointId ?? id) || h.editId === id ||
           typeof h.request === "string" && h.request.startsWith(`[${id}/`),
       )
     : [];
@@ -244,6 +262,8 @@ export async function inspectorRun(root: string, id: string, raw = false) {
   const contract = (
     tasks as { contract?: { requirements?: Data[]; sourceClauses?: unknown } }
   )?.contract;
+  const persistedContract=full ? await saved(root,`motion/ai/${id}/intent-contract.json`) as Data : undefined;
+  const plannedRequirements=contract?.requirements ?? persistedContract?.requirements;
   const semanticTaskGraph = contract?.requirements
     ? {
         sourceClauses: contract.sourceClauses ?? "LEGACY_VERBATIM_PROVENANCE",
@@ -266,6 +286,7 @@ export async function inspectorRun(root: string, id: string, raw = false) {
               target: r.target,
               sceneId: r.sceneId,
               techniques: r.techniques,
+              semanticEdit:r.semanticEdit??null,
               effectOperation: r.effectOperation ?? null,
               animationIds: r.animationIds ?? [],
               expressionIds: r.expressionIds ?? [],
@@ -285,10 +306,30 @@ export async function inspectorRun(root: string, id: string, raw = false) {
     : "NOT_AVAILABLE_PRIVACY";
   const view = clean({
     run: raw ? run : { ...run, result: undefined },
+    startupFailure: run.failure ?? "NOT_RECORDED_LEGACY_RUN",
     trace,
+    contextAdmission: Array.isArray(trace)
+      ? trace.filter(e=>e.stage==="context-admission").map(e=>({...e.data,
+          llmCalls:Array.isArray(run.calls)?run.calls.length:0,
+          requirementCount:Array.isArray(plannedRequirements)?plannedRequirements.length:null,
+          requirementCountStatus:Array.isArray(plannedRequirements)?"PLANNED":"NOT_PLANNED",
+        }))
+      : "NOT_AVAILABLE",
+    directCheckpoint,
+    production: production && typeof production === "object" && "tasks" in production
+      ? { ...production, tasks: Object.fromEntries(Object.entries((production as Data).tasks as Data).map(([key, value]) => {
+          const task = value as Data;
+          return [key, Object.fromEntries(["status", "attempts", "error", "failure", "model", "runIds", "verification"].map(field => [field, task[field]]))];
+        })) }
+      : production,
+    agentRuntime: full ? await saved(root,`motion/ai/${id}/agent-runtime.json`) : "NOT_AVAILABLE",
+    incrementalEdit: full ? await saved(root,`motion/ai/${id}/incremental-edit.json`) : Array.isArray(trace)?trace.filter(e=>e.stage==='incremental-edit').map(e=>({route:e.data?.route,llmCalls:e.data?.llmCalls,objectResolutionMs:e.data?.objectResolutionMs,patchConstructionMs:e.data?.patchConstructionMs,applyMs:e.data?.applyMs,qaMs:e.data?.qaMs})):"NOT_AVAILABLE",
+    contextComposition: Array.isArray(trace) ? trace.filter(e=>e.stage==="semantic-diagnostic" && e.data?.phase==="reference-context").map(e=>e.data.report) : "NOT_AVAILABLE",
+    directContextProjection: Array.isArray(trace) ? trace.filter(e=>e.stage==='direct-context-projection').map(e=>e.data) : 'NOT_AVAILABLE',
     semanticDiagnostics: Array.isArray(trace)
       ? trace.filter((e) =>
           [
+            "context-admission",
             "semantic-coverage",
             "semantic-diagnostic",
             "provider-call-skipped",
@@ -317,7 +358,13 @@ export async function inspectorRun(root: string, id: string, raw = false) {
       : "NOT_AVAILABLE",
     request,
     understanding: tasks,
+    skills:full?await saved(root,`motion/ai/${id}/skills.json`):"REDACTED",
+    motionRules:full?{scope:"current authoritative state, not historical replay",rules:(doc.state as Data)?.motionRules??[],materializations:(doc.state as Data)?.ruleMaterializations??[],candidate:await saved(root,`motion/ai/${id}/rules.json`)}:"REDACTED",
+    repairSourceScope:full?await saved(root,`motion/ai/${id}/intent-repair-scope.json`):"REDACTED",
     semanticTaskGraph,
+    globalRecovery:full ? await saved(root,`motion/ai/${id}/global-recovery.json`) : {status:"REDACTED",reason:"Run privacy policy"},
+    recovery: full ? await saved(root, `motion/ai/${id}/recovery.json`) : "REDACTED",
+    codeRepair: full ? await saved(root, `motion/ai/${id}/code-repair.json`) : "REDACTED",
     compilationPreflight: preflight,
     stateChanges: changes,
     commitEvidence:
@@ -403,11 +450,19 @@ export async function inspectorRun(root: string, id: string, raw = false) {
               runId: run.runId,
               status: run.status,
               createdAt: run.createdAt,
+      executionRole: run.executionRole ?? "direct",
+      productionId: run.productionId ?? null,
+      directCheckpointId:run.directCheckpointId??null,
               privacy: run.privacy,
             }
           : "NOT_AVAILABLE: RESPONSE_SIZE_LIMIT";
   }
   if (omitted.length) view.omittedSections = omitted;
+  if(view.globalRecovery&&typeof view.globalRecovery==="object"){
+    const global=view.globalRecovery as Data;
+    if(view.recovery==="NOT_AVAILABLE")view.recovery={status:global.status,reason:global.finalReason,attempts:global.attempts};
+    if(view.codeRepair==="NOT_AVAILABLE")view.codeRepair={status:"NOT_APPLICABLE",reason:global.finalReason,decisions:global.decisions};
+  }
   return view;
 }
 export function qaCategories(report: unknown): Record<string, unknown> {
@@ -503,11 +558,23 @@ export function debugReport(data: Data) {
     `Status: ${run.status}`,
     `Created: ${run.createdAt}`,
     "",
+    "## Failure Diagnostic",
+    JSON.stringify(run.failure ?? "NOT_RECORDED_LEGACY_RUN", null, 2),
+    "",
     "## User Prompt",
     String(data.prompt),
     "",
     "## Provider",
     pretty(run.calls),
+    "",
+    "## Global Recovery Supervisor",
+    pretty(data.globalRecovery),
+    "",
+    "## Project Recovery",
+    pretty(data.recovery),
+    "",
+    "## Code Repair Proposal",
+    pretty(data.codeRepair),
     "",
     "## Final Reconciliation",
     pretty(run.outcome),
@@ -568,6 +635,9 @@ export async function debugBundle(root: string, id: string) {
     intent: data.understanding,
     operations: (data.stateChanges as Data[]).map((h) => h.operations),
     "qa-report": data.qa,
+    recovery: data.recovery,
+    "global-recovery": data.globalRecovery,
+    "code-repair": data.codeRepair,
     "state-diff": data.stateChanges,
     trace: data.trace,
     environment: {
@@ -789,7 +859,7 @@ export async function projectDiagnosticBundle(root: string, id: string) {
       selectedObjectIds: context?.selectedObjectIds ?? [],
       projectRevision: context?.projectRevision ?? "NOT_AVAILABLE",
       payloadTier:
-        context?.contextualEditHint === true
+        context?.incrementalEditHint === true ? "incremental-effect-edit" : context?.contextualEditHint === true
           ? "contextual-effect-edit"
           : "standard",
     },

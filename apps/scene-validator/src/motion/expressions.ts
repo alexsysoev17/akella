@@ -1,3 +1,4 @@
+import {evaluateProgram} from '../motion-library/expressions/program.js';
 import { velocityAtTime as baseVelocity } from "./sampling.js";
 import type { Animation, MotionState } from "./schema.js";
 import type { Expression } from "../motion-library/expressions/registry.js";
@@ -12,7 +13,8 @@ export function expressionValue(
 ): number {
   let time = (frame - e.startFrame) / fps;
   const duration = e.durationFrames / fps;
-  if (!e.enabled || time <= 0 || time >= duration) return 0;
+  const continuous = e.type === "procedural" || e.type === "wiggle" && e.parameters.temporalMode === "continuous";
+  if (!e.enabled || (continuous ? time < 0 : time <= 0) || time >= duration) return 0;
   const p = e.parameters,
     source =
       "sourceAnimationId" in e
@@ -30,6 +32,8 @@ export function expressionValue(
   };
   let value = 0;
   switch (e.type) {
+    case "procedural":
+      value=e.parameters.amplitude*evaluateProgram(e.program,{time,progress:time/duration,fps,sample:(id,property,offset)=>{const track=animations.find(a=>a.animationId===id);if(!track)throw Error("PROGRAM_DEPENDENCY_MISSING");const values=evaluate(track,frame+offset*fps);const value=values[property as keyof Values];if(value===undefined)throw Error("PROGRAM_PROPERTY_UNAVAILABLE");return value;}});break;
     case "wiggle":
       value = math.wiggle(
         time,
@@ -78,6 +82,10 @@ export function expressionValue(
             ? values.scale
             : undefined) ??
           0;
+        if(e.parameters.velocitySampling==='lookback'){
+          const previous=keys[index-1];
+          velocity=math.averageVelocity(s=>get(s*fps),key/fps,Math.min(e.parameters.velocityLookbackFrames,key-previous)/fps);
+        }
       }
       value = math.inertialOvershoot(
         time,
@@ -124,7 +132,7 @@ export function expressionValue(
   }
   const result =
     value *
-    (e.type === "inertialOvershoot" && e.parameters.mode === "ae"
+    (continuous || (e.type === "inertialOvershoot" && e.parameters.mode === "ae" && e.parameters.settlingEnvelope !== "smoothTail")
       ? 1
       : math.windowOffset(
           time,
@@ -146,6 +154,7 @@ export function composeExpressions(
   )) {
     if (
       !e.enabled ||
+      (Boolean(e.transitionId) || e.ownership?.scope === "logicalObject") ||
       frame < e.startFrame ||
       frame > e.startFrame + e.durationFrames
     )

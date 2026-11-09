@@ -288,7 +288,8 @@ test("production native graph path commits eight objects in one fixture call wit
       ),
     );
     assert.equal(preflight.status, "PASSED");
-    assert.equal(preflight.operationCount, 22);
+    assert.equal(preflight.operationCount, 24);
+    assert.equal(after.state.timingOrigins?.filter(o=>o.entity==="scene").length,2,"scene timing units persisted alongside 22 motion operations");
     const plate = after.state.animations.find(
       (a) => a.targetId === "plate" && a.effect === "slideUp",
     )!;

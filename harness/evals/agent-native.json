@@ -1,0 +1,2046 @@
+{
+  "schemaVersion": "1.0.0",
+  "version": "agent-native-1",
+  "cases": [
+    {
+      "evalId": "AN_01_NEW_KEYFRAMES",
+      "prompt": "Перемести QR по горизонтали на 25 пикселей линейно",
+      "fixture": "basic",
+      "seed": "none",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "Перемести QR по горизонтали на 25 пикселей линейно",
+          "assertion": {
+            "kind": "baselineDelta",
+            "sceneId": "s0",
+            "targetId": "qr",
+            "property": "x",
+            "beforeFrame": 0,
+            "afterFrame": 0,
+            "delta": 0,
+            "tolerance": 0.001
+          }
+        },
+        {
+          "checkId": "1",
+          "sourceText": "Перемести QR по горизонтали на 25 пикселей линейно",
+          "assertion": {
+            "kind": "baselineDelta",
+            "sceneId": "s0",
+            "targetId": "qr",
+            "property": "x",
+            "beforeFrame": 0,
+            "afterFrame": 59,
+            "delta": 25,
+            "tolerance": 0.001
+          }
+        },
+        {
+          "checkId": "2",
+          "sourceText": "Перемести QR по горизонтали на 25 пикселей линейно",
+          "assertion": {
+            "kind": "renderedDelta",
+            "logicalObjectId": "object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0",
+            "beforeFrame": 0,
+            "afterFrame": 59,
+            "property": "x",
+            "delta": 25,
+            "tolerance": 0.001
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_01_NEW_KEYFRAMES-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"Перемести QR по горизонтали на 25 пикселей линейно\",\"assertion\":{\"kind\":\"baselineDelta\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"x\",\"beforeFrame\":0,\"afterFrame\":0,\"delta\":0,\"tolerance\":0.001}},{\"checkId\":\"1\",\"sourceText\":\"Перемести QR по горизонтали на 25 пикселей линейно\",\"assertion\":{\"kind\":\"baselineDelta\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"x\",\"beforeFrame\":0,\"afterFrame\":59,\"delta\":25,\"tolerance\":0.001}},{\"checkId\":\"2\",\"sourceText\":\"Перемести QR по горизонтали на 25 пикселей линейно\",\"assertion\":{\"kind\":\"renderedDelta\",\"logicalObjectId\":\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\",\"beforeFrame\":0,\"afterFrame\":59,\"property\":\"x\",\"delta\":25,\"tolerance\":0.001}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_01_NEW_KEYFRAMES-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"addAnimation\",\"animation\":{\"animationId\":\"new\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"effect\":\"keyframes\",\"parameters\":{\"property\":\"x\",\"points\":[{\"frame\":0,\"value\":0},{\"frame\":20,\"value\":25}]},\"startFrame\":0,\"durationFrames\":20,\"easing\":\"linear\",\"enabled\":true}}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_01_NEW_KEYFRAMES-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_01_NEW_KEYFRAMES-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_02_MULTI_COMPOUND",
+      "prompt": "QR и Phone появляются снизу с фейдом",
+      "fixture": "basic",
+      "seed": "none",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "QR и Phone появляются снизу с фейдом",
+          "assertion": {
+            "kind": "entryField",
+            "entity": "animation",
+            "id": "qrslideUp",
+            "path": [
+              "effect"
+            ],
+            "value": "slideUp"
+          }
+        },
+        {
+          "checkId": "1",
+          "sourceText": "QR и Phone появляются снизу с фейдом",
+          "assertion": {
+            "kind": "entryField",
+            "entity": "animation",
+            "id": "phoneslideUp",
+            "path": [
+              "effect"
+            ],
+            "value": "slideUp"
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_02_MULTI_COMPOUND-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"QR и Phone появляются снизу с фейдом\",\"assertion\":{\"kind\":\"entryField\",\"entity\":\"animation\",\"id\":\"qrslideUp\",\"path\":[\"effect\"],\"value\":\"slideUp\"}},{\"checkId\":\"1\",\"sourceText\":\"QR и Phone появляются снизу с фейдом\",\"assertion\":{\"kind\":\"entryField\",\"entity\":\"animation\",\"id\":\"phoneslideUp\",\"path\":[\"effect\"],\"value\":\"slideUp\"}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\",\"object_63dceb8800b2dd4af9567a1f54f03b7c3dbdc27fac4799091ebfcc4928899ee5\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_02_MULTI_COMPOUND-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"addAnimation\",\"animation\":{\"animationId\":\"qrslideUp\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"effect\":\"slideUp\",\"parameters\":{\"distance\":30,\"mode\":\"in\"},\"startFrame\":0,\"durationFrames\":20,\"easing\":\"linear\",\"enabled\":true}},{\"type\":\"addAnimation\",\"animation\":{\"animationId\":\"qrfadeIn\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"effect\":\"fadeIn\",\"parameters\":{\"from\":0,\"to\":1},\"startFrame\":0,\"durationFrames\":20,\"easing\":\"linear\",\"enabled\":true}},{\"type\":\"addAnimation\",\"animation\":{\"animationId\":\"phoneslideUp\",\"sceneId\":\"s0\",\"targetId\":\"phone\",\"effect\":\"slideUp\",\"parameters\":{\"distance\":30,\"mode\":\"in\"},\"startFrame\":0,\"durationFrames\":20,\"easing\":\"linear\",\"enabled\":true}},{\"type\":\"addAnimation\",\"animation\":{\"animationId\":\"phonefadeIn\",\"sceneId\":\"s0\",\"targetId\":\"phone\",\"effect\":\"fadeIn\",\"parameters\":{\"from\":0,\"to\":1},\"startFrame\":0,\"durationFrames\":20,\"easing\":\"linear\",\"enabled\":true}}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_02_MULTI_COMPOUND-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_02_MULTI_COMPOUND-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_03_TRUE_TRIM",
+      "prompt": "Прорисуй Vector Line вдоль настоящего пути",
+      "fixture": "basic",
+      "seed": "none",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "Прорисуй Vector Line вдоль настоящего пути",
+          "assertion": {
+            "kind": "entryField",
+            "entity": "animation",
+            "id": "draw",
+            "path": [
+              "effect"
+            ],
+            "value": "trimPath"
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_03_TRUE_TRIM-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"Прорисуй Vector Line вдоль настоящего пути\",\"assertion\":{\"kind\":\"entryField\",\"entity\":\"animation\",\"id\":\"draw\",\"path\":[\"effect\"],\"value\":\"trimPath\"}}],\"targets\":[\"object_053008e7243edbfe227781253bc9868e3e618a394a62d4bc1ecb8a9c4f49973a\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_03_TRUE_TRIM-1",
+            "argumentsJson": "{\"operations\": [{\"type\": \"addAnimation\", \"animation\": {\"animationId\": \"draw\", \"sceneId\": \"s0\", \"targetId\": \"line\", \"effect\": \"trimPath\", \"parameters\": {\"from\": 0, \"to\": 1, \"direction\": \"forward\"}, \"startFrame\": 0, \"durationFrames\": 20, \"easing\": \"linear\", \"enabled\": true}}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_03_TRUE_TRIM-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_03_TRUE_TRIM-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_04_TRANSITION",
+      "prompt": "Перемести QR в состояние второй сцены за секунду",
+      "fixture": "basic",
+      "seed": "none",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "Перемести QR в состояние второй сцены за секунду",
+          "assertion": {
+            "kind": "entryField",
+            "entity": "transition",
+            "id": "transition",
+            "path": [
+              "durationFrames"
+            ],
+            "value": 30
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_04_TRANSITION-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"Перемести QR в состояние второй сцены за секунду\",\"assertion\":{\"kind\":\"entryField\",\"entity\":\"transition\",\"id\":\"transition\",\"path\":[\"durationFrames\"],\"value\":30}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_04_TRANSITION-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"animateObjectStateTransition\",\"transitionId\":\"transition\",\"logicalObjectId\":\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\",\"fromSceneId\":\"s0\",\"toSceneId\":\"s1\",\"startFrame\":0,\"durationFrames\":30,\"timelinePolicy\":\"referenceStates\",\"easing\":\"linear\",\"proceduralEffects\":[],\"layerPolicy\":{\"type\":\"switch\",\"switchProgress\":1}}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_04_TRANSITION-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_04_TRANSITION-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_05_NOVEL_SIN",
+      "prompt": "Пусть QR движется по синусоиде. Создай собственную процедурную математическую функцию и сохрани базовые анимации.",
+      "fixture": "basic",
+      "seed": "linear-slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "Пусть QR движется по синусоиде. Создай собственную процедурную математическую функцию и сохрани базовые анимации.",
+          "assertion": {
+            "kind": "motionVaries",
+            "sceneId": "s0",
+            "targetId": "qr",
+            "property": "x",
+            "frames": [
+              21,
+              25,
+              29,
+              33,
+              37
+            ],
+            "minimumRange": 0.01
+          }
+        },
+        {
+          "checkId": "1",
+          "sourceText": "Пусть QR движется по синусоиде. Создай собственную процедурную математическую функцию и сохрани базовые анимации.",
+          "assertion": {
+            "kind": "entryMatches",
+            "entity": "expression",
+            "sceneId": "s0",
+            "targetId": "qr",
+            "where": [
+              {
+                "path": [
+                  "type"
+                ],
+                "value": "procedural"
+              }
+            ],
+            "minimumCount": 1
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_05_NOVEL_SIN-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"Пусть QR движется по синусоиде. Создай собственную процедурную математическую функцию и сохрани базовые анимации.\",\"assertion\":{\"kind\":\"motionVaries\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"x\",\"frames\":[21,25,29,33,37],\"minimumRange\":0.01}},{\"checkId\":\"1\",\"sourceText\":\"Пусть QR движется по синусоиде. Создай собственную процедурную математическую функцию и сохрани базовые анимации.\",\"assertion\":{\"kind\":\"entryMatches\",\"entity\":\"expression\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"where\":[{\"path\":[\"type\"],\"value\":\"procedural\"}],\"minimumCount\":1}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_05_NOVEL_SIN-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"setExpression\",\"expression\":{\"expressionId\":\"novel\",\"type\":\"procedural\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"x\",\"startFrame\":20,\"durationFrames\":40,\"enabled\":true,\"parameters\":{\"amplitude\":8},\"program\":{\"version\":1,\"instructions\":[{\"op\":\"input\",\"name\":\"time\"},{\"op\":\"constant\",\"value\":7},{\"op\":\"mul\"},{\"op\":\"sin\"}]}}}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_05_NOVEL_SIN-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_05_NOVEL_SIN-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_06_NOVEL_DAMP",
+      "prompt": "Пусть QR движется по затухающей волне. Создай собственную процедурную математическую функцию и сохрани базовые анимации.",
+      "fixture": "basic",
+      "seed": "linear-slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "Пусть QR движется по затухающей волне. Создай собственную процедурную математическую функцию и сохрани базовые анимации.",
+          "assertion": {
+            "kind": "motionVaries",
+            "sceneId": "s0",
+            "targetId": "qr",
+            "property": "x",
+            "frames": [
+              21,
+              25,
+              29,
+              33,
+              37
+            ],
+            "minimumRange": 0.01
+          }
+        },
+        {
+          "checkId": "1",
+          "sourceText": "Пусть QR движется по затухающей волне. Создай собственную процедурную математическую функцию и сохрани базовые анимации.",
+          "assertion": {
+            "kind": "entryMatches",
+            "entity": "expression",
+            "sceneId": "s0",
+            "targetId": "qr",
+            "where": [
+              {
+                "path": [
+                  "type"
+                ],
+                "value": "procedural"
+              }
+            ],
+            "minimumCount": 1
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_06_NOVEL_DAMP-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"Пусть QR движется по затухающей волне. Создай собственную процедурную математическую функцию и сохрани базовые анимации.\",\"assertion\":{\"kind\":\"motionVaries\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"x\",\"frames\":[21,25,29,33,37],\"minimumRange\":0.01}},{\"checkId\":\"1\",\"sourceText\":\"Пусть QR движется по затухающей волне. Создай собственную процедурную математическую функцию и сохрани базовые анимации.\",\"assertion\":{\"kind\":\"entryMatches\",\"entity\":\"expression\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"where\":[{\"path\":[\"type\"],\"value\":\"procedural\"}],\"minimumCount\":1}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_06_NOVEL_DAMP-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"setExpression\",\"expression\":{\"expressionId\":\"novel\",\"type\":\"procedural\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"x\",\"startFrame\":20,\"durationFrames\":40,\"enabled\":true,\"parameters\":{\"amplitude\":8},\"program\":{\"version\":1,\"instructions\":[{\"op\":\"input\",\"name\":\"time\"},{\"op\":\"constant\",\"value\":9},{\"op\":\"mul\"},{\"op\":\"sin\"},{\"op\":\"input\",\"name\":\"time\"},{\"op\":\"neg\"},{\"op\":\"exp\"},{\"op\":\"mul\"}]}}}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_06_NOVEL_DAMP-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_06_NOVEL_DAMP-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_07_NOVEL_NOISE",
+      "prompt": "Пусть QR движется по плавному непредсказуемому шуму. Создай собственную процедурную математическую функцию и сохрани базовые анимации.",
+      "fixture": "basic",
+      "seed": "linear-slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "Пусть QR движется по плавному непредсказуемому шуму. Создай собственную процедурную математическую функцию и сохрани базовые анимации.",
+          "assertion": {
+            "kind": "motionVaries",
+            "sceneId": "s0",
+            "targetId": "qr",
+            "property": "x",
+            "frames": [
+              21,
+              25,
+              29,
+              33,
+              37
+            ],
+            "minimumRange": 0.01
+          }
+        },
+        {
+          "checkId": "1",
+          "sourceText": "Пусть QR движется по плавному непредсказуемому шуму. Создай собственную процедурную математическую функцию и сохрани базовые анимации.",
+          "assertion": {
+            "kind": "entryMatches",
+            "entity": "expression",
+            "sceneId": "s0",
+            "targetId": "qr",
+            "where": [
+              {
+                "path": [
+                  "type"
+                ],
+                "value": "procedural"
+              }
+            ],
+            "minimumCount": 1
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_07_NOVEL_NOISE-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"Пусть QR движется по плавному непредсказуемому шуму. Создай собственную процедурную математическую функцию и сохрани базовые анимации.\",\"assertion\":{\"kind\":\"motionVaries\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"x\",\"frames\":[21,25,29,33,37],\"minimumRange\":0.01}},{\"checkId\":\"1\",\"sourceText\":\"Пусть QR движется по плавному непредсказуемому шуму. Создай собственную процедурную математическую функцию и сохрани базовые анимации.\",\"assertion\":{\"kind\":\"entryMatches\",\"entity\":\"expression\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"where\":[{\"path\":[\"type\"],\"value\":\"procedural\"}],\"minimumCount\":1}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_07_NOVEL_NOISE-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"setExpression\",\"expression\":{\"expressionId\":\"novel\",\"type\":\"procedural\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"x\",\"startFrame\":20,\"durationFrames\":40,\"enabled\":true,\"parameters\":{\"amplitude\":8},\"program\":{\"version\":1,\"instructions\":[{\"op\":\"input\",\"name\":\"time\"},{\"op\":\"noise\",\"seed\":42}]}}}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_07_NOVEL_NOISE-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_07_NOVEL_NOISE-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_08_NOVEL_COMPOSE",
+      "prompt": "Пусть QR движется по сумме двух волн. Создай собственную процедурную математическую функцию и сохрани базовые анимации.",
+      "fixture": "basic",
+      "seed": "linear-slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "Пусть QR движется по сумме двух волн. Создай собственную процедурную математическую функцию и сохрани базовые анимации.",
+          "assertion": {
+            "kind": "motionVaries",
+            "sceneId": "s0",
+            "targetId": "qr",
+            "property": "x",
+            "frames": [
+              21,
+              25,
+              29,
+              33,
+              37
+            ],
+            "minimumRange": 0.01
+          }
+        },
+        {
+          "checkId": "1",
+          "sourceText": "Пусть QR движется по сумме двух волн. Создай собственную процедурную математическую функцию и сохрани базовые анимации.",
+          "assertion": {
+            "kind": "entryMatches",
+            "entity": "expression",
+            "sceneId": "s0",
+            "targetId": "qr",
+            "where": [
+              {
+                "path": [
+                  "type"
+                ],
+                "value": "procedural"
+              }
+            ],
+            "minimumCount": 1
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_08_NOVEL_COMPOSE-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"Пусть QR движется по сумме двух волн. Создай собственную процедурную математическую функцию и сохрани базовые анимации.\",\"assertion\":{\"kind\":\"motionVaries\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"x\",\"frames\":[21,25,29,33,37],\"minimumRange\":0.01}},{\"checkId\":\"1\",\"sourceText\":\"Пусть QR движется по сумме двух волн. Создай собственную процедурную математическую функцию и сохрани базовые анимации.\",\"assertion\":{\"kind\":\"entryMatches\",\"entity\":\"expression\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"where\":[{\"path\":[\"type\"],\"value\":\"procedural\"}],\"minimumCount\":1}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_08_NOVEL_COMPOSE-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"setExpression\",\"expression\":{\"expressionId\":\"novel\",\"type\":\"procedural\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"x\",\"startFrame\":20,\"durationFrames\":40,\"enabled\":true,\"parameters\":{\"amplitude\":8},\"program\":{\"version\":1,\"instructions\":[{\"op\":\"input\",\"name\":\"time\"},{\"op\":\"constant\",\"value\":3},{\"op\":\"mul\"},{\"op\":\"sin\"},{\"op\":\"input\",\"name\":\"time\"},{\"op\":\"constant\",\"value\":7},{\"op\":\"mul\"},{\"op\":\"cos\"},{\"op\":\"add\"}]}}}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_08_NOVEL_COMPOSE-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_08_NOVEL_COMPOSE-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_09_NOVEL_SAW",
+      "prompt": "Пусть QR движется по мягко ограниченной кривой. Создай собственную процедурную математическую функцию и сохрани базовые анимации.",
+      "fixture": "basic",
+      "seed": "linear-slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "Пусть QR движется по мягко ограниченной кривой. Создай собственную процедурную математическую функцию и сохрани базовые анимации.",
+          "assertion": {
+            "kind": "motionVaries",
+            "sceneId": "s0",
+            "targetId": "qr",
+            "property": "x",
+            "frames": [
+              21,
+              25,
+              29,
+              33,
+              37
+            ],
+            "minimumRange": 0.01
+          }
+        },
+        {
+          "checkId": "1",
+          "sourceText": "Пусть QR движется по мягко ограниченной кривой. Создай собственную процедурную математическую функцию и сохрани базовые анимации.",
+          "assertion": {
+            "kind": "entryMatches",
+            "entity": "expression",
+            "sceneId": "s0",
+            "targetId": "qr",
+            "where": [
+              {
+                "path": [
+                  "type"
+                ],
+                "value": "procedural"
+              }
+            ],
+            "minimumCount": 1
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_09_NOVEL_SAW-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"Пусть QR движется по мягко ограниченной кривой. Создай собственную процедурную математическую функцию и сохрани базовые анимации.\",\"assertion\":{\"kind\":\"motionVaries\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"x\",\"frames\":[21,25,29,33,37],\"minimumRange\":0.01}},{\"checkId\":\"1\",\"sourceText\":\"Пусть QR движется по мягко ограниченной кривой. Создай собственную процедурную математическую функцию и сохрани базовые анимации.\",\"assertion\":{\"kind\":\"entryMatches\",\"entity\":\"expression\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"where\":[{\"path\":[\"type\"],\"value\":\"procedural\"}],\"minimumCount\":1}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_09_NOVEL_SAW-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"setExpression\",\"expression\":{\"expressionId\":\"novel\",\"type\":\"procedural\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"x\",\"startFrame\":20,\"durationFrames\":40,\"enabled\":true,\"parameters\":{\"amplitude\":8},\"program\":{\"version\":1,\"instructions\":[{\"op\":\"input\",\"name\":\"time\"},{\"op\":\"constant\",\"value\":2},{\"op\":\"mul\"},{\"op\":\"sin\"},{\"op\":\"constant\",\"value\":0.5},{\"op\":\"max\"}]}}}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_09_NOVEL_SAW-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_09_NOVEL_SAW-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_10_NOVEL_PULSE",
+      "prompt": "Пусть QR движется по периодическому импульсу. Создай собственную процедурную математическую функцию и сохрани базовые анимации.",
+      "fixture": "basic",
+      "seed": "linear-slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "Пусть QR движется по периодическому импульсу. Создай собственную процедурную математическую функцию и сохрани базовые анимации.",
+          "assertion": {
+            "kind": "motionVaries",
+            "sceneId": "s0",
+            "targetId": "qr",
+            "property": "x",
+            "frames": [
+              21,
+              25,
+              29,
+              33,
+              37
+            ],
+            "minimumRange": 0.01
+          }
+        },
+        {
+          "checkId": "1",
+          "sourceText": "Пусть QR движется по периодическому импульсу. Создай собственную процедурную математическую функцию и сохрани базовые анимации.",
+          "assertion": {
+            "kind": "entryMatches",
+            "entity": "expression",
+            "sceneId": "s0",
+            "targetId": "qr",
+            "where": [
+              {
+                "path": [
+                  "type"
+                ],
+                "value": "procedural"
+              }
+            ],
+            "minimumCount": 1
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_10_NOVEL_PULSE-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"Пусть QR движется по периодическому импульсу. Создай собственную процедурную математическую функцию и сохрани базовые анимации.\",\"assertion\":{\"kind\":\"motionVaries\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"x\",\"frames\":[21,25,29,33,37],\"minimumRange\":0.01}},{\"checkId\":\"1\",\"sourceText\":\"Пусть QR движется по периодическому импульсу. Создай собственную процедурную математическую функцию и сохрани базовые анимации.\",\"assertion\":{\"kind\":\"entryMatches\",\"entity\":\"expression\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"where\":[{\"path\":[\"type\"],\"value\":\"procedural\"}],\"minimumCount\":1}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_10_NOVEL_PULSE-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"setExpression\",\"expression\":{\"expressionId\":\"novel\",\"type\":\"procedural\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"x\",\"startFrame\":20,\"durationFrames\":40,\"enabled\":true,\"parameters\":{\"amplitude\":8},\"program\":{\"version\":1,\"instructions\":[{\"op\":\"input\",\"name\":\"time\"},{\"op\":\"constant\",\"value\":8},{\"op\":\"mul\"},{\"op\":\"sin\"},{\"op\":\"constant\",\"value\":0},{\"op\":\"gt\"}]}}}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_10_NOVEL_PULSE-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_10_NOVEL_PULSE-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_11_NOVEL_ROOT",
+      "prompt": "Пусть QR движется по корневой траектории. Создай собственную процедурную математическую функцию и сохрани базовые анимации.",
+      "fixture": "basic",
+      "seed": "linear-slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "Пусть QR движется по корневой траектории. Создай собственную процедурную математическую функцию и сохрани базовые анимации.",
+          "assertion": {
+            "kind": "motionVaries",
+            "sceneId": "s0",
+            "targetId": "qr",
+            "property": "x",
+            "frames": [
+              21,
+              25,
+              29,
+              33,
+              37
+            ],
+            "minimumRange": 0.01
+          }
+        },
+        {
+          "checkId": "1",
+          "sourceText": "Пусть QR движется по корневой траектории. Создай собственную процедурную математическую функцию и сохрани базовые анимации.",
+          "assertion": {
+            "kind": "entryMatches",
+            "entity": "expression",
+            "sceneId": "s0",
+            "targetId": "qr",
+            "where": [
+              {
+                "path": [
+                  "type"
+                ],
+                "value": "procedural"
+              }
+            ],
+            "minimumCount": 1
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_11_NOVEL_ROOT-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"Пусть QR движется по корневой траектории. Создай собственную процедурную математическую функцию и сохрани базовые анимации.\",\"assertion\":{\"kind\":\"motionVaries\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"x\",\"frames\":[21,25,29,33,37],\"minimumRange\":0.01}},{\"checkId\":\"1\",\"sourceText\":\"Пусть QR движется по корневой траектории. Создай собственную процедурную математическую функцию и сохрани базовые анимации.\",\"assertion\":{\"kind\":\"entryMatches\",\"entity\":\"expression\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"where\":[{\"path\":[\"type\"],\"value\":\"procedural\"}],\"minimumCount\":1}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_11_NOVEL_ROOT-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"setExpression\",\"expression\":{\"expressionId\":\"novel\",\"type\":\"procedural\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"x\",\"startFrame\":20,\"durationFrames\":40,\"enabled\":true,\"parameters\":{\"amplitude\":8},\"program\":{\"version\":1,\"instructions\":[{\"op\":\"input\",\"name\":\"time\"},{\"op\":\"sqrt\"}]}}}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_11_NOVEL_ROOT-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_11_NOVEL_ROOT-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_12_NOVEL_DECAY",
+      "prompt": "Пусть QR движется по экспоненциальному движению. Создай собственную процедурную математическую функцию и сохрани базовые анимации.",
+      "fixture": "basic",
+      "seed": "linear-slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "Пусть QR движется по экспоненциальному движению. Создай собственную процедурную математическую функцию и сохрани базовые анимации.",
+          "assertion": {
+            "kind": "motionVaries",
+            "sceneId": "s0",
+            "targetId": "qr",
+            "property": "x",
+            "frames": [
+              21,
+              25,
+              29,
+              33,
+              37
+            ],
+            "minimumRange": 0.01
+          }
+        },
+        {
+          "checkId": "1",
+          "sourceText": "Пусть QR движется по экспоненциальному движению. Создай собственную процедурную математическую функцию и сохрани базовые анимации.",
+          "assertion": {
+            "kind": "entryMatches",
+            "entity": "expression",
+            "sceneId": "s0",
+            "targetId": "qr",
+            "where": [
+              {
+                "path": [
+                  "type"
+                ],
+                "value": "procedural"
+              }
+            ],
+            "minimumCount": 1
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_12_NOVEL_DECAY-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"Пусть QR движется по экспоненциальному движению. Создай собственную процедурную математическую функцию и сохрани базовые анимации.\",\"assertion\":{\"kind\":\"motionVaries\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"x\",\"frames\":[21,25,29,33,37],\"minimumRange\":0.01}},{\"checkId\":\"1\",\"sourceText\":\"Пусть QR движется по экспоненциальному движению. Создай собственную процедурную математическую функцию и сохрани базовые анимации.\",\"assertion\":{\"kind\":\"entryMatches\",\"entity\":\"expression\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"where\":[{\"path\":[\"type\"],\"value\":\"procedural\"}],\"minimumCount\":1}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_12_NOVEL_DECAY-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"setExpression\",\"expression\":{\"expressionId\":\"novel\",\"type\":\"procedural\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"x\",\"startFrame\":20,\"durationFrames\":40,\"enabled\":true,\"parameters\":{\"amplitude\":8},\"program\":{\"version\":1,\"instructions\":[{\"op\":\"input\",\"name\":\"time\"},{\"op\":\"neg\"},{\"op\":\"exp\"}]}}}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_12_NOVEL_DECAY-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_12_NOVEL_DECAY-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_13_EASING",
+      "prompt": "У QR измени только easing",
+      "fixture": "basic",
+      "seed": "linear-slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "У QR измени только easing",
+          "assertion": {
+            "kind": "entryField",
+            "entity": "animation",
+            "id": "seed_position",
+            "path": [
+              "easing"
+            ],
+            "value": "easeInOutCubic"
+          }
+        },
+        {
+          "checkId": "1",
+          "sourceText": "У QR измени только easing",
+          "assertion": {
+            "kind": "entryField",
+            "entity": "animation",
+            "id": "seed_position",
+            "path": [
+              "durationFrames"
+            ],
+            "value": 20
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_13_EASING-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"У QR измени только easing\",\"assertion\":{\"kind\":\"entryField\",\"entity\":\"animation\",\"id\":\"seed_position\",\"path\":[\"easing\"],\"value\":\"easeInOutCubic\"}},{\"checkId\":\"1\",\"sourceText\":\"У QR измени только easing\",\"assertion\":{\"kind\":\"entryField\",\"entity\":\"animation\",\"id\":\"seed_position\",\"path\":[\"durationFrames\"],\"value\":20}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_13_EASING-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"updateAnimation\",\"animationId\":\"seed_position\",\"animation\":{\"animationId\":\"seed_position\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"effect\":\"slideUp\",\"parameters\":{\"distance\":60,\"mode\":\"in\"},\"startFrame\":0,\"durationFrames\":20,\"easing\":\"easeInOutCubic\",\"enabled\":true}}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_13_EASING-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_13_EASING-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_14_DURATION",
+      "prompt": "Сделай движение QR длительностью 25 кадров",
+      "fixture": "basic",
+      "seed": "linear-slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "Сделай движение QR длительностью 25 кадров",
+          "assertion": {
+            "kind": "entryField",
+            "entity": "animation",
+            "id": "seed_position",
+            "path": [
+              "durationFrames"
+            ],
+            "value": 25
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_14_DURATION-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"Сделай движение QR длительностью 25 кадров\",\"assertion\":{\"kind\":\"entryField\",\"entity\":\"animation\",\"id\":\"seed_position\",\"path\":[\"durationFrames\"],\"value\":25}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_14_DURATION-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"updateAnimation\",\"animationId\":\"seed_position\",\"animation\":{\"animationId\":\"seed_position\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"effect\":\"slideUp\",\"parameters\":{\"distance\":60,\"mode\":\"in\"},\"startFrame\":0,\"durationFrames\":25,\"easing\":\"linear\",\"enabled\":true}}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_14_DURATION-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_14_DURATION-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_15_EDIT_amplitude",
+      "prompt": "Измени у QR параметр amplitude",
+      "fixture": "basic",
+      "seed": "inertia",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "Измени у QR параметр amplitude",
+          "assertion": {
+            "kind": "entryField",
+            "entity": "expression",
+            "id": "seed_inertia",
+            "path": [
+              "parameters",
+              "amplitude"
+            ],
+            "value": 0.125
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_15_EDIT_amplitude-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"Измени у QR параметр amplitude\",\"assertion\":{\"kind\":\"entryField\",\"entity\":\"expression\",\"id\":\"seed_inertia\",\"path\":[\"parameters\",\"amplitude\"],\"value\":0.125}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_15_EDIT_amplitude-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"scaleExpressionParameter\",\"expressionId\":\"seed_inertia\",\"parameter\":\"amplitude\",\"factor\":0.5}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_15_EDIT_amplitude-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_15_EDIT_amplitude-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_16_EDIT_frequency",
+      "prompt": "Измени у QR параметр frequency",
+      "fixture": "basic",
+      "seed": "inertia",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "Измени у QR параметр frequency",
+          "assertion": {
+            "kind": "entryField",
+            "entity": "expression",
+            "id": "seed_inertia",
+            "path": [
+              "parameters",
+              "frequency"
+            ],
+            "value": 1.25
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_16_EDIT_frequency-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"Измени у QR параметр frequency\",\"assertion\":{\"kind\":\"entryField\",\"entity\":\"expression\",\"id\":\"seed_inertia\",\"path\":[\"parameters\",\"frequency\"],\"value\":1.25}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_16_EDIT_frequency-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"scaleExpressionParameter\",\"expressionId\":\"seed_inertia\",\"parameter\":\"frequency\",\"factor\":0.5}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_16_EDIT_frequency-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_16_EDIT_frequency-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_17_EDIT_decay",
+      "prompt": "Измени у QR параметр decay",
+      "fixture": "basic",
+      "seed": "inertia",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "Измени у QR параметр decay",
+          "assertion": {
+            "kind": "entryField",
+            "entity": "expression",
+            "id": "seed_inertia",
+            "path": [
+              "parameters",
+              "decay"
+            ],
+            "value": 6
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_17_EDIT_decay-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"Измени у QR параметр decay\",\"assertion\":{\"kind\":\"entryField\",\"entity\":\"expression\",\"id\":\"seed_inertia\",\"path\":[\"parameters\",\"decay\"],\"value\":6}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_17_EDIT_decay-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"scaleExpressionParameter\",\"expressionId\":\"seed_inertia\",\"parameter\":\"decay\",\"factor\":2}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_17_EDIT_decay-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_17_EDIT_decay-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_18_REMOVE",
+      "prompt": "У QR убери инерцию",
+      "fixture": "basic",
+      "seed": "inertia",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "У QR убери инерцию",
+          "assertion": {
+            "kind": "absent",
+            "entity": "expression",
+            "id": "seed_inertia"
+          }
+        },
+        {
+          "checkId": "1",
+          "sourceText": "У QR убери инерцию",
+          "assertion": {
+            "kind": "basePreserved",
+            "animationIds": [
+              "seed_position",
+              "seed_phone"
+            ]
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_18_REMOVE-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"У QR убери инерцию\",\"assertion\":{\"kind\":\"absent\",\"entity\":\"expression\",\"id\":\"seed_inertia\"}},{\"checkId\":\"1\",\"sourceText\":\"У QR убери инерцию\",\"assertion\":{\"kind\":\"basePreserved\",\"animationIds\":[\"seed_position\",\"seed_phone\"]}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_18_REMOVE-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"removeExpression\",\"expressionId\":\"seed_inertia\"}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_18_REMOVE-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_18_REMOVE-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_19_GROUP_RETIME",
+      "prompt": "QR и Phone на 5 кадров позже",
+      "fixture": "basic",
+      "seed": "linear-slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "QR и Phone на 5 кадров позже",
+          "assertion": {
+            "kind": "startDelta",
+            "animationId": "seed_position",
+            "frames": 5
+          }
+        },
+        {
+          "checkId": "1",
+          "sourceText": "QR и Phone на 5 кадров позже",
+          "assertion": {
+            "kind": "startDelta",
+            "animationId": "seed_phone",
+            "frames": 5
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_19_GROUP_RETIME-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"QR и Phone на 5 кадров позже\",\"assertion\":{\"kind\":\"startDelta\",\"animationId\":\"seed_position\",\"frames\":5}},{\"checkId\":\"1\",\"sourceText\":\"QR и Phone на 5 кадров позже\",\"assertion\":{\"kind\":\"startDelta\",\"animationId\":\"seed_phone\",\"frames\":5}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\",\"object_63dceb8800b2dd4af9567a1f54f03b7c3dbdc27fac4799091ebfcc4928899ee5\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_19_GROUP_RETIME-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"shiftAnimation\",\"animationId\":\"seed_position\",\"deltaFrames\":5},{\"type\":\"shiftAnimation\",\"animationId\":\"seed_phone\",\"deltaFrames\":5}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_19_GROUP_RETIME-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_19_GROUP_RETIME-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_20_CONTEXT",
+      "prompt": "Сделай колебания послабее",
+      "fixture": "basic",
+      "seed": "inertia",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "Сделай колебания послабее",
+          "assertion": {
+            "kind": "entryField",
+            "entity": "expression",
+            "id": "seed_inertia",
+            "path": [
+              "parameters",
+              "amplitude"
+            ],
+            "value": 0.125
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_20_CONTEXT-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"Сделай колебания послабее\",\"assertion\":{\"kind\":\"entryField\",\"entity\":\"expression\",\"id\":\"seed_inertia\",\"path\":[\"parameters\",\"amplitude\"],\"value\":0.125}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_20_CONTEXT-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"scaleExpressionParameter\",\"expressionId\":\"seed_inertia\",\"parameter\":\"amplitude\",\"factor\":0.5}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_20_CONTEXT-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_20_CONTEXT-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_21_COMPOUND_EDIT",
+      "prompt": "QR: частоту и амплитуду вдвое меньше",
+      "fixture": "basic",
+      "seed": "inertia",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "QR: частоту и амплитуду вдвое меньше",
+          "assertion": {
+            "kind": "entryField",
+            "entity": "expression",
+            "id": "seed_inertia",
+            "path": [
+              "parameters",
+              "amplitude"
+            ],
+            "value": 0.125
+          }
+        },
+        {
+          "checkId": "1",
+          "sourceText": "QR: частоту и амплитуду вдвое меньше",
+          "assertion": {
+            "kind": "entryField",
+            "entity": "expression",
+            "id": "seed_inertia",
+            "path": [
+              "parameters",
+              "frequency"
+            ],
+            "value": 1.25
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_21_COMPOUND_EDIT-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"QR: частоту и амплитуду вдвое меньше\",\"assertion\":{\"kind\":\"entryField\",\"entity\":\"expression\",\"id\":\"seed_inertia\",\"path\":[\"parameters\",\"amplitude\"],\"value\":0.125}},{\"checkId\":\"1\",\"sourceText\":\"QR: частоту и амплитуду вдвое меньше\",\"assertion\":{\"kind\":\"entryField\",\"entity\":\"expression\",\"id\":\"seed_inertia\",\"path\":[\"parameters\",\"frequency\"],\"value\":1.25}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_21_COMPOUND_EDIT-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"scaleExpressionParameter\",\"expressionId\":\"seed_inertia\",\"parameter\":\"frequency\",\"factor\":0.5},{\"type\":\"scaleExpressionParameter\",\"expressionId\":\"seed_inertia\",\"parameter\":\"amplitude\",\"factor\":0.5}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_21_COMPOUND_EDIT-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_21_COMPOUND_EDIT-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_22_DEPENDENCY",
+      "prompt": "Phone движется после QR",
+      "fixture": "basic",
+      "seed": "linear-slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "Phone движется после QR",
+          "assertion": {
+            "kind": "entryField",
+            "entity": "animation",
+            "id": "seed_phone",
+            "path": [
+              "startFrame"
+            ],
+            "value": 20
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_22_DEPENDENCY-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"Phone движется после QR\",\"assertion\":{\"kind\":\"entryField\",\"entity\":\"animation\",\"id\":\"seed_phone\",\"path\":[\"startFrame\"],\"value\":20}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\",\"object_63dceb8800b2dd4af9567a1f54f03b7c3dbdc27fac4799091ebfcc4928899ee5\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_22_DEPENDENCY-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"setTimingDependency\",\"dependency\":{\"dependencyId\":\"after\",\"animationId\":\"seed_phone\",\"anchorAnimationId\":\"seed_position\",\"relation\":\"after\",\"offsetFrames\":0}}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_22_DEPENDENCY-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_22_DEPENDENCY-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_23_PRECISE_DELAY",
+      "prompt": "QR появляется на пять кадров позже",
+      "fixture": "basic",
+      "seed": "linear-slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "QR появляется на пять кадров позже",
+          "assertion": {
+            "kind": "startDelta",
+            "animationId": "seed_position",
+            "frames": 5
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_23_PRECISE_DELAY-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"QR появляется на пять кадров позже\",\"assertion\":{\"kind\":\"startDelta\",\"animationId\":\"seed_position\",\"frames\":5}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_23_PRECISE_DELAY-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"shiftAnimation\",\"animationId\":\"seed_position\",\"deltaFrames\":5}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_23_PRECISE_DELAY-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_23_PRECISE_DELAY-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_24_REVERSE_TRIM",
+      "prompt": "Разверни прорисовку линии",
+      "fixture": "two-paths",
+      "seed": "trim-detached",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "Разверни прорисовку линии",
+          "assertion": {
+            "kind": "entryField",
+            "entity": "animation",
+            "id": "seed_trim_line",
+            "path": [
+              "parameters",
+              "direction"
+            ],
+            "value": "reverse"
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_24_REVERSE_TRIM-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"Разверни прорисовку линии\",\"assertion\":{\"kind\":\"entryField\",\"entity\":\"animation\",\"id\":\"seed_trim_line\",\"path\":[\"parameters\",\"direction\"],\"value\":\"reverse\"}}],\"targets\":[\"object_053008e7243edbfe227781253bc9868e3e618a394a62d4bc1ecb8a9c4f49973a\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_24_REVERSE_TRIM-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"updateAnimation\",\"animationId\":\"seed_trim_line\",\"animation\":{\"animationId\":\"seed_trim_line\",\"sceneId\":\"s0\",\"targetId\":\"line\",\"effect\":\"trimPath\",\"parameters\":{\"from\":0,\"to\":1,\"direction\":\"reverse\"},\"startFrame\":0,\"durationFrames\":21,\"easing\":\"linear\",\"enabled\":true}}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_24_REVERSE_TRIM-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_24_REVERSE_TRIM-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_25_NOVEL_SAMPLE",
+      "prompt": "QR реагирует на движение Phone",
+      "fixture": "basic",
+      "seed": "linear-slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "QR реагирует на движение Phone",
+          "assertion": {
+            "kind": "entryMatches",
+            "entity": "expression",
+            "sceneId": "s0",
+            "targetId": "qr",
+            "where": [
+              {
+                "path": [
+                  "type"
+                ],
+                "value": "procedural"
+              }
+            ],
+            "minimumCount": 1
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_25_NOVEL_SAMPLE-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"QR реагирует на движение Phone\",\"assertion\":{\"kind\":\"entryMatches\",\"entity\":\"expression\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"where\":[{\"path\":[\"type\"],\"value\":\"procedural\"}],\"minimumCount\":1}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_25_NOVEL_SAMPLE-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"setExpression\",\"expression\":{\"expressionId\":\"novel\",\"type\":\"procedural\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"x\",\"startFrame\":20,\"durationFrames\":40,\"enabled\":true,\"parameters\":{\"amplitude\":8},\"program\":{\"version\":1,\"instructions\":[{\"op\":\"sample\",\"animationId\":\"seed_phone\",\"property\":\"x\",\"offsetSeconds\":0},{\"op\":\"constant\",\"value\":0.2},{\"op\":\"mul\"}]}}}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_25_NOVEL_SAMPLE-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_25_NOVEL_SAMPLE-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_26_TYPO",
+      "prompt": "У кьюара добавь небольшую синусную волну",
+      "fixture": "basic",
+      "seed": "linear-slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "У кьюара добавь небольшую синусную волну",
+          "assertion": {
+            "kind": "motionVaries",
+            "sceneId": "s0",
+            "targetId": "qr",
+            "property": "x",
+            "frames": [
+              21,
+              25,
+              29,
+              33,
+              37
+            ],
+            "minimumRange": 0.01
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_26_TYPO-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"У кьюара добавь небольшую синусную волну\",\"assertion\":{\"kind\":\"motionVaries\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"x\",\"frames\":[21,25,29,33,37],\"minimumRange\":0.01}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_26_TYPO-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"setExpression\",\"expression\":{\"expressionId\":\"novel\",\"type\":\"procedural\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"x\",\"startFrame\":20,\"durationFrames\":40,\"enabled\":true,\"parameters\":{\"amplitude\":2},\"program\":{\"version\":1,\"instructions\":[{\"op\":\"input\",\"name\":\"time\"},{\"op\":\"constant\",\"value\":4},{\"op\":\"mul\"},{\"op\":\"sin\"}]}}}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_26_TYPO-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_26_TYPO-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": [
+          "Под кьюаром использован QR."
+        ]
+      }
+    },
+    {
+      "evalId": "AN_27_CYCLE",
+      "prompt": "Свяжи QR и Phone взаимной зависимостью",
+      "fixture": "basic",
+      "seed": "linear-slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "Свяжи QR и Phone взаимной зависимостью",
+          "assertion": {
+            "kind": "basePreserved",
+            "animationIds": [
+              "seed_position"
+            ]
+          }
+        }
+      ],
+      "expectedFailure": true,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_27_CYCLE-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"Свяжи QR и Phone взаимной зависимостью\",\"assertion\":{\"kind\":\"basePreserved\",\"animationIds\":[\"seed_position\"]}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_27_CYCLE-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"setTimingDependency\",\"dependency\":{\"dependencyId\":\"a\",\"animationId\":\"seed_phone\",\"anchorAnimationId\":\"seed_position\",\"relation\":\"after\",\"offsetFrames\":0}},{\"type\":\"setTimingDependency\",\"dependency\":{\"dependencyId\":\"b\",\"animationId\":\"seed_position\",\"anchorAnimationId\":\"seed_phone\",\"relation\":\"after\",\"offsetFrames\":0}}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_27_CYCLE-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_27_CYCLE-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_28_UNKNOWN_PROPERTY",
+      "prompt": "Анимируй несуществующее свойство",
+      "fixture": "basic",
+      "seed": "linear-slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "Анимируй несуществующее свойство",
+          "assertion": {
+            "kind": "basePreserved",
+            "animationIds": [
+              "seed_position"
+            ]
+          }
+        }
+      ],
+      "expectedFailure": true,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_28_UNKNOWN_PROPERTY-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"Анимируй несуществующее свойство\",\"assertion\":{\"kind\":\"basePreserved\",\"animationIds\":[\"seed_position\"]}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_28_UNKNOWN_PROPERTY-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"setExpression\",\"expression\":{\"expressionId\":\"bad\",\"type\":\"procedural\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"secretFile\",\"startFrame\":20,\"durationFrames\":40,\"enabled\":true,\"parameters\":{\"amplitude\":8},\"program\":{\"version\":1,\"instructions\":[{\"op\":\"input\",\"name\":\"time\"}]}}}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_28_UNKNOWN_PROPERTY-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_28_UNKNOWN_PROPERTY-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_29_NUMERIC_DOMAIN",
+      "prompt": "Создай функцию с делением на ноль",
+      "fixture": "basic",
+      "seed": "linear-slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "Создай функцию с делением на ноль",
+          "assertion": {
+            "kind": "basePreserved",
+            "animationIds": [
+              "seed_position"
+            ]
+          }
+        }
+      ],
+      "expectedFailure": true,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_29_NUMERIC_DOMAIN-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"Создай функцию с делением на ноль\",\"assertion\":{\"kind\":\"basePreserved\",\"animationIds\":[\"seed_position\"]}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_29_NUMERIC_DOMAIN-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"setExpression\",\"expression\":{\"expressionId\":\"bad\",\"type\":\"procedural\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"x\",\"startFrame\":20,\"durationFrames\":40,\"enabled\":true,\"parameters\":{\"amplitude\":8},\"program\":{\"version\":1,\"instructions\":[{\"op\":\"constant\",\"value\":1},{\"op\":\"constant\",\"value\":0},{\"op\":\"div\"}]}}}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_29_NUMERIC_DOMAIN-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_29_NUMERIC_DOMAIN-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_30_SCOPE",
+      "prompt": "Измени QR, сохрани Phone",
+      "fixture": "basic",
+      "seed": "linear-slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "Измени QR, сохрани Phone",
+          "assertion": {
+            "kind": "basePreserved",
+            "animationIds": [
+              "seed_position"
+            ]
+          }
+        }
+      ],
+      "expectedFailure": true,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_30_SCOPE-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"Измени QR, сохрани Phone\",\"assertion\":{\"kind\":\"basePreserved\",\"animationIds\":[\"seed_position\"]}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_30_SCOPE-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"shiftAnimation\",\"animationId\":\"seed_phone\",\"deltaFrames\":5}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_30_SCOPE-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_30_SCOPE-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_31_AMBIGUITY",
+      "prompt": "Измени QR",
+      "fixture": "ambiguous",
+      "seed": "linear-slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [],
+      "expectedResultChecks": [],
+      "expectedFailure": true,
+      "referenceOutput": {
+        "calls": [],
+        "disposition": "NEEDS_USER_INPUT",
+        "message": "Какой из двух QR нужно изменить?",
+        "assumptions": []
+      }
+    },
+    {
+      "evalId": "AN_32_MULTI_CHANNEL",
+      "prompt": "QR двигается по разным волнам X и Y",
+      "fixture": "basic",
+      "seed": "linear-slide",
+      "target": "qr",
+      "scene": "s0",
+      "expectedCapabilities": [],
+      "checks": [
+        "qa",
+        "agentResultChecks"
+      ],
+      "expectedResultChecks": [
+        {
+          "checkId": "0",
+          "sourceText": "QR двигается по разным волнам X и Y",
+          "assertion": {
+            "kind": "motionVaries",
+            "sceneId": "s0",
+            "targetId": "qr",
+            "property": "x",
+            "frames": [
+              21,
+              25,
+              29,
+              33,
+              37
+            ],
+            "minimumRange": 0.01
+          }
+        },
+        {
+          "checkId": "1",
+          "sourceText": "QR двигается по разным волнам X и Y",
+          "assertion": {
+            "kind": "motionVaries",
+            "sceneId": "s0",
+            "targetId": "qr",
+            "property": "y",
+            "frames": [
+              21,
+              25,
+              29,
+              33,
+              37
+            ],
+            "minimumRange": 0.01
+          }
+        }
+      ],
+      "expectedFailure": false,
+      "referenceOutput": {
+        "calls": [
+          {
+            "tool": "defineChecks",
+            "callId": "AN_32_MULTI_CHANNEL-0",
+            "argumentsJson": "{\"checks\":[{\"checkId\":\"0\",\"sourceText\":\"QR двигается по разным волнам X и Y\",\"assertion\":{\"kind\":\"motionVaries\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"x\",\"frames\":[21,25,29,33,37],\"minimumRange\":0.01}},{\"checkId\":\"1\",\"sourceText\":\"QR двигается по разным волнам X и Y\",\"assertion\":{\"kind\":\"motionVaries\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"y\",\"frames\":[21,25,29,33,37],\"minimumRange\":0.01}}],\"targets\":[\"object_a439fba430a33b87ab005d350187fb06e2d7e8ff35d3d029ad4f09cec942ada0\"],\"dependencyPolicy\":\"preserve-relative\"}"
+          },
+          {
+            "tool": "applyEdit",
+            "callId": "AN_32_MULTI_CHANNEL-1",
+            "argumentsJson": "{\"operations\":[{\"type\":\"setExpression\",\"expression\":{\"expressionId\":\"x-wave\",\"type\":\"procedural\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"x\",\"startFrame\":20,\"durationFrames\":40,\"enabled\":true,\"parameters\":{\"amplitude\":8},\"program\":{\"version\":1,\"instructions\":[{\"op\":\"input\",\"name\":\"time\"},{\"op\":\"constant\",\"value\":6},{\"op\":\"mul\"},{\"op\":\"sin\"}]}}},{\"type\":\"setExpression\",\"expression\":{\"expressionId\":\"y-wave\",\"type\":\"procedural\",\"sceneId\":\"s0\",\"targetId\":\"qr\",\"property\":\"y\",\"startFrame\":20,\"durationFrames\":40,\"enabled\":true,\"parameters\":{\"amplitude\":8},\"program\":{\"version\":1,\"instructions\":[{\"op\":\"input\",\"name\":\"time\"},{\"op\":\"constant\",\"value\":4},{\"op\":\"mul\"},{\"op\":\"cos\"}]}}}]}"
+          },
+          {
+            "tool": "runFocusedQA",
+            "callId": "AN_32_MULTI_CHANNEL-2",
+            "argumentsJson": "{}"
+          },
+          {
+            "tool": "commitRevision",
+            "callId": "AN_32_MULTI_CHANNEL-3",
+            "argumentsJson": "{}"
+          }
+        ],
+        "disposition": "CONTINUE",
+        "message": "Проверено",
+        "assumptions": []
+      }
+    }
+  ]
+}

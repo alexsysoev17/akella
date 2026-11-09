@@ -1,3 +1,7 @@
+import {validateProgram} from '../motion-library/expressions/program.js';
+import { TimelineConstraintError, requiredProjectFrames } from "./constraints.js";
+import { intervalConflict } from "./intervals.js";
+import { expressionLifecycles } from "../motion-library/expressions/registry.js";
 import type { MotionState } from "./schema.js";
 import { evaluateAnimation } from "./engine.js";
 import type { MotionObject } from "./context.js";
@@ -12,10 +16,27 @@ export function validateExpressions(
     const target = objects.get(`${e.sceneId}/${e.targetId}`);
     if (!target || target.mask)
       throw new Error("Expression target missing or is a mask");
-    if (e.startFrame + e.durationFrames >= state.settings.durationFrames)
-      throw new Error(
-        "Expression must finish before final project frame so its settled endpoint is rendered",
-      );
+    if(e.textBinding){const a=state.animations.find(a=>a.animationId===e.textBinding!.animationId);if(!a||!a.enabled||!a.text||a.text.segmentation==='block'||a.sceneId!==e.sceneId||a.targetId!==e.targetId||e.transitionId||e.ownership&&e.ownership.scope!=='sceneInstance')throw Error('TEXT_EXPRESSION_BINDING_INVALID');if('sourceAnimationId'in e&&e.sourceAnimationId!==a.animationId)throw Error('TEXT_EXPRESSION_SOURCE_MISMATCH');if(e.type==='inertialOvershoot'&&e.textBinding.phase!=='afterTrack')throw Error('TEXT_INERTIA_REQUIRES_MOVEMENT_ENDPOINT');}
+    if(e.type==="procedural"){validateProgram(e.program);for(const i of e.program.instructions)if(i.op==="sample"&&!state.animations.some(a=>a.animationId===i.animationId))throw Error("PROGRAM_DEPENDENCY_MISSING");}
+    if (e.transitionId) {
+      const t = state.objectTransitions?.find(t => t.transitionId === e.transitionId);
+      if (!t || ![t.fromSceneId, t.toSceneId].includes(e.sceneId))
+        throw new Error(`UNSUPPORTED_EFFECT_BINDING: ${e.expressionId} requires a current transition and one of its reference scenes`);
+    }
+    if (e.ownership?.scope === "sceneInstance" && e.transitionId) throw new Error("EFFECT_SCOPE_MISMATCH: instance effect cannot bind a transition");
+    if (e.ownership && e.ownership.scope === "transition" && !e.transitionId) throw new Error("UNSUPPORTED_EFFECT_BINDING: transition owner requires a motion transition");
+    if (e.transitionId && e.ownership?.logicalObjectId !== undefined && e.ownership.logicalObjectId !== state.objectTransitions!.find(t => t.transitionId === e.transitionId)!.logicalObjectId) throw new Error("EFFECT_OWNER_MISMATCH");
+    if (e.ownership?.scope === "logicalObject" && (!["wiggle","procedural","dampedOscillation","spring","bounce","inertialOvershoot"].includes(e.type) || !e.ownership.logicalObjectId)) throw new Error("UNSUPPORTED_LOGICAL_EFFECT: effect requires a supported evaluator and canonical logical identity");
+    if (e.type === "inertialOvershoot" && e.transitionId) {
+      const t = state.objectTransitions!.find(t => t.transitionId === e.transitionId)!;
+      if (e.parameters.mode !== "ae" || e.sourceAnimationId !== t.transitionId || e.startFrame !== t.startFrame + t.durationFrames || e.parameters.incomingImpulse) throw new Error("INVALID_TRANSITION_INERTIA_ANCHOR");
+    }
+    const conflict = intervalConflict(e, state.settings.durationFrames, expressionLifecycles[e.type]);
+    if (expressionLifecycles[e.type] === "settling" && conflict)
+      throw new TimelineConstraintError(requiredProjectFrames(state), state.settings.durationFrames, [e.expressionId], `INVALID_LIFECYCLE_INTERVAL: ${e.expressionId} ${e.type} on ${e.sceneId}/${e.targetId} must finish before final project frame so its settled endpoint is rendered`);
+    if (expressionLifecycles[e.type] === "continuous" && conflict)
+      throw new TimelineConstraintError(requiredProjectFrames(state), state.settings.durationFrames, [e.expressionId], `INVALID_LIFECYCLE_INTERVAL: ${e.expressionId} ${e.type} exceeds project duration`);
+    if (e.type === "inertialOvershoot" && e.transitionId) continue;
     if ("sourceAnimationId" in e) {
       const a = state.animations.find(
         (a) => a.animationId === e.sourceAnimationId,

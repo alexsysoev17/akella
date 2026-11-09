@@ -1,4 +1,5 @@
 export interface ProjectConfig {
+  figmaSource?: FigmaSourceLink;
   schemaVersion: "1.0.0";
   projectId: string;
   name: string;
@@ -13,6 +14,19 @@ export interface ProjectConfig {
     sourceFingerprint: string;
     files: number;
   }[];
+}
+/** Provenance only. Credentials and temporary asset URLs never belong here. */
+export interface FigmaSourceLink {
+  version: 1;
+  fileKey: string;
+  fileUrl: string;
+  pageId: string;
+  pageName: string;
+  sectionId: string;
+  sectionName: string;
+  frameIds: string[];
+  capturedAt: string;
+  transport: "figma-mcp";
 }
 export interface Asset {
   assetId: string;

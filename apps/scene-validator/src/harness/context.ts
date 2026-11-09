@@ -1,3 +1,5 @@
+import { semanticContext } from "./semantic-context.js";
+import { duringStage } from "./failure.js";
 import { resolveObjectReference } from "../motion/object-resolution.js";
 import { channels } from "../motion/operations.js";
 import { logicalId } from "../motion/registry.js";
@@ -116,13 +118,15 @@ export async function agentContext(
   let base = contexts.get(key),
     cacheHit = !!base;
   if (!base) {
-    base = buildContext(
-      project,
-      state,
-      input.request,
-      input.selectedObjectId,
-      input.selectedSceneId,
-      { sceneIds: named, targetIds },
+    base = await duringStage("project-context", () =>
+      buildContext(
+        project,
+        state,
+        input.request,
+        input.selectedObjectId,
+        input.selectedSceneId,
+        { sceneIds: named, targetIds },
+      ),
     );
     if (contexts.size >= 20) contexts.delete(contexts.keys().next().value!);
     contexts.set(key, { ...base, userRequest: "" });
@@ -161,9 +165,11 @@ export async function agentContext(
     }),
     visibility: state.visibility.filter((v) => sceneIds.has(v.sceneId)),
   };
-  const knowledge = await motionKnowledge(
-    input.request,
-    objects.some((o) => o.type === "TEXT"),
+  const knowledge = await duringStage("motion-knowledge", () =>
+    motionKnowledge(
+      input.request,
+      objects.some((o) => o.type === "TEXT"),
+    ),
   );
   const techniqueIds = new Set<string>(
     knowledge.techniques.map((t) => t.implementationId),
@@ -185,7 +191,7 @@ export async function agentContext(
     "trimPath",
   ];
   knowledge.capabilities = capabilityCatalog().filter((c) =>
-    ids.includes(c.id),
+    c.kind === "animation" || ids.includes(c.id),
   );
   knowledge.expressions = knowledge.expressions.filter((e) =>
     ids.includes(e.id),
@@ -196,7 +202,7 @@ export async function agentContext(
     description: p.description,
   }));
   const references = [
-    ...(await codeVersions()),
+    ...(await duringStage("source-versions", () => codeVersions())),
     ...knowledge.skills.map((s) => ({
       id: "skill:" + s.id,
       version: digest(s.text),
@@ -215,11 +221,8 @@ export async function agentContext(
     },
     { id: "harness-config", version: digest(config) },
   ];
-  const experience = await experienceSearch(
-    project.root,
-    input.request,
-    [...techniqueIds],
-    3,
+  const experience = await duringStage("experience-search", () =>
+    experienceSearch(project.root, input.request, [...techniqueIds], 3),
   );
   const value = {
     project: base.project,
@@ -299,10 +302,16 @@ export async function agentContext(
         "Do not guess targets absent from supplied context; retain unresolved requirement",
     },
   };
-  const bytes = Buffer.byteLength(JSON.stringify(value));
-  if (bytes > config.maxContextBytes)
-    throw new Error(
-      `CONTEXT_BUDGET: ${bytes} > ${config.maxContextBytes}; no requested target silently truncated`,
-    );
-  return { value, bytes, cacheHit, references, contextDigest: digest(value) };
+  const internalBytes = Buffer.byteLength(JSON.stringify(value));
+  const bytes = Buffer.byteLength(JSON.stringify(semanticContext(value)));
+  // Full request admission includes system/schema overhead and lossless packing
+  // at HarnessRun.invoke; rejecting this internal projection here prevents packing.
+  return {
+    value,
+    bytes,
+    internalBytes,
+    cacheHit,
+    references,
+    contextDigest: digest(value),
+  };
 }

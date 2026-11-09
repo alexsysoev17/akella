@@ -1,3 +1,4 @@
+import { presentationBlocks } from "./transition-runtime.js";
 import { statePresentation, transitionDiagnostics } from "./transitions.js";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -11,11 +12,13 @@ const cache = new Map<
   { markup: string; fonts: string; warnings: string[] }
 >();
 export async function motionHtml(project: LoadedProject, state: MotionState) {
+  if(state.anchors?.length)throw Error("ENGINE_CAPABILITY_MISSING: explicit anchors require native renderer");
+  if (state.staticObjects?.length) throw new Error("ENGINE_CAPABILITY_MISSING: persistent static objects require native renderer");
   validateMotion(state, project);
   const parts: string[] = [],
     warnings: string[] = transitionDiagnostics(state, project);
   let fonts = "";
-  for (const block of [...state.blocks].sort(
+  for (const block of presentationBlocks(state).sort(
     (a, b) => a.startFrame - b.startFrame,
   )) {
     const scene = project.inspection.document.scenes.find(

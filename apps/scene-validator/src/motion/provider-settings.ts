@@ -35,6 +35,7 @@ export const providerSettingsSchema = z
         "Credentials are not model IDs",
       )
       .default(""),
+    reasoningEffort: z.enum(['low','medium','high']).optional(),
   })
   .strict();
 export type ProviderSettings = z.infer<typeof providerSettingsSchema>;

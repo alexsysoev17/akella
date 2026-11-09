@@ -1,6 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { loadProject } from "./project.js";
+import { loadProject, readProject } from "./project.js";
 import { noSymlinkPath } from "./files.js";
 export async function discoverProjects(root: string) {
   const projects = [],
@@ -17,10 +17,19 @@ export async function discoverProjects(root: string) {
   return { projects, errors };
 }
 export async function findProject(root: string, id: string) {
-  const { projects } = await discoverProjects(root);
-  const project = projects.find((p) => p.config.projectId === id);
-  if (!project) throw new Error("Project not found");
-  return project;
+  // Frame requests must not inspect/hash source assets in every unrelated project.
+  // Read small manifests to resolve the folder, then inspect only the selected source.
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+    const folder = path.join(root, entry.name);
+    try {
+      const project = await readProject(folder);
+      if (project.config.projectId === id) return await loadProject(folder);
+    } catch {
+      /* Same invalid-project exclusion as discoverProjects. */
+    }
+  }
+  throw new Error("Project not found");
 }
 export function summary(p: Awaited<ReturnType<typeof loadProject>>) {
   return {

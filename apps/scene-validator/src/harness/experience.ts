@@ -13,6 +13,7 @@ export interface Experience {
   objectiveQA: string;
   artisticQuality: "NOT_TESTED";
   versions: unknown;
+  recoveryLesson?: {procedure:string;failureCode:string;verifiedCommit:boolean};
 }
 export async function saveExperience(root: string, value: Experience) {
   const dir = await safeDirectory(root, "motion/harness/experience");
@@ -64,5 +65,6 @@ export async function experienceSearch(
       failures: e.failures,
       objectiveQA: e.objectiveQA,
       artisticQuality: e.artisticQuality,
+      recoveryLesson:e.recoveryLesson,
     }));
 }

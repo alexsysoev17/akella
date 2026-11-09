@@ -1,0 +1,12 @@
+import type {AnchorBinding} from './anchor-contract.js';
+import {type Matrix} from './geometry.js';
+export const anchorPresets=Object.fromEntries(['topLeft','topCenter','topRight','middleLeft','center','middleRight','bottomLeft','bottomCenter','bottomRight'].map((name,i)=>[name,{units:'normalized' as const,x:(i%3)/2,y:Math.floor(i/3)/2}]));
+export function anchorBinding(anchors:AnchorBinding[]|undefined,id:string,scene:string,frame:number,defaultOrigin:'legacy'|'center'='legacy'){return anchors?.filter(a=>a.logicalObjectId===id&&(!a.sceneId||a.sceneId===scene)&&(a.startFrame===undefined||a.startFrame<=frame)).sort((a,b)=>Number(Boolean(b.sceneId))-Number(Boolean(a.sceneId))||(b.startFrame??-Infinity)-(a.startFrame??-Infinity))[0]??(defaultOrigin==='center'?{logicalObjectId:id,point:{units:'normalized',x:.5,y:.5},preservation:'none'}:undefined);}
+export function anchorLocal(binding:AnchorBinding|undefined,width:number,height:number){return binding?{x:binding.point.x*(binding.point.units==='normalized'?width:1),y:binding.point.y*(binding.point.units==='normalized'?height:1)}:{x:0,y:0};}
+export function transformPoint(m:Matrix,p:{x:number;y:number}){return{x:m[0][0]*p.x+m[0][1]*p.y+m[0][2],y:m[1][0]*p.x+m[1][1]*p.y+m[1][2]};}
+export function motionTransform(v:{x?:number;y?:number;rotation?:number;scale?:number;scaleX?:number;scaleY?:number},origin:{x:number;y:number},compensation={x:0,y:0}):Matrix{
+ const r=(v.rotation??0)*Math.PI/180,c=Math.cos(r),s=Math.sin(r),sx=v.scaleX??v.scale??1,sy=v.scaleY??v.scale??1,{x,y}=origin;
+ return [[c*sx,-s*sy,(v.x??0)+compensation.x+x-c*sx*x+s*sy*y],[s*sx,c*sy,(v.y??0)+compensation.y+y-s*sx*x-c*sy*y]];
+}
+export function anchoredMotion(v:Parameters<typeof motionTransform>[0],local:Matrix,binding:AnchorBinding|undefined,width:number,height:number){const t=binding?.transform;const values=t?{...v,x:(v.x??0)+(t.x??0),y:(v.y??0)+(t.y??0),scaleX:(v.scaleX??v.scale??1)*(t.scaleX??1),scaleY:(v.scaleY??v.scale??1)*(t.scaleY??1),rotation:(v.rotation??0)+(t.rotation??0)}:v;return motionTransform(values,transformPoint(local,anchorLocal(binding,width,height)),binding?.compensation);}
+export function preserveAnchorOffset(v:Parameters<typeof motionTransform>[0],local:Matrix,old:AnchorBinding|undefined,next:AnchorBinding,width:number,height:number){const a=anchoredMotion(v,local,old,width,height),b=anchoredMotion(v,local,next,width,height);return{x:(next.compensation?.x??0)+a[0][2]-b[0][2],y:(next.compensation?.y??0)+a[1][2]-b[1][2]};}

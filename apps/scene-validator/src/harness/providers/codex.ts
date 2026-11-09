@@ -1,10 +1,14 @@
 import { redactSecrets, redact } from "../security.js";
+import { validateProviderSchema } from "./schema.js";
 import { Codex } from "@openai/codex-sdk";
 import { promisify } from "node:util";
 import { execFile } from "node:child_process";
 import { spawn } from "node:child_process";
-import { access, readFile, writeFile } from "node:fs/promises";
+import { access, readFile, writeFile, chmod } from "node:fs/promises";
 import path from "node:path";
+import {fileURLToPath} from "node:url";
+import {StringDecoder} from "node:string_decoder";
+import {homedir} from 'node:os';
 import {
   ProviderError,
   transportErrorCode,
@@ -56,6 +60,20 @@ export class CodexAdapter implements ProviderAdapter {
       nativeOutputTokenLimit: false,
     };
   }
+  async contextProfile(model?:string){
+    // Metadata only: never read auth.json or transmit local configuration.
+    try{
+      const home=process.env.CODEX_HOME||path.join(homedir(),'.codex');
+      const requested=model||((await readFile(path.join(home,'config.toml'),'utf8')).split(/^\[/m)[0].match(/^model\s*=\s*"([a-zA-Z0-9_.:/-]+)"/m)?.[1]);
+      if(!requested)return undefined;
+      const cache=JSON.parse(await readFile(path.join(home,'models_cache.json'),'utf8'));
+      const age=Date.now()-Date.parse(cache.fetched_at);if(!Number.isFinite(age)||age>7*86400000||age< -86400000)return undefined;
+      const entry=cache.models?.find((e:{slug:string})=>e.slug===requested);
+      const window=entry?.context_window;
+      if(!Number.isSafeInteger(window)||window<4000||window>4000000)return undefined;
+      return {provider:this.id,model:requested,contextWindowTokens:window,maxOutputTokens:16000,transportOverheadTokens:32768,reasoningReserveTokens:8192,source:'local Codex model metadata, window as configured (not max_context_window); output reserve is AKELLA policy, native cap unsupported'};
+    }catch{return undefined;}
+  }
   async health() {
     try {
       const { stdout, stderr } = await promisify(execFile)(
@@ -78,6 +96,7 @@ export class CodexAdapter implements ProviderAdapter {
     }
   }
   async generate(req: ProviderRequest): Promise<ProviderResponse> {
+    validateProviderSchema(req.responseSchema);
     if (req.tools?.length)
       throw new ProviderError(
         "UNSUPPORTED_CAPABILITY",
@@ -102,9 +121,9 @@ export class CodexAdapter implements ProviderAdapter {
     let response: string,
       usage: ProviderUsage | null = null;
     try {
-      if (this.id === "codex-sdk") {
+      if (this.id === "codex-sdk" && process.platform !== "win32") {
         const codex = new Codex({
-          codexPathOverride: await codexBinary(),
+          codexPathOverride: await sdkTransportBinary(this.directory),
           config: {
             features: toolsDisabled,
             web_search: "disabled",
@@ -115,6 +134,7 @@ export class CodexAdapter implements ProviderAdapter {
         const result = await codex
           .startThread({
             model: req.model || undefined,
+            modelReasoningEffort: req.reasoningEffort,
             workingDirectory: this.directory,
             sandboxMode: "read-only",
             approvalPolicy: "never",
@@ -122,7 +142,7 @@ export class CodexAdapter implements ProviderAdapter {
             networkAccessEnabled: false,
             webSearchMode: "disabled",
           })
-          .run(prompt, { outputSchema: req.responseSchema, signal });
+          .run(req.images?.length ? [{type:'text' as const,text:prompt},...req.images.map(image=>({type:'local_image' as const,path:image}))] : prompt, { outputSchema: req.responseSchema, signal });
         if (
           result.items.some((i) =>
             [
@@ -137,6 +157,7 @@ export class CodexAdapter implements ProviderAdapter {
             "UNSUPPORTED_CAPABILITY",
             "Response used forbidden runtime tools",
           );
+        if(!result.usage)throw new ProviderError("OUTPUT_TRUNCATED","Stream ended before turn.completed; response cannot be committed");
         response = result.finalResponse;
         if (result.usage)
           usage = {
@@ -169,6 +190,7 @@ export class CodexAdapter implements ProviderAdapter {
         for (const key of Object.keys(toolsDisabled))
           args.push("-c", `features.${key}=false`);
         if (req.model) args.push("--model", req.model);
+        if (req.reasoningEffort) args.push("-c", `model_reasoning_effort="${req.reasoningEffort}"`);
         args.push("-");
         const events = await cli(await codexBinary(), args, prompt, signal);
         for (const event of events) {
@@ -191,6 +213,7 @@ export class CodexAdapter implements ProviderAdapter {
               cachedInputTokens: event.usage.cached_input_tokens,
             };
         }
+        if(!events.some(e=>e.type==="turn.completed"))throw new ProviderError("OUTPUT_TRUNCATED","CLI stream ended before turn.completed");
         response = await readFile(
           path.join(this.directory, "response.txt"),
           "utf8",
@@ -200,14 +223,19 @@ export class CodexAdapter implements ProviderAdapter {
         path.join(this.directory, "raw-response.json"),
         redactSecrets(response),
       );
+      let output: unknown;
+      try { output = JSON.parse(response); } catch(error) {
+        throw new ProviderError(/Unexpected end|Unterminated/i.test(String(error)) ? "OUTPUT_TRUNCATED" : "PROVIDER_JSON_INVALID", "Completed provider message is not valid JSON: " + String(error));
+      }
       const result: ProviderResponse = {
-        output: JSON.parse(response),
+        output,
         usage,
         estimatedCost: null,
         latencyMs: performance.now() - started,
         diagnostics: [
           "Codex does not expose a native output-token cap here; budget checked after response",
           "Price unavailable: estimatedCost=null",
+          process.platform === "win32" ? "Windows: SDK selection uses the existing CLI transport with UTF-8/LF framing" : "SDK JSONL Unicode framing guard: U+2028/U+2029 escaped without changing decoded content",
         ],
         toolCalls: [],
       };
@@ -229,10 +257,11 @@ export class CodexAdapter implements ProviderAdapter {
       if (req.signal?.aborted)
         throw new ProviderError("CANCELLED", "Run cancelled");
       if (signal.aborted)
-        throw new ProviderError("TIMEOUT", "Provider time budget exceeded");
+        throw new ProviderError("PROVIDER_TIMEOUT", "Provider time budget exceeded");
       if (e instanceof ProviderError) throw e;
+      const transport = /Failed to parse item:/.test(String(e)) ? "PROVIDER_EVENT_PARSE_ERROR" : transportErrorCode(e);
       throw new ProviderError(
-        e instanceof SyntaxError ? "INVALID_OUTPUT" : transportErrorCode(e),
+        e instanceof SyntaxError ? "INVALID_OUTPUT" : transport === "TRANSPORT" ? "PROVIDER_TRANSPORT_ERROR" : transport === "AUTH_REQUIRED" ? "PROVIDER_AUTH_FAILED" : transport === "TIMEOUT" ? "PROVIDER_TIMEOUT" : transport,
         String(e),
       );
     }
@@ -259,12 +288,14 @@ function cli(
       stdio: ["pipe", "pipe", "pipe"],
       shell: false,
     });
+    const decoder = new StringDecoder("utf8");
     let output = "",
       error = "";
-    const abort = () => child.kill("SIGTERM");
+    let killTimer:ReturnType<typeof setTimeout>|undefined;
+    const abort = () => {child.kill("SIGTERM");killTimer=setTimeout(()=>child.kill("SIGKILL"),1000);killTimer.unref();};
     signal.addEventListener("abort", abort, { once: true });
     child.stdout.on("data", (b) => {
-      output += b;
+      output += decoder.write(b);
       if (output.length > 4_000_000) {
         child.kill("SIGTERM");
         reject(new ProviderError("INVALID_OUTPUT", "Response exceeds 4MB"));
@@ -274,6 +305,8 @@ function cli(
     child.on("error", reject);
     child.on("close", (code) => {
       signal.removeEventListener("abort", abort);
+      clearTimeout(killTimer);
+      output += decoder.end();
       if (code !== 0) return reject(new Error(`Codex CLI ${code}: ${error}`));
       try {
         resolve(
@@ -284,10 +317,21 @@ function cli(
             .map((l) => JSON.parse(l)),
         );
       } catch (e) {
-        reject(e);
+        reject(new ProviderError("PROVIDER_EVENT_PARSE_ERROR", "Invalid CLI JSONL envelope: " + String(e)));
       }
     });
     child.stdin.on("error", () => {});
     child.stdin.end(prompt);
   });
+}
+
+/** Keep the installed SDK and its lifecycle; shield only its line framing. */
+export async function sdkTransportBinary(directory: string) {
+  if (process.platform === "win32") throw new ProviderError("UNSUPPORTED_CAPABILITY", "SDK Unicode framing proxy requires POSIX; select codex-cli transport on Windows");
+  const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
+  const file = path.join(directory, "sdk-transport.sh");
+  const proxy = fileURLToPath(new URL("./codex-stream-proxy.mjs", import.meta.url));
+  await writeFile(file, `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(proxy)} ${quote(await codexBinary())} "$@"\n`, {mode:0o700});
+  await chmod(file,0o700);
+  return file;
 }

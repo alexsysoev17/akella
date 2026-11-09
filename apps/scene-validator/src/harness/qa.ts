@@ -1,8 +1,11 @@
+import { verifyWithInfrastructureRecovery } from "../motion/qa/failure.js";
+import { closeNativeRenderer } from "../native/client.js";
+import { renderingMode, nativeEnvironment } from "../native/client.js";
 import { chromium, type Browser } from "playwright";
 import { readFile, readdir, cp, rm } from "node:fs/promises";
 import path from "node:path";
 import { atomicJson, noSymlinkPath, safeDirectory } from "../files.js";
-import { motionQA } from "../motion/qa/render.js";
+import { validatePreview as motionQA } from "../motion/tool-runtime.js";
 import type { MotionState } from "../motion/schema.js";
 import type { IntentTask } from "../motion/intent/compiler.js";
 import type { HarnessRun } from "./runtime.js";
@@ -21,10 +24,13 @@ export class RunQA {
     const dir = `motion/qa/${this.run.runId}/${task.taskId}-attempt-${attempt}`,
       scope =
         task.kind === "sceneTiming" ||
-        task.techniques.some((t) => String(t) === "objectStateTransition")
+        (renderingMode() === "browser-compat" && task.techniques.some((t) => String(t) === "objectStateTransition"))
           ? undefined
           : task.targetReference;
+    this.run.phase = "native-dependency-initialization";
     const key = digest([
+      renderingMode(),
+      renderingMode() === "native" ? await nativeEnvironment() : null,
       this.run.project.inspection.fingerprint,
       next,
       before,
@@ -32,6 +38,7 @@ export class RunQA {
       task.userIntent,
       this.run.references,
     ]);
+    this.run.phase = "motion-qa";
     const cacheRoot = await safeDirectory(
         this.run.project.root,
         "motion/harness/cache/qa",
@@ -62,20 +69,23 @@ export class RunQA {
       }
     }
     this.run.cacheMisses++;
-    this.browser ??= await chromium.launch({ headless: true });
+    if (renderingMode() === "browser-compat")
+      this.browser ??= await chromium.launch({ headless: true });
     const renderStart = performance.now();
-    const report = await motionQA(
-      this.run.project,
-      next,
-      dir,
-      task.userIntent,
-      before,
-      scope,
-      {
-        signal: this.run.signal,
-        beforeRender: () => this.run.beforeRender(),
-        browser: this.browser,
-      },
+    const report = await verifyWithInfrastructureRecovery(
+      () =>
+        motionQA(this.run.project, next, dir, task.userIntent, before, scope, {
+          signal: this.run.signal,
+          beforeRender: () => this.run.beforeRender(),
+          browser: this.browser,
+        }),
+      () => closeNativeRenderer(),
+      () =>
+        this.run.record("render-infrastructure-recovery", {
+          taskId: task.taskId,
+          attempt: 1,
+          semanticRepair: false,
+        }),
     );
     this.run.renderDurationMs += performance.now() - renderStart;
     this.run.qaDurationMs += performance.now() - start;

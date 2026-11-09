@@ -1,6 +1,13 @@
+import {materializeRules,compileSemanticEdit,resolveRuleTargets,ruleObjects} from "../rules.js";
+import {refreshTimingOrigins} from "../project-time.js";
+import { requiredProjectFrames, TimelineConstraintError } from "../constraints.js";
+import { MotionToolError, motionStateDigest } from "../tools.js";
+import { failureCategory, infrastructureFailure } from "../qa/failure.js";
+import { taskRepairContext } from "./repair-context.js";
 import { qaAdmission } from "../qa/policy.js";
 import { resolveTextSettings } from "../../motion-library/techniques/text.js";
 import { isDeepStrictEqual } from "node:util";
+import { freezeObjectOperations } from "../static-object.js";
 import { inertiaIntensityDefaults } from "../../motion-library/expressions/registry.js";
 import { semanticBindings } from "../../motion-library/techniques/registry.js";
 import type { LoadedProject } from "../../types.js";
@@ -15,8 +22,8 @@ import {
   expandInheritance,
   type IntentTask,
 } from "./compiler.js";
-import { applyOperations, channels } from "../operations.js";
-import { resolveTimingDependencies } from "./retime.js";
+import { applyOperations, channels, motionDiff } from "../operations.js";
+import { resolveTimingDependencies, reanchorExpressions } from "./retime.js";
 import { parsePlan } from "../schema.js";
 const desiredChannels = (r: IntentRequirement) =>
   new Set(
@@ -62,6 +69,12 @@ export function assertIntentScope(
   )!;
   const own = (a: { sceneId: string; targetId: string }) =>
     a.sceneId === r.sceneId && a.targetId === r.target.sourceNodeId;
+  if(r.semanticEdit){const expected=applyOperations(before,compileSemanticEdit(project,before,r.semanticEdit,r.sourceText,r.target.logicalObjectId??undefined),project);if(!isDeepStrictEqual(expected,next))throw Error("RULE_EDIT_SCOPE_VIOLATION");return;}
+  if (r.motionAction === "freezeProject") {
+    const expected = applyOperations(before, freezeObjectOperations(project, before, r.target.logicalObjectId!), project);
+    if (!isDeepStrictEqual(next, expected)) throw new Error("STATIC_OBJECT_SCOPE_VIOLATION");
+    return;
+  }
   const writes = desiredChannels(r),
     allEdits = r.kind === "editAnimation";
   const permittedIds = new Set(
@@ -81,6 +94,20 @@ export function assertIntentScope(
           /reveal|ribbon|trim/i.test(a.animationId) &&
           channels(a).some((c) => c.startsWith("scale"))));
   const baseline = structuredClone(before);
+  if (r.kind === "objectAnimation" && baseline.staticObjects?.some(o => o.logicalObjectId === r.target.logicalObjectId) && !next.staticObjects?.some(o => o.logicalObjectId === r.target.logicalObjectId))
+    baseline.staticObjects = baseline.staticObjects.filter(o => o.logicalObjectId !== r.target.logicalObjectId);
+  if (plan.timelineExtension !== "fixed" && before.settings.timelineExtensionPolicy !== "fixed" && next.settings.durationFrames > before.settings.durationFrames &&
+      next.settings.durationFrames === requiredProjectFrames({ ...next, settings: { ...next.settings, durationFrames: before.settings.durationFrames } }))
+    { baseline.settings.durationFrames = next.settings.durationFrames; baseline.settings.tailPolicy = next.settings.tailPolicy; }
+  const originDelta =
+    (next.blocks[0]?.startFrame ?? 0) - (before.blocks[0]?.startFrame ?? 0);
+  if (originDelta > 0) {
+    baseline.settings.durationFrames += originDelta;
+    for (const b of baseline.blocks) b.startFrame += originDelta;
+    for (const a of baseline.animations)
+      if (!allowed(a)) a.startFrame += originDelta;
+    for (const t of baseline.objectTransitions ?? []) t.startFrame += originDelta;
+  }
   baseline.animations = [
     ...before.animations.filter((a) => !allowed(a)),
     ...next.animations.filter(allowed),
@@ -91,15 +118,31 @@ export function assertIntentScope(
       ...next.animations.filter(allowed),
     ].map((a) => a.animationId),
   );
+  const transitionIds = new Set((before.objectTransitions ?? []).filter(t => r.techniques.includes("objectStateTransition") && t.logicalObjectId === r.target.logicalObjectId).map(t => t.transitionId));
+  const createdTransitionIds=new Set((next.objectTransitions??[]).filter(t=>r.kind==="objectAnimation"&&r.techniques.includes("objectStateTransition")&&t.logicalObjectId===r.target.logicalObjectId&&!(before.objectTransitions??[]).some(old=>old.transitionId===t.transitionId)&&(!r.parameters.fromSceneId||r.parameters.fromSceneId===t.fromSceneId)&&(!r.parameters.toSceneId||r.parameters.toSceneId===t.toSceneId)).map(t=>t.transitionId));
   const exprAllowed = (e: NonNullable<MotionState["expressions"]>[number]) =>
-    own(e) &&
+    (own(e) &&
     (!r.expressionIds || r.expressionIds.includes(e.expressionId)) &&
     (r.techniques.includes(e.type as (typeof r.techniques)[number]) ||
-      ("sourceAnimationId" in e && allowedIds.has(e.sourceAnimationId)));
+      ("sourceAnimationId" in e && allowedIds.has(e.sourceAnimationId)))) || Boolean(e.transitionId && transitionIds.has(e.transitionId) &&
+      (r.effectOperation?.action !== "remove" || r.dependentPolicy === "removeDependents")) || Boolean(e.transitionId&&createdTransitionIds.has(e.transitionId)&&r.techniques.includes(e.type as IntentRequirement["techniques"][number]));
+  if (originDelta > 0) {
+    for (const e of baseline.expressions ?? [])
+      if (!exprAllowed(e)) e.startFrame += originDelta;
+  }
   baseline.expressions = [
     ...(before.expressions ?? []).filter((e) => !exprAllowed(e)),
     ...(next.expressions ?? []).filter(exprAllowed),
   ];
+  // A base edit may retime its dependents, never rewrite their parameters.
+  baseline.expressions = (baseline.expressions ?? []).flatMap(e => {
+    if (!e.transitionId || !transitionIds.has(e.transitionId) || r.techniques.includes(e.type as IntentRequirement["techniques"][number])) return [e];
+    const old = before.expressions?.find(x => x.expressionId === e.expressionId);
+    if (!old) return [];
+    if (r.effectOperation?.action === "remove" && r.dependentPolicy === "removeDependents") return [];
+    const from = before.objectTransitions?.find(t => t.transitionId === e.transitionId), to = next.objectTransitions?.find(t => t.transitionId === e.transitionId);
+    return [{ ...old, startFrame: old.type === "inertialOvershoot" && from && to ? old.startFrame + to.startFrame + to.durationFrames - from.startFrame - from.durationFrames : old.startFrame }];
+  });
   baseline.timingDependencies = [
     ...(before.timingDependencies ?? []).filter(
       (d) =>
@@ -121,16 +164,27 @@ export function assertIntentScope(
       t: NonNullable<MotionState["objectTransitions"]>[number],
     ) =>
       t.logicalObjectId === r.target.logicalObjectId &&
-      t.fromSceneId === r.sceneId &&
+      (r.parameters.fromSceneId?t.fromSceneId===r.parameters.fromSceneId:[t.fromSceneId, t.toSceneId].includes(r.sceneId!)) &&
       (!r.parameters.toSceneId || t.toSceneId === r.parameters.toSceneId);
     baseline.objectTransitions = [
       ...(before.objectTransitions ?? []).filter((t) => !allowedTransition(t)),
       ...(next.objectTransitions ?? []).filter(allowedTransition),
     ];
   }
-  resolveTimingDependencies(baseline);
+  const allowedOrigin = (origin:NonNullable<MotionState["timingOrigins"]>[number]) =>
+    origin.entity === "animation" ? allowedIds.has(origin.id) :
+    origin.entity === "expression" ? [...(before.expressions??[]),...(next.expressions??[])].some(e=>e.expressionId===origin.id&&exprAllowed(e)) :
+    origin.entity === "transition" ? [...(before.objectTransitions??[]),...(next.objectTransitions??[])].some(t=>t.transitionId===origin.id&&t.logicalObjectId===r.target.logicalObjectId&&r.techniques.includes("objectStateTransition")) :
+    origin.entity === "dependency" ? [...(baseline.timingDependencies??[])].some(d=>d.dependencyId===origin.id&&allowedIds.has(d.animationId)) : false;
+  if(before.timingOrigins || next.timingOrigins) baseline.timingOrigins=[...(before.timingOrigins??[]).filter(o=>!allowedOrigin(o)),...(next.timingOrigins??[]).filter(allowedOrigin)];
+  const scoped = structuredClone(baseline);
+  resolveTimingDependencies(scoped);
+  reanchorExpressions(scoped, before, new Set((scoped.expressions ?? []).filter(exprAllowed).map(e=>e.expressionId)));
+  refreshTimingOrigins(before,scoped,new Set((scoped.timingOrigins??[]).filter(allowedOrigin).map(o=>o.entity+":"+o.id)));
+  materializeRules(scoped,project);
   const canonical = (s: MotionState) => ({
     ...s,
+    ...(s.timingOrigins?{timingOrigins:[...s.timingOrigins].sort((a,b)=>(a.entity+a.id).localeCompare(b.entity+b.id))}:{}),
     expressions: [...(s.expressions ?? [])].sort((a, b) =>
       a.expressionId.localeCompare(b.expressionId),
     ),
@@ -141,17 +195,28 @@ export function assertIntentScope(
       a.animationId.localeCompare(b.animationId),
     ),
   });
-  if (!isDeepStrictEqual(canonical(baseline), canonical(next)))
-    throw new Error(
+  if (!isDeepStrictEqual(canonical(scoped), canonical(next)))
+    throw Object.assign(new Error(
       "TASK_SCOPE_VIOLATION: operations modify targets/techniques outside this requirement; fade and timing allowed only where present in contract",
-    );
+    ), {scopeDiff:motionDiff(canonical(scoped),canonical(next))});
 }
 export function requirementChecks(
   state: MotionState,
   r: IntentRequirement,
   plan: IntentPlan,
   previous?: MotionState,
+  committed: MotionState | undefined = previous,
+  project?:LoadedProject,
 ) {
+  if(r.semanticEdit){
+    if(!previous||!project)return [{name:'semanticEditApplied',requirementId:r.requirementId,status:'FAILED'}];
+    try{const expected=applyOperations(previous,compileSemanticEdit(project,previous,r.semanticEdit,r.sourceText,r.target.logicalObjectId??undefined),project);return [{name:'semanticEditApplied',requirementId:r.requirementId,status:isDeepStrictEqual(expected,state)?'PASSED':'FAILED'}];}catch{return [{name:'semanticEditApplied',requirementId:r.requirementId,status:'FAILED'}];}
+  }
+  if (r.techniques.includes("objectStateTransition")) {
+    const matches = (state.objectTransitions ?? []).filter(t => t.logicalObjectId === r.target.logicalObjectId && (r.parameters.fromSceneId?t.fromSceneId===r.parameters.fromSceneId:[t.fromSceneId, t.toSceneId].includes(r.sceneId!)) && (!r.parameters.toSceneId || t.toSceneId === r.parameters.toSceneId));
+    if (r.effectOperation?.action === "remove") return [{ name: "stateTransitionRemoved", requirementId: r.requirementId, status: matches.length === 0 ? "PASSED" : "FAILED" }];
+    return [{ name: "stateTransitionContract", requirementId: r.requirementId, status: matches.length === 1 && (r.timing.startSeconds == null || matches[0].startFrame === Math.round(r.timing.startSeconds * state.settings.fps)) && (r.parameters.easing == null || JSON.stringify(matches[0].easing) === JSON.stringify(r.parameters.easing)) && (r.parameters.durationSeconds == null || matches[0].durationFrames === Math.round(r.parameters.durationSeconds * state.settings.fps)) ? "PASSED" : "FAILED" }];
+  }
   if (
     r.effectOperation?.storage === "animation" &&
     r.effectOperation.action === "remove"
@@ -197,6 +262,12 @@ export function requirementChecks(
       },
     ];
   }
+  if (r.effectOperation?.action === "enable" || r.effectOperation?.action === "disable") {
+    const enabled = r.effectOperation.action === "enable";
+    const ids = r.effectOperation.storage === "animation" ? r.animationIds ?? [] : r.expressionIds ?? previous?.expressions?.filter(e => e.sceneId === r.sceneId && e.targetId === r.target.sourceNodeId && r.techniques.includes(e.type as (typeof r.techniques)[number])).map(e => e.expressionId) ?? [];
+    const actual = r.effectOperation.storage === "animation" ? state.animations.filter(a => ids.includes(a.animationId)) : state.expressions?.filter(e => ids.includes(e.expressionId)) ?? [];
+    return [{ name: "effectEnabledState", requirementId: r.requirementId, status: ids.length > 0 && actual.length === ids.length && actual.every(e => e.enabled === enabled) ? "PASSED" : "FAILED" }];
+  }
   // Disabled tracks remain editable; presence checks must not imply enabling or visible playback.
   const presenceState =
     r.effectOperation?.storage === "animation"
@@ -209,7 +280,8 @@ export function requirementChecks(
           ),
         }
       : state;
-  const checks = validateRequirement(presenceState, r).map((c) => ({
+  const checkState = r.effectOperation?.storage === "expression" ? { ...presenceState, expressions: presenceState.expressions?.map(e => e.sceneId === r.sceneId && e.targetId === r.target.sourceNodeId && r.techniques.includes(e.type as (typeof r.techniques)[number]) && (!r.expressionIds || r.expressionIds.includes(e.expressionId)) ? { ...e, enabled: true } : e) } : presenceState;
+  const checks = validateRequirement(checkState, r).map((c) => ({
     ...c,
     requirementId: r.requirementId,
   }));
@@ -262,9 +334,12 @@ export function requirementChecks(
       requirementId: r.requirementId,
       status:
         changed ||
+        (r.effectOperation?.storage === "expression" && r.effectOperation.action === "update") ||
         r.timing.reference ||
         r.timing.anchorRequirementId ||
         r.timing.startSeconds !== null ||
+        r.timing.delaySeconds !== 0 ||
+        r.timing.offsetFrames != null ||
         r.effectOperation?.action === "updateTiming"
           ? "PASSED"
           : "FAILED",
@@ -282,7 +357,9 @@ export function requirementChecks(
           (r.timing.reference ||
             r.timing.anchorRequirementId ||
             r.timing.startSeconds !== null ||
-            r.effectOperation?.action === "updateTiming" ||
+            r.timing.delaySeconds !== 0 ||
+            r.timing.offsetFrames != null ||
+            (r.effectOperation?.action === "updateTiming" && r.timing.relation !== "unchanged") ||
             now.startFrame === old.startFrame) &&
           (r.parameters.durationFactor === null ||
             now.durationFrames ===
@@ -310,6 +387,7 @@ export function requirementChecks(
         requirementId: r.requirementId,
         status:
           now &&
+          (r.parameters.decayFactor == null || ("decay" in old.parameters && "decay" in now.parameters && Math.abs(now.parameters.decay - old.parameters.decay * r.parameters.decayFactor) < 1e-10)) &&
           (r.parameters.frequencyFactor === null ||
             ("frequency" in old.parameters &&
               "frequency" in now.parameters &&
@@ -328,6 +406,7 @@ export function requirementChecks(
     }
   }
   if (
+    r.techniques.includes("inertialOvershoot") &&
     r.parameters.intensity != null &&
     r.parameters.amplitude === null &&
     r.parameters.amplitudeFactor === null
@@ -375,7 +454,7 @@ export function requirementChecks(
         requirementId: r.requirementId,
         status:
           "mode" in a.parameters &&
-          a.parameters.mode === "in" &&
+          a.parameters.mode === (r.techniques.includes("fadeOut") ? "out" : "in") &&
           a.parameters.distance > 0
             ? "PASSED"
             : "FAILED",
@@ -430,7 +509,7 @@ export function requirementChecks(
   }
   const primary =
       related.find((a) => !a.effect.startsWith("fade")) ?? related[0],
-    block = state.blocks.find((b) => b.sceneId === r.sceneId);
+    block = state.blocks.map(b=>({...b,startFrame:state.sceneAnchors?.find(a=>a.sceneId===b.sceneId)?.startFrame ?? b.startFrame})).find((b) => b.sceneId === r.sceneId);
   if (
     primary &&
     block &&
@@ -438,7 +517,7 @@ export function requirementChecks(
       r.timing.reference ||
       r.timing.anchorRequirementId ||
       r.timing.startSeconds !== null ||
-      r.effectOperation?.action === "updateTiming")
+      (r.effectOperation?.action === "updateTiming" && r.timing.relation !== "unchanged"))
   ) {
     const anchorReq = plan.requirements.find(
       (x) => x.requirementId === r.timing.anchorRequirementId,
@@ -448,40 +527,66 @@ export function requirementChecks(
           (a) => a.animationId === r.timing.reference!.resolvedAnimationId,
         )
       : requirementAnchor(state, anchorReq);
+    const isSelfAnchor = Boolean(
+      r.timing.reference?.endpoint !== "end" &&
+        ((r.timing.reference &&
+          (related.some(
+            (a) => a.animationId === r.timing.reference!.resolvedAnimationId,
+          ) ||
+            Boolean(
+              r.timing.reference.resolvedAnimationId &&
+                r.animationIds?.includes(r.timing.reference.resolvedAnimationId),
+            ))) ||
+          (anchor && related.some((a) => a.animationId === anchor.animationId))),
+    );
     const delay =
       r.timing.offsetFrames ??
       Math.round(r.timing.delaySeconds * state.settings.fps);
-    const expected = r.timing.reference
-      ? anchor!.startFrame +
-        (r.timing.reference.endpoint === "end" ? anchor!.durationFrames : 0) +
-        delay
-      : r.timing.startSeconds !== null
-        ? Math.round(r.timing.startSeconds * state.settings.fps) + delay
-        : r.timing.relation === "sceneStart"
-          ? block.startFrame + delay
-          : anchor
-            ? r.timing.relation === "afterRequirement"
-              ? anchor.startFrame + anchor.durationFrames + delay
-              : r.timing.relation === "withRequirement"
-                ? anchor.startFrame + delay
-                : r.timing.relation === "beforeRequirement"
-                  ? anchor.startFrame - primary.durationFrames + delay
-                  : null
-            : r.timing.relation === "sceneEnd"
-              ? block.startFrame +
-                block.durationFrames -
-                primary.durationFrames +
-                delay
-              : null;
+    const prevAnchor =
+      committed?.animations.find(
+        (a) => a.animationId === r.timing.reference?.resolvedAnimationId,
+      ) ??
+      committed?.animations.find((a) => a.animationId === primary.animationId);
+    const expected = isSelfAnchor || (r.kind === "editAnimation" && !r.timing.reference && !r.timing.anchorRequirementId && r.timing.startSeconds === null && r.timing.relation === "unchanged")
+      ? (prevAnchor?.startFrame ?? primary.startFrame - delay) + delay
+      : r.timing.reference
+        ? anchor!.startFrame +
+          (r.timing.reference.endpoint === "end" ? anchor!.durationFrames : 0) +
+          delay
+        : r.timing.startSeconds !== null
+          ? Math.round(r.timing.startSeconds * state.settings.fps) + delay
+          : r.timing.relation === "sceneStart"
+            ? block.startFrame + delay
+            : anchor
+              ? r.timing.relation === "afterRequirement"
+                ? anchor.startFrame + anchor.durationFrames + delay
+                : r.timing.relation === "withRequirement"
+                  ? anchor.startFrame + delay
+                  : r.timing.relation === "beforeRequirement"
+                    ? anchor.startFrame - primary.durationFrames + delay
+                    : null
+              : r.timing.relation === "sceneEnd"
+                ? block.startFrame +
+                  block.durationFrames -
+                  primary.durationFrames +
+                  delay
+                : null;
     if (expected !== null)
       checks.push({
         name: "requirementTiming",
         requirementId: r.requirementId,
-        status: related.every((a) => a.startFrame === expected)
+        status: related.every(
+          (a) =>
+            a.startFrame - (r.timing.align !== "end" ? (committed?.animations.find(old=>old.animationId===a.animationId)?.startFrame ?? primary.startFrame) - (committed?.animations.find(old=>old.animationId===primary.animationId)?.startFrame ?? primary.startFrame) : 0) +
+              (r.timing.align === "end" && r.timing.relation !== "sceneEnd"
+                ? a.durationFrames
+                : 0) ===
+            expected,
+        )
           ? "PASSED"
           : "FAILED",
       });
-    if (r.timing.anchorRequirementId || r.timing.reference)
+    if ((r.timing.anchorRequirementId || r.timing.reference) && !isSelfAnchor)
       checks.push({
         name: "persistedTemporalDependency",
         requirementId: r.requirementId,
@@ -508,6 +613,7 @@ export function requirementChecks(
       (r.parameters.frequency === null ||
         !("frequency" in e.parameters) ||
         e.parameters.frequency === r.parameters.frequency) &&
+      (r.parameters.decay === null || ("decay" in e.parameters && e.parameters.decay === r.parameters.decay)) &&
       (e.type !== "wiggle" ||
         r.parameters.seed == null ||
         e.parameters.seed === r.parameters.seed);
@@ -516,11 +622,18 @@ export function requirementChecks(
       requirementId: r.requirementId,
       status: ok ? "PASSED" : "FAILED",
     });
+    if (e.type === "wiggle" && r.targetScope === "logicalObject" && (r.kind !== "editAnimation" || r.parameters.lifetime != null || r.parameters.durationSeconds != null)) {
+      const expectedEnd = r.parameters.lifetime === "scene" ? (block ? block.startFrame + block.durationFrames : -1)
+        : r.parameters.lifetime === "transition" ? state.objectTransitions?.find(t => t.transitionId === e.transitionId)?.startFrame! + state.objectTransitions?.find(t => t.transitionId === e.transitionId)?.durationFrames!
+        : r.parameters.durationSeconds != null ? e.startFrame + Math.round(r.parameters.durationSeconds * state.settings.fps) : state.settings.durationFrames;
+      checks.push({ name: "requestedLogicalEffectScope", requirementId: r.requirementId,
+        status: e.ownership?.scope === "logicalObject" && e.ownership.logicalObjectId === r.target.logicalObjectId && e.startFrame + e.durationFrames === expectedEnd ? "PASSED" : "FAILED" });
+    }
     if (e.type === "wiggle" && r.kind !== "editAnimation") {
       const expected =
         r.timing.startSeconds !== null
           ? Math.round(r.timing.startSeconds * state.settings.fps)
-          : block?.startFrame;
+          : e.ownership?.scope === "logicalObject" && r.parameters.lifetime !== "scene" ? 0 : block?.startFrame;
       if (r.timing.relation === "sceneStart" && expected !== undefined)
         checks.push({
           name: "expressionTiming",
@@ -543,7 +656,7 @@ export function requirementChecks(
     );
     const source =
       e && "sourceAnimationId" in e
-        ? state.animations.find((a) => a.animationId === e.sourceAnimationId)
+        ? state.animations.find((a) => a.animationId === e.sourceAnimationId) ?? state.objectTransitions?.find(t => t.transitionId === e.transitionId && t.transitionId === e.sourceAnimationId)
         : undefined;
     checks.push({
       name: "afterPosition",
@@ -584,11 +697,12 @@ export async function runIntentTasks(
     trace: (tasks: IntentTask[], entry?: unknown) => Promise<void>;
     checkpoint?: () => void;
     maxAttempts?: number;
+    preparedPlans?: Map<string, { beforeDigest: string; compiled: Plan }>;
   },
 ) {
   const preflightStarted = performance.now();
   const plan = expandInheritance(input),
-    tasks = compileTasks(project, plan),
+    tasks = compileTasks(project, plan, initial),
     pending = tasks.filter((t) => t.status === "PENDING"),
     plans: Plan[] = [];
   let current = initial;
@@ -635,20 +749,18 @@ export async function runIntentTasks(
       try {
         if (attempt === 1) {
           try {
-            generated = compileRequirement(project, current, plan, task);
+            const prepared = hooks.preparedPlans?.get(task.taskId);
+            task.compilationSource = prepared?.beforeDigest === motionStateDigest(current) ? "validated-preflight" : "compiled";
+            generated = task.compilationSource === "validated-preflight"
+              ? structuredClone(prepared!.compiled)
+              : compileRequirement(project, current, plan, task, initial);
           } catch (error) {
             throw new Error("COMPILER_COVERAGE_ERROR: " + String(error));
           }
         } else
           generated = parsePlan(
             await hooks.repair(
-              {
-                motion: current,
-                intentRequirement: plan.requirements.filter((r) =>
-                  task.requirementIds.includes(r.requirementId),
-                ),
-                repairFeedback: feedback,
-              },
+              taskRepairContext(project, current, plan, task, feedback),
               task.userIntent,
               task,
               attempt,
@@ -658,8 +770,9 @@ export async function runIntentTasks(
           throw new Error("Requirement produced no executable operations");
         task.generatedOperations = generated.operations;
         let next: MotionState;
+        let checks: ReturnType<typeof requirementChecks>;
         try {
-          next = applyOperations(current, generated.operations, project);
+          ({ next, checks } = admitCompiledTask(project, current, plan, task, generated, initial));
         } catch (error) {
           throw new Error(
             (attempt === 1
@@ -667,10 +780,7 @@ export async function runIntentTasks(
               : "MODEL_OPERATION_VALIDATION_ERROR: ") + String(error),
           );
         }
-        assertIntentScope(project, current, next, plan, task);
-        const checks = plan.requirements
-          .filter((r) => task.requirementIds.includes(r.requirementId))
-          .flatMap((r) => requirementChecks(next, r, plan, current));
+
         task.generatedOperations = generated.operations;
         task.validationResult = {
           status: checks.some((c) => c.status === "FAILED")
@@ -761,7 +871,15 @@ export async function runIntentTasks(
           validation: task.validationResult,
           qa,
         });
-        if (!qaAdmission(qa).accepted) throw new Error("MOTION_QA_FAILED");
+        if (!qaAdmission(qa).accepted)
+          throw new Error(
+            infrastructureFailure(
+              qa as { checks?: { status: string; reason?: string }[] },
+            )
+              ? "RENDER_INFRASTRUCTURE_FAILED: " +
+                JSON.stringify((qa as { checks?: unknown[] }).checks)
+              : "MOTION_QA_FAILED",
+          );
         hooks.checkpoint?.();
         current = await hooks.commit(task, generated, next);
         task.status = "PASSED";
@@ -801,6 +919,7 @@ export async function runIntentTasks(
           });
         task.primaryFailureReason ??= failureReason;
         feedback = {
+          failureCategory: failureCategory(failureReason),
           taskId: task.taskId,
           requirementIds: task.requirementIds,
           targetId: task.targetReference.targetId,
@@ -834,6 +953,7 @@ export async function runIntentTasks(
         task.repairHistory.push({ attempt, feedback });
         await hooks.trace(tasks, { status: "repair", feedback });
         if (
+          failureCategory(failureReason) !== "animation-validation" ||
           signature === previousSignature ||
           attempt === (hooks.maxAttempts ?? 3) ||
           /COMPILER_COVERAGE_ERROR|UNSUPPORTED_COMPOUND_EDIT|^Error: OPERATION_VALIDATION_ERROR|BUDGET|CANCELLED|authentication|timeout|aborted|401|403|login|Исходный дизайн|Анимация уже изменилась/i.test(
@@ -862,6 +982,8 @@ export async function runIntentTasks(
       r,
       plan,
       taskBefore.get(task.taskId),
+      initial,
+      project,
     );
     const persisted =
       task.status === "PASSED" && checks.every((c) => c.status === "PASSED");
@@ -906,16 +1028,17 @@ export async function runIntentTasks(
           r.semanticActionId ?? r.selectionRequirementId ?? r.requirementId,
       ),
     ).size,
-    selectedObjectCount: new Set(
-      plan.requirements
-        .filter((r) => r.target.sourceNodeId)
-        .map((r) => r.sceneId + "/" + r.target.sourceNodeId),
-    ).size,
+    selectedObjectCount: new Set(plan.requirements.flatMap(r=>r.semanticEdit ? resolveRuleTargets(project,r.semanticEdit.targets.length?r.semanticEdit.targets:r.semanticEdit.scope.logicalObjectIds) : r.target.sourceNodeId?[r.sceneId+"/"+r.target.sourceNodeId]:[])).size,
     selectedAnimationCount: new Set(
       plan.requirements.flatMap((r) => r.animationIds ?? []),
     ).size,
     selectedExpressionCount: new Set(
-      plan.requirements.flatMap((r) => r.expressionIds ?? []),
+      plan.requirements.flatMap((r) => {
+        if(!r.semanticEdit)return r.expressionIds??[];
+        const ids=resolveRuleTargets(project,r.semanticEdit.targets.length?r.semanticEdit.targets:r.semanticEdit.scope.logicalObjectIds);
+        const objects=ruleObjects(project).filter(o=>r.semanticEdit!.scope.selector==='project'||ids.includes(o.logicalObjectId));
+        return [...(initial.expressions??[]),...(current.expressions??[])].filter(e=>e.type===r.semanticEdit!.effect && objects.some(o=>e.ownership?.logicalObjectId===o.logicalObjectId||o.sourceInstances.some(i=>i.sceneId===e.sceneId&&i.sourceNodeId===e.targetId))).map(e=>e.expressionId);
+      }),
     ).size,
     validationLevels: {
       semantic: {
@@ -996,18 +1119,28 @@ export async function runIntentTasks(
   };
 }
 
+/** The same admission rules are used by preflight and execution. Schema/geometry writes remain in applyOperations. */
+export function admitCompiledTask(project: LoadedProject, before: MotionState, plan: IntentPlan, task: IntentTask, compiled: Plan, committed: MotionState = before) {
+  const next = applyOperations(before, compiled.operations, project);
+  assertIntentScope(project, before, next, plan, task);
+  const checks = plan.requirements.filter(r => task.requirementIds.includes(r.requirementId)).flatMap(r => requirementChecks(next, r, plan, before, committed, project));
+  return { next, checks };
+}
 /** Full deterministic candidate preflight; no persistence, renderer or provider call. */
 export function preflightIntentPlan(
   project: LoadedProject,
   state: MotionState,
   input: IntentPlan,
+  overrides: ReadonlyMap<string, Plan> = new Map(),
 ) {
   const preflightStarted = performance.now();
   const plan = expandInheritance(input),
-    tasks = compileTasks(project, plan),
+    tasks = compileTasks(project, plan, state),
     done = new Set<string>();
   let candidate = structuredClone(state);
   const reports: unknown[] = [];
+  const preparedPlans = new Map<string, { beforeDigest: string; compiled: Plan }>();
+  const recoveries: unknown[] = [];
   while (done.size < tasks.length) {
     const task = tasks.find(
       (t) => !done.has(t.taskId) && t.dependencies.every((id) => done.has(id)),
@@ -1015,18 +1148,32 @@ export function preflightIntentPlan(
     if (!task)
       throw Object.assign(
         new Error("INTENT_PREFLIGHT_FAILED: dependency cycle"),
-        { report: { status: "FAILED", reports } },
+        { report: { status: "FAILED", classification: "INVALID", code: "DEPENDENCY_CYCLE", reports } },
       );
     try {
       if (task.status === "BLOCKED")
         throw new Error(task.error ?? "UNSUPPORTED_REQUIREMENT");
       const compilationStarted = performance.now();
-      const compiled = compileRequirement(project, candidate, plan, task),
-        next = applyOperations(candidate, compiled.operations, project);
-      assertIntentScope(project, candidate, next, plan, task);
-      const checks = plan.requirements
-        .filter((r) => task.requirementIds.includes(r.requirementId))
-        .flatMap((r) => requirementChecks(next, r, plan, candidate));
+      const initial = candidate;
+      let working = candidate, prefix: Plan["operations"] = [];
+      let admitted: ReturnType<typeof admitCompiledTask> | undefined, compiled: Plan | undefined;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const proposed = overrides.get(task.taskId) ?? compileRequirement(project, working, plan, task, state);
+          compiled = { ...proposed, operations: [...prefix, ...proposed.operations] };
+          admitted = admitCompiledTask(project, initial, plan, task, compiled, state);
+          break;
+        } catch (error) {
+          const required = error instanceof TimelineConstraintError ? error.requiredDurationFrames : error instanceof MotionToolError && error.issue.code === "TIMELINE_CONFLICT" ? Number(error.issue.details.requiredDurationFrames) : NaN;
+          if (attempt === 2 || plan.timelineExtension === "fixed" || state.settings.timelineExtensionPolicy === "fixed" || !Number.isInteger(required) || required <= working.settings.durationFrames || required > 108000) throw error;
+          prefix = [{ type: "setProjectSettings", settings: { ...initial.settings, durationFrames: required, tailPolicy: "holdLastScene" } }];
+          working = applyOperations(initial, prefix, project);
+          recoveries.push({ taskId: task.taskId, classification: "RECOVERABLE", code: "DEPENDENT_EFFECT_EXCEEDS_TIMELINE", resolution: "extendProject", previousDurationFrames: initial.settings.durationFrames, requiredDurationFrames: required, requiredAdditionalFrames: required - initial.settings.durationFrames, attempt: attempt + 1, blocksMoved: false });
+        }
+      }
+      if (!admitted || !compiled) throw new Error("PREFLIGHT_RECOVERY_LIMIT");
+      const { next, checks } = admitted;
+      preparedPlans.set(task.taskId, { beforeDigest: motionStateDigest(candidate), compiled });
       if (checks.some((c) => c.status === "FAILED"))
         throw Object.assign(new Error("REQUIREMENT_OPERATIONS_INCOMPLETE"), {
           checks,
@@ -1056,9 +1203,18 @@ export function preflightIntentPlan(
         {
           report: {
             status: "FAILED",
+            classification: error instanceof TimelineConstraintError || error instanceof MotionToolError && error.issue.code === "TIMELINE_CONFLICT" ? "RECOVERABLE" : /AMBIGUOUS|REQUIRE_POLICY/.test(String(error)) ? "AMBIGUOUS" : /UNSUPPORTED|недоступен/.test(String(error)) ? "UNSUPPORTED" : "INVALID",
+            code: error instanceof TimelineConstraintError ? error.code : error instanceof MotionToolError ? error.issue.code : String(error).replace(/^Error: /, "").split(":")[0],
+            affectedIds: error instanceof TimelineConstraintError ? error.affectedIds : undefined,
+            availableResolutions: error instanceof TimelineConstraintError ? plan.timelineExtension === "fixed" || state.settings.timelineExtensionPolicy === "fixed" ? ["inspectDependencies", "reviseTimelineConstraint"] : ["extendProject", "adjustEffectDuration"] : error instanceof MotionToolError ? error.issue.allowedActions : [],
+            requiredAdditionalFrames: error instanceof TimelineConstraintError ? error.requiredDurationFrames - error.actualDurationFrames : undefined,
+            recoveries,
             taskId: task.taskId,
             reports,
             failure: String(error),
+            scopeDiff:(error as {scopeDiff?:unknown}).scopeDiff,
+            toolIssue: error instanceof MotionToolError ? error.issue : undefined,
+            diagnostic: { target: task.targetReference, techniques: task.techniques, code: String(error).replace(/^Error: /, "").split(":")[0], invariant: String(error) },
             checks: (error as { checks?: unknown }).checks,
           },
         },
@@ -1067,7 +1223,10 @@ export function preflightIntentPlan(
   }
   return {
     status: "PASSED",
+    classification: "VALID",
+    recoveries,
     durationMs: performance.now() - preflightStarted,
+    preparedPlans,
     graphDiff: {
       before: state.timingDependencies ?? [],
       after: candidate.timingDependencies ?? [],

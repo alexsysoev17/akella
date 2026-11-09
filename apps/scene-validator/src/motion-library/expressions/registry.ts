@@ -1,3 +1,5 @@
+import {programSchema} from './program.js';
+import {globalFrameSchema, intervalDurationSchema} from "../../motion/time.js";
 import { z } from "zod";
 import { springParameters, bounceParameters } from "../easings/registry.js";
 const finite = (lo: number, hi: number) => z.number().finite().min(lo).max(hi);
@@ -12,17 +14,21 @@ export const propertySchema = z.enum([
 ]);
 const common = {
   expressionId: id,
+  textBinding: z.object({animationId:id,phase:z.enum(["withTrack","afterTrack"])}).strict().optional(),
+  transitionId: id.optional(),
+  ownership: z.object({ scope: z.enum(["sceneInstance", "transition", "logicalObject"]), logicalObjectId: id.optional() }).strict().optional(),
   sceneId: id,
   targetId: id,
   property: propertySchema,
-  startFrame: z.number().int().min(0).max(108000),
-  durationFrames: z.number().int().min(1).max(108000),
+  startFrame: globalFrameSchema,
+  durationFrames: intervalDurationSchema,
   enabled: z.boolean(),
 };
-const amplitude = finite(0, 10000),
-  frequency = finite(0.01, 30),
-  decay = finite(0, 30);
+const amplitude = finite(0, 100000),
+  frequency = finite(0.001, 10000),
+  decay = finite(0, 10000);
 export const expressionSchema = z.discriminatedUnion("type", [
+  z.object({...common,type:z.literal("procedural"),program:programSchema,parameters:z.object({amplitude}).strict()}).strict(),
   z
     .object({
       ...common,
@@ -32,6 +38,7 @@ export const expressionSchema = z.discriminatedUnion("type", [
           amplitude,
           frequency,
           seed: z.number().int().min(0).max(2147483647),
+          temporalMode: z.enum(["continuous", "legacyWindow"]).optional(),
         })
         .strict(),
     })
@@ -50,11 +57,13 @@ export const expressionSchema = z.discriminatedUnion("type", [
       sourceAnimationId: id,
       parameters: z
         .object({
-          amplitude: finite(0, 2),
+          amplitude,
           frequency,
           decay,
-          velocityLookbackFrames: finite(0.01, 30).default(6),
+          velocityLookbackFrames: finite(0.01, 1000).default(6),
+          velocitySampling: z.enum(['endpoint','lookback']).optional(),
           mode: z.enum(["legacy", "ae"]).optional(),
+          settlingEnvelope: z.literal("smoothTail").optional(),
           incomingImpulse: finite(-100000, 100000).nullable().optional(),
         })
         .strict(),
@@ -82,17 +91,25 @@ export const expressionSchema = z.discriminatedUnion("type", [
       parameters: z
         .object({
           mode: z.enum(["cycle", "pingPong"]),
-          amplitude: finite(0, 10),
+          amplitude,
         })
         .strict(),
     })
     .strict(),
 ]);
 export type Expression = z.infer<typeof expressionSchema>;
+/** Shared temporal contract; absence of temporalMode preserves old stored Wiggle output. */
+export const expressionLifecycles = {
+  procedural: "continuous", wiggle: "continuous", loop: "continuous",
+  inertialOvershoot: "settling", dampedOscillation: "settling",
+  spring: "settling", bounce: "settling",
+} as const satisfies Record<Expression["type"], "continuous" | "settling">;
 export const expressionRegistry = expressionSchema.options.map((option) => ({
   id: option.shape.type.value,
+  lifecycle: expressionLifecycles[option.shape.type.value],
   parameterSchema: z.toJSONSchema(option.shape.parameters),
   description: {
+    procedural: "Versioned bounded mathematical stack program; arbitrary additive property functions, explicit read-only base-track sample dependencies. No IO/eval/recursion.",
     wiggle: "Seeded smooth value noise; units/sec frequency.",
     dampedOscillation: "Additive sine with exponential decay per second.",
     inertialOvershoot:
@@ -106,6 +123,7 @@ export const inertiaIntensityDefaults = {
   subtle: { amplitude: 0.1, frequency: 2.5, decay: 3 },
   normal: { amplitude: 0.25, frequency: 2.5, decay: 3 },
   strong: { amplitude: 0.4, frequency: 2.5, decay: 3 },
+  veryStrong: { amplitude: 0.8, frequency: 2.5, decay: 3 },
 } as const;
 export const relativeIntensityFactors = {
   slightlyWeaker: 0.8,
@@ -115,3 +133,9 @@ export const relativeIntensityFactors = {
   stronger: 1.6,
   muchStronger: 2,
 } as const;
+
+export const wiggleIntensityDefaults = {
+  subtle: { amplitude: 3, frequency: 0.8 }, normal: { amplitude: 10, frequency: 2 },
+  strong: { amplitude: 20, frequency: 2 }, veryStrong: { amplitude: 40, frequency: 2 },
+} as const;
+export const effectIntensityDefaults = { inertialOvershoot: inertiaIntensityDefaults, wiggle: wiggleIntensityDefaults } as const;

@@ -83,3 +83,10 @@ export function parentLocalDelta(parent: Matrix, x: number, y: number) {
   const m = inverse(parent);
   return { x: m[0][0] * x + m[0][1] * y, y: m[1][0] * x + m[1][1] * y };
 }
+
+/** Add procedural offsets in canvas space around the existing geometry origin. */
+export function transitionOffsetMatrix(base:Matrix,offset:{x?:number;y?:number;rotation?:number;scaleX?:number;scaleY?:number},origin?:{x:number;y:number}):Matrix {
+ const angle=(offset.rotation??0)*Math.PI/180,c=Math.cos(angle),s=Math.sin(angle),sx=Math.max(.001,1+(offset.scaleX??0)),sy=Math.max(.001,1+(offset.scaleY??0));
+ const x=origin?.x??base[0][2],y=origin?.y??base[1][2];
+ return multiply([[c*sx,-s*sy,x+(offset.x??0)-c*sx*x+s*sy*y],[s*sx,c*sy,y+(offset.y??0)-s*sx*x-c*sy*y]],base);
+}
