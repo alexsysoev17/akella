@@ -1,3 +1,7 @@
+import {compileSemanticEdit} from "../rules.js";
+import { TimelineConstraintError } from "../constraints.js";
+import { freezeObjectOperations } from "../static-object.js";
+import { statePresentation } from "../transitions.js";
 import { parentLocalDelta, unit } from "../geometry.js";
 import {
   resolveTextSettings,
@@ -5,7 +9,7 @@ import {
 } from "../../motion-library/techniques/text.js";
 import type { SourceNode } from "../registry.js";
 import { resolveTemporalReference } from "./references.js";
-import { offscreenDistance } from "./entrance.js";
+import { offscreenDistance,transformedOffscreenVector } from "./entrance.js";
 import {
   semanticBindings,
   isCustomEasing,
@@ -22,6 +26,8 @@ import type {
 import type { MotionState, Plan, Animation } from "../schema.js";
 import { channels, applyOperations } from "../operations.js";
 import { objectsIn } from "../context.js";
+import { lowerMotionTool, transitionForTarget } from "../tools.js";
+import { editExpression,compileWiggle } from "../effect-edit.js";
 import { resolveBaseMotion } from "../base-motion.js";
 import { inertiaIntensityDefaults } from "../../motion-library/expressions/registry.js";
 export interface IntentTask {
@@ -40,6 +46,7 @@ export interface IntentTask {
   repairHistory: unknown[];
   error?: string;
   operationCoverage?: unknown;
+  compilationSource?: "validated-preflight" | "compiled";
   primaryFailureReason?: string;
 }
 const stable = (v: unknown) =>
@@ -72,6 +79,7 @@ export function expandInheritance(plan: IntentPlan) {
 export function compileTasks(
   project: LoadedProject,
   input: IntentPlan,
+  committed?: MotionState,
 ): IntentTask[] {
   const plan = expandInheritance(input),
     tasks: IntentTask[] = [];
@@ -140,6 +148,20 @@ export function compileTasks(
       )
       .map((other) => other.taskId);
   }
+  if (committed) {
+    const owner = new Map<string, IntentTask>();
+    for (const t of tasks) for (const r of plan.requirements.filter(r=>t.requirementIds.includes(r.requirementId) && r.kind==="editAnimation"))
+      for (const a of requirementAnimations(committed,r)) owner.set(a.animationId,t);
+    const parents=new Map((committed.timingDependencies ?? []).map(d=>[d.animationId,d.anchorAnimationId]));
+    for (const [id,child] of owner) {
+      const seen=new Set<string>();let anchorId=parents.get(id);
+      while(anchorId&&!seen.has(anchorId)){
+        seen.add(anchorId);const anchor=owner.get(anchorId);
+        if(anchor&&anchor!==child&&!child.dependencies.includes(anchor.taskId))child.dependencies.push(anchor.taskId);
+        anchorId=parents.get(anchorId);
+      }
+    }
+  }
   return tasks;
 }
 /** Pick one existing base for a standalone easing edit; explicit effect/property always wins. */
@@ -159,8 +181,14 @@ export function requirementAnimations(
   const effects = r.techniques.filter(
     (t) => semanticBindings[t] === "animation",
   );
-  if (effects.length)
-    return own.filter((a) => effects.includes(a.effect as IntentTechnique));
+  if (effects.length) {
+    const matching=own.filter((a) => effects.includes(a.effect as IntentTechnique));
+    if(r.kind==='objectAnimation'){
+      const scoped=matching.filter(a=>a.animationId==='intent_'+stable([r.sceneId,r.target.sourceNodeId,a.effect,...(r.kind==='objectAnimation'&&(r.timing.startSeconds!=null||r.timing.relation==='afterRequirement'&&r.timing.anchorRequirementId)?[r.requirementId]:[])]));
+      if(scoped.length)return scoped;
+    }
+    return matching;
+  }
   if (
     !r.techniques.some((t) => semanticBindings[t] === "easing") &&
     r.parameters.easing === null
@@ -193,6 +221,7 @@ export function isParameterOnlyEdit(r: IntentRequirement) {
       r.parameters.frequency,
       r.parameters.frequencyFactor,
       r.parameters.decay,
+      r.parameters.decayFactor,
       r.parameters.seed,
     ].some((v) => v != null)
   );
@@ -232,7 +261,12 @@ export function requirementEasing(r: IntentRequirement): Easing | undefined {
 export function requirementAnchor(
   state: MotionState,
   requirement: IntentRequirement | undefined,
-): Animation | undefined {
+): Pick<Animation, "animationId" | "sceneId" | "targetId" | "startFrame" | "durationFrames"> | undefined {
+  if (requirement?.techniques.includes("objectStateTransition")) {
+    const transitions = state.objectTransitions?.filter(t => t.logicalObjectId === requirement.target.logicalObjectId && (!requirement.sceneId || [t.fromSceneId, t.toSceneId].includes(requirement.sceneId))) ?? [];
+    if (transitions.length > 1) throw new Error("AMBIGUOUS_ANCHOR_TIMING");
+    if (transitions[0]) return { ...transitions[0], animationId: transitions[0].transitionId, sceneId: requirement.sceneId!, targetId: requirement.target.sourceNodeId! };
+  }
   const referenced = requirement
     ? requirementAnimations(state, requirement)
     : [];
@@ -285,6 +319,7 @@ export function compileRequirement(
   state: MotionState,
   input: IntentPlan,
   task: IntentTask,
+  committed: MotionState = state,
 ): Plan {
   const plan = expandInheritance(input),
     reqs = plan.requirements.filter((r) =>
@@ -292,6 +327,10 @@ export function compileRequirement(
     );
   const operations: Plan["operations"] = [],
     warnings: string[] = [];
+  if(reqs[0]?.semanticEdit)return {status:"ready",summary:"Инкрементальная правка правил движения",assumptions:[],warnings:[],operations:compileSemanticEdit(project,state,reqs[0].semanticEdit,reqs[0].sourceText,reqs[0].target.logicalObjectId??undefined)};
+  if (reqs[0]?.motionAction === "freezeProject") return { status: "ready", summary: "Объект зафиксирован на весь ролик", assumptions: [], warnings: [], operations: freezeObjectOperations(project, state, reqs[0].target.logicalObjectId!) };
+  if (reqs[0]?.kind === "objectAnimation" && state.staticObjects?.some(o => o.logicalObjectId === reqs[0].target.logicalObjectId))
+    operations.push({type:"removeStaticObject",logicalObjectId:reqs[0].target.logicalObjectId!});
   if (task.kind === "sceneTiming")
     operations.push({
       type: "retimeScenes",
@@ -302,7 +341,8 @@ export function compileRequirement(
     });
   else {
     const r = reqs[0],
-      block = state.blocks.find((b) => b.sceneId === r.sceneId);
+      block = state.blocks.map(b=>({...b,startFrame:state.sceneAnchors?.find(a=>a.sceneId===b.sceneId)?.startFrame ?? b.startFrame})).find((b) => b.sceneId === r.sceneId) ??
+        (r.techniques.includes("objectStateTransition") ? { ...state.blocks[0], sceneId: r.sceneId!, startFrame: 0, durationFrames: state.settings.durationFrames } : undefined);
     if (!block) throw new Error("Scene interval missing");
     const own = (a: { sceneId: string; targetId: string }) =>
       a.sceneId === r.sceneId && a.targetId === r.target.sourceNodeId;
@@ -315,17 +355,39 @@ export function compileRequirement(
     if (r.timing.anchorRequirementId && !anchor)
       throw new Error("Anchor requirement has no persisted base action");
     const fps = state.settings.fps;
-    let start = r.timing.reference
-      ? anchor!.startFrame +
-        (r.timing.reference.endpoint === "end" ? anchor!.durationFrames : 0)
-      : r.timing.startSeconds !== null
-        ? Math.round(r.timing.startSeconds * fps)
-        : r.timing.relation === "afterRequirement"
-          ? anchor!.startFrame + anchor!.durationFrames
-          : r.timing.relation === "withRequirement"
-            ? anchor!.startFrame
-            : block.startFrame;
-    start += r.timing.offsetFrames ?? Math.round(r.timing.delaySeconds * fps);
+    const existingTargets = requirementAnimations(state, r);
+    const existingBase =
+      r.kind === "editAnimation" || r.effectOperation?.action === "updateTiming"
+        ? existingTargets[0]
+        : undefined;
+    const isSelfAnchor = Boolean(
+      !r.timing.anchorRequirementId && anchor &&
+        r.timing.reference?.endpoint !== "end" &&
+        (existingTargets.some((t) => t.animationId === anchor.animationId) ||
+          (r.target.sourceNodeId &&
+            anchor.targetId === r.target.sourceNodeId &&
+            r.sceneId === anchor.sceneId)),
+    );
+    const delta =
+      r.timing.offsetFrames ??
+      Math.round((r.timing.delaySeconds ?? 0) * fps);
+    let start: number;
+    if (isSelfAnchor) {
+      start = (committed.animations.find(a=>a.animationId===existingBase?.animationId)?.startFrame ?? existingBase?.startFrame ?? block.startFrame) + delta;
+    } else if (r.timing.reference) {
+      start =
+        anchor!.startFrame +
+        (r.timing.reference.endpoint === "end" ? anchor!.durationFrames : 0) +
+        delta;
+    } else if (r.timing.startSeconds !== null) {
+      start = Math.round(r.timing.startSeconds * fps) + delta;
+    } else if (r.timing.relation === "afterRequirement") {
+      start = anchor!.startFrame + anchor!.durationFrames + delta;
+    } else if (r.timing.relation === "withRequirement") {
+      start = anchor!.startFrame + delta;
+    } else {
+      start = (committed.animations.find(a=>a.animationId===existingBase?.animationId)?.startFrame ?? existingBase?.startFrame ?? block.startFrame) + delta;
+    }
     if (r.parameters.text)
       r.parameters.text = resolveTextSettings(
         r.parameters.text,
@@ -407,9 +469,13 @@ export function compileRequirement(
 
     if (
       r.effectOperation?.action === "updateTiming" &&
+      r.parameters.durationFactor == null &&
+      r.parameters.durationSeconds == null &&
       !r.timing.reference &&
       !r.timing.anchorRequirementId &&
       r.timing.startSeconds === null &&
+      r.timing.offsetFrames == null &&
+      r.timing.delaySeconds === 0 &&
       !["sceneStart", "sceneEnd"].includes(r.timing.relation)
     )
       throw new Error("TIMING_RELATION_MISSING");
@@ -421,6 +487,7 @@ export function compileRequirement(
           ? (requirementAnimations(state, r)[0]?.durationFrames ?? duration)
           : duration) +
         (r.timing.offsetFrames ?? Math.round(r.timing.delaySeconds * fps));
+    if (r.kind === "objectAnimation" && r.timing.align === "end" && r.timing.relation !== "sceneEnd") start -= duration;
     // An additional entrance Fade follows the actual base movement, not inertia.
     if (
       r.kind === "objectAnimation" &&
@@ -451,57 +518,39 @@ export function compileRequirement(
       }
     }
     const hasInertia = r.techniques.includes("inertialOvershoot");
-    if (
-      r.techniques.includes("objectStateTransition") &&
-      r.timing.startSeconds === null
-    ) {
-      const nextBlock =
-        state.blocks.find((b) => b.sceneId === r.parameters.toSceneId) ??
-        state.blocks[state.blocks.indexOf(block) + 1];
-      if (!nextBlock) throw new Error("Transition requires next source state");
-      start = nextBlock.startFrame - duration;
+    const stateTransition = r.techniques.includes("objectStateTransition");
+    if (!stateTransition && !(hasInertia && transitionForTarget(project, state, r.sceneId!, r.target.sourceNodeId!))) {
+      if (r.timing.relation === "sceneEnd") start = block.startFrame + block.durationFrames - duration;
+      if (r.timing.relation === "beforeRequirement") start = anchor!.startFrame - duration + Math.round(r.timing.delaySeconds * fps);
     }
-    if (r.timing.relation === "sceneEnd")
-      start = block.startFrame + block.durationFrames - duration;
-    if (r.timing.relation === "beforeRequirement")
-      start =
-        anchor!.startFrame - duration + Math.round(r.timing.delaySeconds * fps);
-    if (
-      start < block.startFrame ||
-      start >= block.startFrame + block.durationFrames
-    )
-      throw new Error("Requested action outside its scene");
-    const remaining = block.startFrame + block.durationFrames - start;
-    if (remaining < duration + (hasInertia ? 4 : 0)) {
-      if (r.parameters.durationSeconds !== null)
-        throw new Error("Explicit duration does not fit scene");
-      duration = Math.max(1, Math.floor(remaining * (hasInertia ? 0.35 : 0.8)));
-      warnings.push("Default entrance shortened to fit the scene");
-    }
-    if (r.techniques.includes("objectStateTransition")) {
-      const object = buildRegistry(
-        project.inspection.document,
-        project.inspection.fingerprint,
-      ).objects.find((o) => o.logicalObjectId === r.target.logicalObjectId);
-      if (!object) throw new Error("LOGICAL_OBJECT_UNRESOLVED");
-      const toSceneId =
-        r.parameters.toSceneId ??
-        state.blocks[state.blocks.indexOf(block) + 1]?.sceneId;
-      if (!toSceneId) throw new Error("TARGET_STATE_MISSING");
-      operations.push({
-        type: "animateObjectStateTransition",
-        transitionId:
-          "intent_transition_" +
-          stable([object.logicalObjectId, r.sceneId, toSceneId]),
-        logicalObjectId: object.logicalObjectId,
-        fromSceneId: r.parameters.fromSceneId ?? r.sceneId!,
-        toSceneId,
-        startFrame: start,
-        durationFrames: duration,
-        easing: r.parameters.easing ?? "easeInOutCubic",
-        proceduralEffects: [],
-        layerPolicy: { type: "switch", switchProgress: 1 },
-      });
+    if (stateTransition) {
+      let boundTransitionId:string|undefined;
+      const existing = r.kind==="editAnimation"?transitionForTarget(project, state, r.sceneId!, r.target.sourceNodeId!):undefined;
+      if (r.kind === "editAnimation") {
+        if (!existing) throw new Error("ANIMATION_NOT_FOUND: no existing logical state transition");
+        boundTransitionId=existing.transitionId;
+        if (r.effectOperation?.action === "remove") operations.push(...lowerMotionTool(project, state, { tool: "removeAnimation", animationId: existing.transitionId, dependentPolicy: r.dependentPolicy ?? "reject" }));
+        else operations.push(...lowerMotionTool(project, state, { tool: "updateAnimation", animationId: existing.transitionId, patch: {
+          ...(r.parameters.easing != null ? { easing: r.parameters.easing } : {}),
+          ...(r.parameters.durationSeconds != null ? { durationFrames: duration } : r.parameters.durationFactor != null ? { durationFrames: Math.max(1, Math.round(existing.durationFrames * r.parameters.durationFactor)) } : {}),
+          ...(r.timing.startSeconds != null ? { startFrame: start } : {}),
+        } }));
+      } else {
+        const object = buildRegistry(project.inspection.document, project.inspection.fingerprint).objects.find(o => o.logicalObjectId === r.target.logicalObjectId);
+        if (!object) throw new Error("LOGICAL_OBJECT_UNRESOLVED");
+        const sourceIndex = project.inspection.document.scenes.findIndex(s => s.sceneId === r.sceneId);
+        const toSceneId = r.parameters.toSceneId ?? project.inspection.document.scenes[sourceIndex + 1]?.sceneId;
+        if (!toSceneId) throw new Error("TARGET_STATE_MISSING");
+        boundTransitionId="intent_transition_" + stable([object.logicalObjectId, r.parameters.fromSceneId??r.sceneId, toSceneId]);
+        operations.push(...lowerMotionTool(project, state, { tool: "createStateTransition", transition: {
+          transitionId: boundTransitionId,
+          timelinePolicy: "referenceStates", logicalObjectId: object.logicalObjectId,
+          fromSceneId: r.parameters.fromSceneId ?? r.sceneId!, toSceneId,
+          startFrame: start, durationFrames: duration, easing: r.parameters.easing ?? (hasInertia?"linear":"easeInOutCubic"),
+          proceduralEffects: [], layerPolicy: { type: "switch", switchProgress: 1 },
+        }}));
+      }
+      if (hasInertia) operations.push(...compileInertiaAttachments(project, applyOperations(state, operations, project), r, true,boundTransitionId, input));
     } else if (
       r.effectOperation?.storage === "animation" &&
       r.effectOperation.action === "remove"
@@ -520,19 +569,14 @@ export function compileRequirement(
           warnings.push(
             `Связь после удалённого эффекта снята; начало оставшейся анимации сохранено на кадре ${state.animations.find((a) => a.animationId === d.animationId)?.startFrame}.`,
           );
-      operations.push(
-        ...ids.map((animationId) => ({
-          type: "removeAnimation" as const,
-          animationId,
-        })),
-      );
+      for (const animationId of ids) operations.push(...lowerMotionTool(project, state, { tool: "removeAnimation", animationId, dependentPolicy: r.dependentPolicy ?? "reject" }));
     } else if (task.kind === "editAnimation") {
       const targets = requirementAnimations(state, r);
       const expressions =
         state.expressions?.filter(
           (e) =>
             own(e) &&
-            e.enabled &&
+            (e.enabled || r.effectOperation?.storage === "expression") &&
             r.techniques.includes(e.type as IntentTechnique) &&
             (!r.expressionIds || r.expressionIds.includes(e.expressionId)) &&
             (!r.parameters.property || e.property === r.parameters.property),
@@ -543,22 +587,34 @@ export function compileRequirement(
         );
       for (const a of targets) {
         const next = structuredClone(a);
+        if (r.effectOperation?.action === "enable" || r.effectOperation?.action === "disable") {
+          next.enabled = r.effectOperation.action === "enable";
+          operations.push({ type: "updateAnimation", animationId: a.animationId, animation: next });
+          continue;
+        }
         if (r.parameters.text) next.text = r.parameters.text;
         if (
           r.timing.reference ||
           r.timing.anchorRequirementId ||
           r.timing.startSeconds !== null ||
-          r.effectOperation?.action === "updateTiming"
+          r.timing.offsetFrames != null ||
+          r.timing.delaySeconds !== 0 ||
+          (r.effectOperation?.action === "updateTiming" && r.timing.relation !== "unchanged")
         ) {
-          next.startFrame = start;
-          if (anchor)
+          const trackOffset = existingBase ? a.startFrame - existingBase.startFrame : 0;
+          next.startFrame = isSelfAnchor
+            ? (committed.animations.find(old=>old.animationId===a.animationId)?.startFrame ?? a.startFrame) + delta
+            : start + trackOffset;
+          if (anchor && !isSelfAnchor)
             operations.push({
               type: "setTimingDependency",
               dependency: {
                 dependencyId: "dependency_" + stable(a.animationId),
                 animationId: a.animationId,
                 anchorAnimationId: anchor.animationId,
-                relation: r.timing.reference
+                relation: r.timing.align === "end"
+                  ? (r.timing.reference?.endpoint === "end" || r.timing.relation === "afterRequirement" ? "endWith" : "before")
+                  : r.timing.reference
                   ? r.timing.reference.endpoint === "end"
                     ? "after"
                     : "with"
@@ -568,17 +624,11 @@ export function compileRequirement(
                       ? "before"
                       : "with",
                 offsetFrames:
-                  r.timing.offsetFrames ??
-                  Math.round(r.timing.delaySeconds * fps),
+                  (r.timing.offsetFrames ??
+                  Math.round(r.timing.delaySeconds * fps)) + trackOffset,
               },
             });
-          else
-            for (const dep of state.timingDependencies ?? [])
-              if (dep.animationId === a.animationId)
-                operations.push({
-                  type: "removeTimingDependency",
-                  dependencyId: dep.dependencyId,
-                });
+
         }
         if (requirementEasing(r)) next.easing = requirementEasing(r)!;
         if (
@@ -614,6 +664,7 @@ export function compileRequirement(
             1,
             Math.round(r.parameters.durationSeconds * fps),
           );
+        if (r.timing.align === "end" && r.timing.relation !== "sceneEnd") next.startFrame = start - next.durationFrames;
         if (
           next.effect === "keyframes" &&
           next.durationFrames !== a.durationFrames
@@ -659,10 +710,7 @@ export function compileRequirement(
       }
       for (const e of expressions) {
         if (r.expressionAction === "remove") {
-          operations.push({
-            type: "removeExpression",
-            expressionId: e.expressionId,
-          });
+          operations.push(...lowerMotionTool(project, state, { tool: "removeEffect", expressionId: e.expressionId }));
           continue;
         }
         const updated = [...operations]
@@ -675,51 +723,17 @@ export function compileRequirement(
         const next = structuredClone(
           updated?.type === "setExpression" ? updated.expression : e,
         );
-        if (r.parameters.property) next.property = r.parameters.property;
-        if (next.type === "wiggle" && r.parameters.seed != null)
-          next.parameters.seed = r.parameters.seed;
-        if (!targets.length && r.parameters.durationSeconds !== null)
-          next.durationFrames = Math.max(
-            1,
-            Math.round(r.parameters.durationSeconds * fps),
-          );
-        else if (!targets.length && r.parameters.durationFactor !== null)
-          next.durationFrames = Math.max(
-            1,
-            Math.round(next.durationFrames * r.parameters.durationFactor),
-          );
-        if (r.parameters.amplitudeFactor !== null)
-          next.parameters.amplitude *= r.parameters.amplitudeFactor;
-        else if (
-          next.type === "inertialOvershoot" &&
-          r.parameters.intensity !== null &&
-          r.parameters.intensity !== "normal" &&
-          r.parameters.amplitude === null
-        )
-          next.parameters.amplitude *=
-            inertiaIntensityDefaults[r.parameters.intensity].amplitude /
-            inertiaIntensityDefaults.normal.amplitude;
-        if (r.parameters.amplitude !== null)
-          next.parameters.amplitude = r.parameters.amplitude;
-        if (
-          "frequency" in next.parameters &&
-          r.parameters.frequencyFactor !== null
-        )
-          next.parameters.frequency *= r.parameters.frequencyFactor;
-        if ("frequency" in next.parameters && r.parameters.frequency !== null)
-          next.parameters.frequency = r.parameters.frequency;
-        if ("decay" in next.parameters && r.parameters.decay !== null)
-          next.parameters.decay = r.parameters.decay;
-        operations.push({ type: "setExpression", expression: next });
+        const edited = editExpression(next, r, state, !targets.length);
+        operations.push(...lowerMotionTool(project, state, { tool: "updateEffect", expressionId: e.expressionId, patch: { startFrame: edited.startFrame, durationFrames: edited.durationFrames, enabled: edited.enabled, parameters: edited.parameters } }));
       }
       if (
         hasInertia &&
-        r.expressionAction !== "remove" &&
+        !["remove", "disable", "enable"].includes(r.expressionAction ?? "") &&
         !r.expressionIds &&
         (targets.length > 0 || !expressions.length)
       ) {
         const candidate = applyOperations(state, operations, project);
-        operations.push(...compileInertiaAttachments(candidate, r, true));
+        operations.push(...compileInertiaAttachments(project, candidate, r, true, undefined, input));
       }
     } else {
       const requested: (IntentTechnique | "property")[] = r.techniques.filter(
@@ -755,7 +769,8 @@ export function compileRequirement(
         } else requested.push("property");
       }
       for (const effect of requested) {
-        const old = state.animations.find((a) => own(a) && a.effect === effect);
+        const sequentialCreate = r.kind === "objectAnimation" && (r.timing.startSeconds != null || r.timing.relation === "afterRequirement" && !!anchor && start >= anchor.startFrame + anchor.durationFrames);
+        const old = state.animations.find((a) => own(a) && a.effect === effect && (!sequentialCreate || a.startFrame < start + duration && a.startFrame + a.durationFrames > start));
         if (
           effect === "fadeIn" &&
           state.animations.some(
@@ -770,7 +785,7 @@ export function compileRequirement(
           throw new Error("OPACITY_ENTRANCE_CONFLICT");
         const animationId =
           old?.animationId ??
-          "intent_" + stable([r.sceneId, r.target.sourceNodeId, effect]);
+          "intent_" + stable([r.sceneId, r.target.sourceNodeId, effect, ...(sequentialCreate ? [r.requirementId] : [])]);
         const common = {
           ...(r.parameters.text ? { text: r.parameters.text } : {}),
           animationId,
@@ -807,12 +822,14 @@ export function compileRequirement(
             effect: "rotation",
             parameters: { from: 0, to: r.parameters.distance ?? 15 },
           };
-        else if (effect.startsWith("slide"))
+        else if (effect.startsWith("slide")) {
+          const vector=r.parameters.distance===null&&(r.parameters.entrance==="offscreen"||r.parameters.text?.origin==="outsideViewport")?transformedOffscreenVector(project,r.sceneId!,r.target.sourceNodeId!,effect,r.techniques.includes("fadeOut")?"out":"in"):undefined;
           a = {
             ...common,
             effect: effect as "slideUp",
             parameters: {
-              distance:
+              ...(vector?{vector}:{}),
+              distance:vector?Math.hypot(vector.x,vector.y):
                 r.parameters.distance ??
                 (r.parameters.text?.origin === "outsideViewport" ||
                 r.parameters.entrance === "offscreen" ||
@@ -824,12 +841,13 @@ export function compileRequirement(
                       r.sceneId!,
                       r.target.sourceNodeId!,
                       effect,
+                      r.techniques.includes("fadeOut") ? "out" : "in",
                     )
                   : (textLocalDistance(project, r) ?? 80)),
-              mode: "in",
+              mode: r.techniques.includes("fadeOut") ? "out" : "in",
             },
           };
-        else if (effect === "fadeIn" || effect === "fadeOut")
+        } else if (effect === "fadeIn" || effect === "fadeOut")
           a = {
             ...common,
             effect,
@@ -926,6 +944,7 @@ export function compileRequirement(
         for (const previous of state.animations.filter(
           (previous) =>
             own(previous) &&
+            (!sequentialCreate || previous.startFrame < start + duration && previous.startFrame + previous.durationFrames > start) &&
             (effect !== "fadeIn" || previous.animationId === a.animationId) &&
             (channels(previous).some((c) => writes.includes(c)) ||
               (effect === "trimPath" &&
@@ -965,7 +984,8 @@ export function compileRequirement(
                 "dependency_" + stable([a.animationId, anchor.animationId]),
               animationId: a.animationId,
               anchorAnimationId: anchor.animationId,
-              relation: (
+              relation: r.timing.align === "end" ?
+                (r.timing.reference?.endpoint === "end" || r.timing.relation === "afterRequirement" ? "endWith" : "before") : (
                 r.timing.reference
                   ? r.timing.reference.endpoint === "end"
                   : r.timing.relation === "afterRequirement"
@@ -974,60 +994,33 @@ export function compileRequirement(
                 : r.timing.relation === "beforeRequirement"
                   ? "before"
                   : "with",
-              offsetFrames: Math.round(r.timing.delaySeconds * fps),
+              offsetFrames: r.timing.offsetFrames ?? Math.round(r.timing.delaySeconds * fps),
             },
           });
       }
       if (r.techniques.includes("wiggle")) {
-        const old = state.expressions?.find(
-          (e) =>
-            own(e) &&
-            e.type === "wiggle" &&
-            (!r.parameters.property || e.property === r.parameters.property),
-        );
-        const frames = Math.min(
-          duration,
-          block.startFrame + block.durationFrames - start,
-          state.settings.durationFrames - start - 1,
-        );
-        if (frames < 1)
-          throw new Error("Wiggle requires a finite visible interval");
-        operations.push({
-          type: "setExpression",
-          expression: {
-            expressionId:
-              old?.expressionId ??
-              "intent_wiggle_" +
-                stable([
-                  r.sceneId,
-                  r.target.sourceNodeId,
-                  r.parameters.property ?? "y",
-                ]),
-            sceneId: r.sceneId!,
-            targetId: r.target.sourceNodeId!,
-            type: "wiggle",
-            property: r.parameters.property ?? "y",
-            startFrame: start,
-            durationFrames: frames,
-            enabled: true,
-            parameters: {
-              amplitude: r.parameters.amplitude ?? 10,
-              frequency: r.parameters.frequency ?? 2,
-              seed:
-                r.parameters.seed ??
-                parseInt(
-                  stable([r.sceneId, r.target.sourceNodeId]).slice(0, 7),
-                  16,
-                ),
-            },
-          },
-        });
+        operations.push(...compileWiggle(project, state, r, start, duration));
       }
       if (hasInertia) {
         const candidate = applyOperations(state, operations, project);
-        operations.push(...compileInertiaAttachments(candidate, r));
+        operations.push(...compileInertiaAttachments(project, candidate, r, false, undefined, input));
       }
     }
+  }
+  const r = reqs[0], fps = state.settings.fps;
+  if(task.kind==="sceneTiming")for(const requirement of reqs.filter(r=>r.timing.startUnit))operations.push({type:"setTimingOrigin",origin:{entity:"scene",id:requirement.sceneId!,basis:"semantic",start:{unit:requirement.timing.startUnit??"seconds",value:requirement.timing.startUnit==="frames"?Math.round(requirement.timing.startSeconds!*fps):requirement.timing.startSeconds!}}});
+
+  for (const op of [...operations]) {
+    if(!r.timing.startUnit && !r.timing.delayUnit)continue;
+    if(op.type === "addAnimation" || op.type === "updateAnimation" || op.type === "setExpression" || op.type === "animateObjectStateTransition") {
+      const item=op.type === "animateObjectStateTransition" ? op : op.type === "setExpression" ? op.expression : op.animation;
+      const entity=op.type === "animateObjectStateTransition" ? "transition" as const : op.type === "setExpression" ? "expression" as const : "animation" as const;
+      const id="animationId" in item ? item.animationId : "expressionId" in item ? item.expressionId : item.transitionId;
+      if(op.type !== "updateAnimation")operations.push({type:"setTimingOrigin",origin:{entity,id,basis:"semantic",
+        start:{unit:r.timing.startUnit??"seconds",value:r.timing.startUnit==="frames"?item.startFrame:item.startFrame/fps},
+        duration:{unit:"seconds",value:item.durationFrames/fps}}});
+    }
+    if(op.type === "setTimingDependency")operations.push({type:"setTimingOrigin",origin:{entity:"dependency",id:op.dependency.dependencyId,basis:"semantic",offset:{unit:r.timing.delayUnit??"seconds",value:r.timing.delayUnit==="frames"?(r.timing.frameDelay??op.dependency.offsetFrames):op.dependency.offsetFrames/fps,...(r.timing.frameDelay!=null?{secondsOffset:(op.dependency.offsetFrames-r.timing.frameDelay)/fps}:{})}}});
   }
   return {
     status: "ready",
@@ -1039,24 +1032,50 @@ export function compileRequirement(
 }
 /** Shared creation path for standalone and compound edits, evaluated after base edits. */
 function compileInertiaAttachments(
+  project: LoadedProject,
   state: MotionState,
   r: IntentRequirement,
   missingOnly = false,
+  boundTransitionId?:string,
+  intent?: IntentPlan,
 ): Plan["operations"] {
+  const transition = boundTransitionId?state.objectTransitions?.find(t=>t.transitionId===boundTransitionId):transitionForTarget(project, state, r.sceneId!, r.target.sourceNodeId!);
+  if (transition && r.targetScope !== "instance") {
+    const end = transition.startFrame + transition.durationFrames;
+    const settle = Math.max(4, Math.round(1.2 * state.settings.fps));
+    if (settle < 4) throw new TimelineConstraintError(end + Math.round(1.2 * state.settings.fps) + 1, state.settings.durationFrames, [transition.transitionId]);
+    const defaults = inertiaIntensityDefaults[r.parameters.intensity ?? "normal"];
+    const geometry = statePresentation(project, state)[transition.logicalObjectId];
+    const object=buildRegistry(project.inspection.document,project.inspection.fingerprint).objects.find(o=>o.logicalObjectId===transition.logicalObjectId)!;
+    const source=resolveState(project.inspection.document,object,transition.fromSceneId);
+    return (["x", "y"] as const).filter(property => (!r.parameters.property || r.parameters.property === property) && Math.abs(geometry[transition.toSceneId].normalized[property === "x" ? 0 : 1][2] - geometry[transition.fromSceneId].normalized[property === "x" ? 0 : 1][2]) > 1e-8).flatMap(property => {
+      const existing = state.expressions?.find(e => e.type === "inertialOvershoot" && e.transitionId === transition.transitionId && e.property === property);
+      if (missingOnly && existing) return [];
+      return [{ type: "setExpression" as const, expression: {
+        expressionId: existing?.expressionId ?? "intent_inertia_" + stable([transition.transitionId, property]),
+        transitionId: transition.transitionId, ownership: { scope: "transition" as const, logicalObjectId: transition.logicalObjectId },
+        sceneId: transition.fromSceneId, targetId: source.sourceNodeId, property, type: "inertialOvershoot" as const,
+        sourceAnimationId: transition.transitionId, startFrame: end, durationFrames: settle, enabled: true,
+        parameters: { mode: "ae" as const, settlingEnvelope: "smoothTail" as const, amplitude: r.parameters.amplitude ?? defaults.amplitude, frequency: r.parameters.frequency ?? defaults.frequency, decay: r.parameters.decay ?? defaults.decay, velocityLookbackFrames: 6 },
+      } }];
+    });
+  }
   const base = resolveBaseMotion(state, r.sceneId!, r.target.sourceNodeId!);
-  if (base.status !== "RESOLVED") throw new Error(base.status);
-  const block = state.blocks.find((b) => b.sceneId === r.sceneId)!;
+  if (base.status !== "RESOLVED") throw new Error(`${base.status}: inertialOvershoot on ${r.sceneId}/${r.target.sourceNodeId} requires an enabled finite Position track; inspected ${base.checkedTracks.map(t => t.animationId).join(", ") || "none"}`);
   const operations: Plan["operations"] = [];
   for (const track of base.tracks) {
-    const settle = Math.min(
-      Math.round(1.2 * state.settings.fps),
-      block.startFrame + block.durationFrames - track.endFrame - 1,
-      state.settings.durationFrames - track.endFrame - 1,
-    );
-    if (settle < 4)
-      throw new Error(
-        "UNSUPPORTED_COMPOUND_EDIT: Insufficient settling interval after Position",
-      );
+    // Figma reference blocks do not bound global-time effects. Match the
+    // transition inertia lifetime; output range is handled by timeline policy.
+    const nextTransition = (state.objectTransitions ?? []).filter(t =>
+      t.logicalObjectId === r.target?.logicalObjectId && t.fromSceneId === r.sceneId && t.startFrame >= track.endFrame)
+      .sort((a,b) => a.startFrame-b.startFrame)[0];
+    const plannedStarts = (intent?.requirements ?? []).filter(next =>
+      next.techniques.includes("objectStateTransition") && next.target?.logicalObjectId === r.target?.logicalObjectId &&
+      next.parameters.fromSceneId === r.sceneId && next.timing.startSeconds != null)
+      .map(next => Math.round(next.timing.startSeconds! * state.settings.fps)).filter(start => start >= track.endFrame);
+    const handoff = Math.min(nextTransition?.startFrame ?? Infinity, ...plannedStarts);
+    const settle = Math.min(Math.max(4, Math.round(1.2 * state.settings.fps)), handoff-track.endFrame);
+    if (settle < 4) throw new Error("UNSUPPORTED_COMPOUND_EDIT: Insufficient settling interval before next transition");
     for (const property of track.properties) {
       if (r.parameters.property && property !== r.parameters.property) continue;
       const a = track.animation;
@@ -1106,6 +1125,7 @@ function compileInertiaAttachments(
   return operations;
 }
 export function validateRequirement(state: MotionState, r: IntentRequirement) {
+  if (r.motionAction === "freezeProject") return [{ name: "staticLifetime", status: state.staticObjects?.some(o => o.logicalObjectId === r.target.logicalObjectId) ? "PASSED" : "FAILED" }];
   if (r.kind === "unsupported" || r.unresolvedReason)
     return [
       {
@@ -1118,7 +1138,7 @@ export function validateRequirement(state: MotionState, r: IntentRequirement) {
     return [
       {
         name: "sceneTiming",
-        status: state.blocks.some(
+        status: (state.sceneAnchors ?? state.blocks).some(
           (b) =>
             b.sceneId === r.sceneId &&
             b.startFrame ===
@@ -1135,7 +1155,7 @@ export function validateRequirement(state: MotionState, r: IntentRequirement) {
         ? state.objectTransitions?.some(
             (t) =>
               t.logicalObjectId === r.target.logicalObjectId &&
-              t.fromSceneId === r.sceneId &&
+              [t.fromSceneId, t.toSceneId].includes(r.sceneId!) &&
               (!r.parameters.toSceneId ||
                 t.toSceneId === r.parameters.toSceneId),
           )

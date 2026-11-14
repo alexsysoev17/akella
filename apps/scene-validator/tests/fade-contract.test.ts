@@ -324,7 +324,7 @@ test("adapter/parser/compiler/executor adds five Fades in one call after context
       5,
     );
     assert.deepEqual(final.state.expressions, weakState.state.expressions);
-    assert.equal(calls, 3);
+    assert.equal(calls, 2, "two Fade interpretations; intervening amplitude edit is local");
     console.log(
       JSON.stringify({
         fixture: "fade wire E2E",
@@ -436,7 +436,7 @@ test("invalid provider enum commits zero changes and creates no successful actio
       recentSuccessfulActions(after),
       recentSuccessfulActions(before),
     );
-    assert.equal(calls, 1);
+    assert.equal(calls, 2); // Primary rejection + one reserved semantic repair. Invalid enum alone must not invoke source investigation.
   } finally {
     stop();
     await f.cleanup();

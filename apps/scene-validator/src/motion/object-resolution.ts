@@ -17,6 +17,7 @@ export interface ObjectCandidate {
   resolutionMethod: string;
   existingAnimationIds: string[];
   existingExpressionIds: string[];
+  existingTransitionIds: string[];
 }
 export interface ObjectResolution {
   status: "RESOLVED" | "AMBIGUOUS_TARGET" | "TARGET_UNRESOLVED";
@@ -39,6 +40,7 @@ export function resolveObjectReference(
     selectedObjectId?: string;
     techniques?: string[];
     preferExisting?: boolean;
+    allowLogicalFallback?: boolean;
   },
 ): ObjectResolution {
   const registry = buildRegistry(
@@ -89,6 +91,7 @@ export function resolveObjectReference(
             : (nameMatch ??
               objectNameMatch(o.name, reference) ??
               "morphological"),
+          existingTransitionIds: (state.objectTransitions ?? []).filter(t => t.logicalObjectId === logical?.logicalObjectId && (!input.techniques?.length || input.techniques.some(t => ["objectStateTransition", "inertialOvershoot", "wiggle"].includes(t)))).map(t => t.transitionId),
           existingAnimationIds: state.animations
             .filter(
               (a) =>
@@ -106,8 +109,7 @@ export function resolveObjectReference(
             .filter(
               (e) =>
                 e.enabled &&
-                e.sceneId === o.sceneId &&
-                e.targetId === o.targetId &&
+                ((e.sceneId === o.sceneId && e.targetId === o.targetId) || e.ownership?.scope === "logicalObject" && e.ownership.logicalObjectId === logical?.logicalObjectId) &&
                 (!input.techniques?.length ||
                   input.techniques.includes(e.type)),
             )
@@ -115,6 +117,20 @@ export function resolveObjectReference(
         },
       ];
     });
+  if (input.allowLogicalFallback && candidates.length === 1 &&
+      !candidates[0].existingAnimationIds.length && !candidates[0].existingExpressionIds.length &&
+      candidates[0].logicalObjectId) {
+    const logical = candidates[0].logicalObjectId;
+    const alternatives = resolveObjectReference(project, state, {
+      referenceText: input.referenceText, logicalObjectId: logical,
+      techniques: input.techniques, preferExisting: true,
+    });
+    const applicable = alternatives.candidates.filter(c => c.existingAnimationIds.length || c.existingExpressionIds.length);
+    if (applicable.length) {
+      rejected.push({ candidate: candidates[0], reason: "selected-instance-has-no-compatible-motion" });
+      candidates = applicable.map(c => ({ ...c, resolutionMethod: "logical-existing-motion" }));
+    }
+  }
   const restrict = (
     reason: string,
     test: (c: ObjectCandidate) => boolean,
@@ -128,25 +144,35 @@ export function resolveObjectReference(
       candidates = matched;
     }
   };
-  if (input.sceneId)
+  if (input.sceneId && !input.allowLogicalFallback)
     restrict("requested-scene", (c) => c.sceneId === input.sceneId, true);
   // Never use registry order or spelling similarity to guess among canonical instances.
   // Alias-equivalent canonical spellings remain ambiguous unless state/selection disambiguates.
   if (candidates.length > 1 && input.selectedObjectId)
     restrict(
       "selected-object",
-      (c) => c.sourceNodeId === input.selectedObjectId,
+      (c) => c.sourceNodeId === input.selectedObjectId && (!input.preferExisting ||
+        Boolean(c.existingAnimationIds.length || c.existingExpressionIds.length || c.existingTransitionIds.length)),
     );
   if (candidates.length > 1 && input.preferExisting)
     restrict("existing-motion", (c) =>
-      Boolean(c.existingAnimationIds.length || c.existingExpressionIds.length),
+      Boolean(c.existingAnimationIds.length || c.existingExpressionIds.length || c.existingTransitionIds.length),
     );
-  if (candidates.length > 1 && input.activeSceneId)
+  if (candidates.length > 1 && input.activeSceneId && !input.allowLogicalFallback)
     restrict("active-scene", (c) => c.sceneId === input.activeSceneId);
   if (candidates.length > 1 && input.techniques?.length)
     restrict("existing-technique", (c) =>
-      Boolean(c.existingAnimationIds.length || c.existingExpressionIds.length),
+      Boolean(c.existingAnimationIds.length || c.existingExpressionIds.length || c.existingTransitionIds.length),
     );
+  // Collapse references to ONE authoritative transition, never independent same-name tracks.
+  if (candidates.length > 1 && !input.sceneId && !input.sourceNodeId &&
+      candidates.every(c => c.logicalObjectId === candidates[0].logicalObjectId && c.existingTransitionIds.length === 1) &&
+      new Set(candidates.flatMap(c => c.existingTransitionIds)).size === 1 &&
+      candidates.every(c => !c.existingAnimationIds.length)) {
+    const t = state.objectTransitions!.find(t => t.transitionId === candidates[0].existingTransitionIds[0])!;
+    const representative = candidates.find(c => c.sceneId === t.fromSceneId)!;
+    candidates = [{ ...representative, resolutionMethod: "unique-logical-transition" }];
+  }
   const status =
     candidates.length === 1
       ? "RESOLVED"
@@ -184,8 +210,13 @@ export function resolveExistingAnimation(
       e.targetId === target.sourceNodeId &&
       techniques.includes(e.type),
   );
+  const transitions = (state.objectTransitions ?? []).filter(t => t.logicalObjectId === target.logicalObjectId && techniques.includes("objectStateTransition"));
   return {
+    transitions,
     status:
+      transitions.length === 1 ||
+      (animations.length === 0 && expressions.length > 0 &&
+       new Set(expressions.map(e => `${e.type}/${e.property}`)).size === expressions.length) ||
       animations.length + expressions.length === 1
         ? "RESOLVED"
         : animations.length + expressions.length

@@ -1,84 +1,35 @@
+import {dependencyStart} from "../time.js";
 import type { MotionState } from "../schema.js";
-/** Retimes a group of explicit scene starts atomically. Unspecified starts remain fixed.
- * Intervals follow existing block order; scene-local tracks shift together. Shortened
- * scenes compress existing intervals consistently, rather than leaving stale frames. */
-export function retimeScenes(
-  state: MotionState,
-  starts: { sceneId: string; startFrame: number }[],
-) {
-  const before = structuredClone(state.blocks),
-    ordered = [...state.blocks].sort((a, b) => a.startFrame - b.startFrame);
-  const seen = new Set<string>();
-  for (const ref of starts) {
-    if (seen.has(ref.sceneId)) throw new Error("Duplicate scene timing");
+/** Retimes organizational anchors atomically without compressing motion intervals.
+ * Associated tracks shift together; visible blocks follow only when representable. */
+export function retimeScenes(state:MotionState, starts:{sceneId:string;startFrame:number}[]) {
+  const before=structuredClone(state), seen=new Set<string>();
+  const ordered=[...state.blocks].sort((a,b)=>a.startFrame-b.startFrame);
+  for(const ref of starts){
+    if(seen.has(ref.sceneId))throw new Error("Duplicate scene timing");
     seen.add(ref.sceneId);
-    const blocks = ordered.filter((b) => b.sceneId === ref.sceneId);
-    if (blocks.length !== 1)
-      throw new Error("Scene timing requires one unambiguous block");
-    blocks[0].startFrame = ref.startFrame;
+    if(ordered.filter(b=>b.sceneId===ref.sceneId).length!==1)throw new Error("Scene timing requires one unambiguous block");
   }
-  if (ordered[0].startFrame !== 0)
-    throw new Error("First scene must start at frame zero");
-  for (let i = 0; i < ordered.length; i++) {
-    const b = ordered[i],
-      next = ordered[i + 1];
-    if (next && next.startFrame <= b.startFrame)
-      throw new Error("Scene starts must preserve storyboard order");
-    if (b.startFrame >= state.settings.durationFrames)
-      throw new Error("Scene start outside project duration");
-    const duration =
-      (next?.startFrame ?? state.settings.durationFrames) - b.startFrame;
-    if (b.transition.durationFrames >= duration)
-      b.transition = { type: "cut", durationFrames: 0 };
-    b.durationFrames = duration + (next ? b.transition.durationFrames : 0);
+  state.sceneAnchors=[...(state.sceneAnchors ?? []).filter(a=>!seen.has(a.sceneId)),...starts];
+  const proposed=ordered.map(b=>({...b,startFrame:starts.find(r=>r.sceneId===b.sceneId)?.startFrame ?? b.startFrame}));
+  // Organizational anchors can lie anywhere. Adjust default presentation only
+  // where the existing contiguous video-block representation can express it.
+  const visual=proposed[0]?.startFrame===0 && proposed.every((b,i)=>b.startFrame>=0&&b.startFrame<state.settings.durationFrames&&(!i||b.startFrame>proposed[i-1].startFrame));
+  if(visual) for(let i=0;i<proposed.length;i++){
+    const b=proposed[i], next=proposed[i+1], duration=(next?.startFrame??state.settings.durationFrames)-b.startFrame;
+    if(b.transition.durationFrames>=duration)b.transition={type:"cut",durationFrames:0};
+    b.durationFrames=duration+(next?b.transition.durationFrames:0);
+    Object.assign(state.blocks.find(x=>x.blockId===b.blockId)!,b);
   }
-  for (const old of before) {
-    const next = ordered.find((b) => b.blockId === old.blockId)!;
-    const scale = Math.min(1, next.durationFrames / old.durationFrames),
-      delta = next.startFrame - old.startFrame;
-    const map = (frame: number) =>
-      next.startFrame + Math.round((frame - old.startFrame) * scale);
-    if (!delta && scale === 1) continue;
-    for (const a of state.animations.filter((a) => a.sceneId === old.sceneId)) {
-      const end = map(a.startFrame + a.durationFrames);
-      a.startFrame = Math.max(0, map(a.startFrame));
-      a.durationFrames = Math.max(1, end - a.startFrame);
-      if (a.effect === "keyframes") {
-        a.parameters.points = a.parameters.points.map((k) => ({
-          ...k,
-          frame: Math.round(k.frame * scale),
-        }));
-        if (
-          a.parameters.points.some(
-            (k, i) => i && k.frame <= a.parameters.points[i - 1].frame,
-          )
-        )
-          throw new Error("Retiming collapses keyframe intervals");
-      }
-    }
-    for (const e of state.expressions?.filter(
-      (e) => e.sceneId === old.sceneId,
-    ) ?? []) {
-      const end = map(e.startFrame + e.durationFrames);
-      e.startFrame = Math.max(0, map(e.startFrame));
-      e.durationFrames = Math.max(1, end - e.startFrame);
-      if (e.type === "inertialOvershoot")
-        e.parameters.velocityLookbackFrames = Math.min(
-          e.parameters.velocityLookbackFrames,
-          state.animations.find((a) => a.animationId === e.sourceAnimationId)
-            ?.durationFrames ?? 1,
-        );
-    }
-    for (const t of state.objectTransitions?.filter(
-      (t) => t.fromSceneId === old.sceneId,
-    ) ?? []) {
-      const end = map(t.startFrame + t.durationFrames);
-      t.startFrame = Math.max(0, map(t.startFrame));
-      t.durationFrames = Math.max(1, end - t.startFrame);
-    }
+  for(const ref of starts){
+    const old=before.sceneAnchors?.find(a=>a.sceneId===ref.sceneId)?.startFrame ?? before.blocks.find(b=>b.sceneId===ref.sceneId)!.startFrame;
+    const delta=ref.startFrame-old;
+    for(const a of state.animations.filter(a=>a.sceneId===ref.sceneId))a.startFrame+=delta;
+    for(const e of state.expressions?.filter(e=>e.sceneId===ref.sceneId) ?? [])e.startFrame+=delta;
+    for(const t of state.objectTransitions?.filter(t=>t.fromSceneId===ref.sceneId) ?? [])t.startFrame+=delta;
   }
 }
-export function resolveTimingDependencies(state: MotionState) {
+export function resolveTimingDependencies(state: MotionState, explicitStarts = new Set<string>(), explicitEdges = new Set<string>()) {
   const edges = state.timingDependencies ?? [],
     byTarget = new Map(edges.map((d) => [d.animationId, d.anchorAnimationId]));
   const visited = new Set<string>(),
@@ -115,19 +66,27 @@ export function resolveTimingDependencies(state: MotionState) {
       );
     if (!a || !anchor)
       throw new Error("Timing dependency refers to a missing animation");
-    const start =
-      anchor.startFrame +
-      (d.relation === "after"
-        ? anchor.durationFrames
-        : d.relation === "before"
-          ? -a.durationFrames
-          : 0) +
-      d.offsetFrames;
-    if (start < 0) throw new Error("Timing dependency precedes project");
-    const delta = start - a.startFrame;
+    // Resolve the parent first, then derive an explicitly moved child offset.
+    // This also handles a group whose selected members skip an intermediate node.
+    if (explicitStarts.has(a.animationId) && !explicitEdges.has(d.dependencyId))
+      d.offsetFrames = a.startFrame - dependencyStart(a, anchor, d.relation, 0);
+    const start = dependencyStart(a, anchor, d.relation, d.offsetFrames);
     a.startFrame = start;
-    for (const e of state.expressions ?? [])
-      if ("sourceAnimationId" in e && e.sourceAnimationId === a.animationId)
-        e.startFrame += delta;
+
+  }
+}
+
+/** Attached effects retain their source-relative offset across direct and transitive edits. */
+export function reanchorExpressions(state: MotionState, before: MotionState, skip = new Set<string>()) {
+  const tracks = (s: MotionState) => new Map<string, {startFrame:number;durationFrames:number}>([...s.animations.map(a=>[a.animationId,a] as const), ...(s.objectTransitions ?? []).map(t=>[t.transitionId,t] as const)]);
+  const oldTracks=tracks(before), nextTracks=tracks(state);
+  for (const e of state.expressions ?? []) {
+    const sourceId=e.textBinding?.animationId??("sourceAnimationId"in e?e.sourceAnimationId:undefined);if(!sourceId||skip.has(e.expressionId))continue;
+    const old = before.expressions?.find(x=>x.expressionId===e.expressionId);
+    const from=oldTracks.get(sourceId), to=nextTracks.get(sourceId);
+    if (!old || !from || !to) continue;
+    if(e.textBinding){const ratio=to.durationFrames/from.durationFrames;if(e.textBinding.phase==='withTrack'){e.startFrame=Math.round(to.startFrame+(old.startFrame-from.startFrame)*ratio);e.durationFrames=Math.max(1,Math.round(old.durationFrames*ratio));}else e.startFrame=old.startFrame+to.startFrame-from.startFrame+to.durationFrames-from.durationFrames;continue;}
+    const endAnchor=e.type==="inertialOvershoot" && old.startFrame>=from.startFrame+from.durationFrames;
+    e.startFrame=old.startFrame + to.startFrame-from.startFrame + (endAnchor?to.durationFrames-from.durationFrames:0);
   }
 }

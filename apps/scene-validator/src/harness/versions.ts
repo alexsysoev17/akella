@@ -1,18 +1,97 @@
+import { duringStage } from "./failure.js";
 import { readFile } from "node:fs/promises";
 import { digest } from "./context.js";
 const components = [
   "files",
+  "runtime-code",
   "source",
   "harness/providers/budget",
   "harness/providers/codex",
   "harness/qualification",
+  "harness/recovery/config",
+  "motion/intent/semantic-patch",
+  "harness/recovery/jobs",
+  "harness/recovery/source-reader",
+  "harness/recovery/supervisor",
+  "harness/recovery/supervisor-memory",
+  "harness/recovery/source-routing",
+  "harness/recovery/provider-runtime",
+  "harness/recovery/failure",
+  "harness/recovery/runtime",
+  "harness/recovery/memory",
+  "harness/recovery/code-repair",
+  "harness/recovery/code-service",
+  "harness/recovery/promotion",
+  "harness/recovery/replay",
+  "harness/recovery/resume",
   "motion-library/guidance",
   "motion/store",
+  "motion/incremental-patch",
+  "motion/production-source", "motion/task-complexity", "motion/text-segment", "motion/transition-groups", "motion/production-contract", "motion/production-plan", "motion/production-models", "motion/production-runtime", "motion/agent-policy", "motion/agent-runtime", "motion/direct-checkpoint", "motion/working-revision", "motion-library/expressions/program",
+  "motion/anchor",
+  "motion/anchor-contract",
+  "motion/anchor-edit",
+  "motion/anchor-language",
+  "motion/anchor-service",
+  "motion/tools",
+  "motion/brand-knowledge", "motion/model-policy", "motion/motion-observations",
+  "motion/procedural-conversion", "motion/inertia-tuning", "motion-library/easings/handoff",
+  "motion/constraints",
+  "motion/intervals",
+  "motion/time",
+  "motion/project-time",
+  "motion/text-clearance",
+  "harness/providers/codex-stream-proxy.mjs",
+  "motion/presentation-lifetime",
+  "motion/transition-runtime",
+  "native/composition-qa",
+  "native/skill-coverage",
+  "motion-library/skills/registry",
+  "motion-library/skills/handoff",
+  "motion-library/skills/contracts",
+  "motion-library/skills/runtime",
+  "harness/recovery/source-context",
+  "motion/tool-runtime",
+  "motion/effect-edit",
+  "motion/incremental-edit",
+  "motion/rules",
+  "motion/rule-contract",
+  "motion/rule-qa",
+  "motion-library/skills/rule-skills",
+  "motion/validate-expressions",
+  "motion/transition-runtime",
+  "native/composition-qa",
+  "native/skill-coverage",
+  "motion-library/skills/registry",
+  "motion-library/skills/handoff",
+  "motion-library/skills/contracts",
+  "motion-library/skills/runtime",
+  "motion/transition-effects",
   "motion/service",
   "motion/geometry",
   "motion/intent/retime",
   "motion/qa/policy",
+  "motion/qa/failure",
+  "motion/intent/repair-context",
+  "motion/intent/temporal-evidence",
   "motion/engine",
+  "motion/evaluation",
+  "motion/video",
+  "motion/video-browser",
+  "native/skia",
+  "native/font-index",
+  "native/fonts",
+  "native/paths",
+  "native/text",
+  "native/renderer",
+  "native/worker",
+  "native/client",
+  "native/service",
+  "native/preview",
+  "native/quality",
+  "native/qa",
+  "native/reconstruct",
+
   "motion/sampling",
   "motion/expressions",
   "motion-library/expressions/functions",
@@ -60,28 +139,40 @@ const components = [
   "motion/intent/execution",
   "motion-library/registry/path-capability",
   "harness/context",
+  "harness/semantic-context",
+  "harness/context-packing",
+  "harness/failure",
   "harness/selector-context",
   "harness/runtime",
   "harness/qa",
   "harness/config",
 ];
-export async function codeVersions() {
-  return await Promise.all(
-    components.map(async (id) => {
-      let content: string;
-      try {
-        content = await readFile(
-          new URL("../" + id + ".ts", import.meta.url),
-          "utf8",
-        );
-      } catch (e) {
-        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-        content = await readFile(
-          new URL("../" + id + ".js", import.meta.url),
-          "utf8",
-        );
-      }
-      return { id: "code:" + id, version: digest(content) };
-    }),
+export async function codeVersions(
+  base = new URL("../", import.meta.url),
+  ids: readonly string[] = components,
+) {
+  return await duringStage("source-versions", () =>
+    Promise.all(
+      ids.map(async (id) => {
+        let content: string;
+        try {
+          content = await readFile(new URL(id.endsWith(".mjs")?id:id + ".ts", base), "utf8");
+        } catch (e) {
+          if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+          try {
+            content = await readFile(new URL(id + ".js", base), "utf8");
+          } catch (error) {
+            const code =
+              (error as NodeJS.ErrnoException).code === "ENOENT"
+                ? "SOURCE_VERSION_REQUIRED_MISSING"
+                : "SOURCE_VERSION_READ_FAILED";
+            throw Object.assign(new Error(code + ": " + id, { cause: error }), {
+              code,
+            });
+          }
+        }
+        return { id: "code:" + id, version: digest(content) };
+      }),
+    ),
   );
 }

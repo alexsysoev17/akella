@@ -1,4 +1,5 @@
 export interface ProjectConfig {
+  figmaSource?: FigmaSourceLink;
   schemaVersion: "1.0.0";
   projectId: string;
   name: string;
@@ -13,6 +14,19 @@ export interface ProjectConfig {
     sourceFingerprint: string;
     files: number;
   }[];
+}
+/** Provenance only. Credentials and temporary asset URLs never belong here. */
+export interface FigmaSourceLink {
+  version: 1;
+  fileKey: string;
+  fileUrl: string;
+  pageId: string;
+  pageName: string;
+  sectionId: string;
+  sectionName: string;
+  frameIds: string[];
+  capturedAt: string;
+  transport: "figma-mcp";
 }
 export interface Asset {
   assetId: string;
@@ -55,6 +69,15 @@ export interface LoadedProject {
   scenePath: string;
   sourceRoot: string;
   inspection: SourceInspection;
+  /** Derived native evidence only; never serialized into source or motion.json. */
+  nativeTextPose?: NativeTextPoseProof;
+}
+export interface NativeTextPoseProof {
+  version: 'native-text-pose/1';
+  sourceFingerprint: string;
+  fontFilesDigest: string | null;
+  groups: Record<string, { width: number; height: number; shapeDigest: string; inkDigest: string; refs: {sceneId:string;sourceNodeId:string}[] }>;
+  diagnostics: {logicalObjectId:string;reason:string}[];
 }
 export interface ValidationReport {
   schemaVersion: "1.0.0";

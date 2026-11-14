@@ -1,3 +1,4 @@
+import { agentPolicy, type AgentValidationMode } from './agent-policy.js';
 import { ensureRegistry } from "./registry.js";
 import { isDeepStrictEqual } from "node:util";
 import { createHash, randomUUID } from "node:crypto";
@@ -13,12 +14,16 @@ import {
 } from "../files.js";
 import { loadProject } from "../project.js";
 import type { LoadedProject } from "../types.js";
+import {prepareNativeTextPose} from '../native/client.js';
 import { defaultMotion } from "./context.js";
 import { motionSchema, operationsSchema, type MotionState } from "./schema.js";
 import { applyOperations, motionDiff, validateMotion } from "./operations.js";
 const entry = z
   .object({
     editId: z.string(),
+    transactionId:z.string().uuid().optional(),
+    operationsDigest:z.string().optional(),
+    requestFingerprint:z.string().optional(),
     createdAt: z.string(),
     request: z.string(),
     origin: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
@@ -53,6 +58,7 @@ export type MotionDocument = z.infer<typeof documentSchema>;
 export async function readMotion(
   project: LoadedProject,
 ): Promise<MotionDocument> {
+  await prepareNativeTextPose(project);
   await ensureRegistry(project);
   const file = path.join(project.root, "motion/motion.json");
   if (!(await exists(file)))
@@ -64,11 +70,54 @@ export async function readMotion(
       cursor: 0,
       history: [],
     };
-  await noSymlinkPath(project.root, file);
-  const doc = documentSchema.parse(JSON.parse(await readFile(file, "utf8")));
-  if (doc.cursor > doc.history.length)
-    throw new Error("Повреждён курсор истории motion");
-  doc.sourceDiagnostics = [];
+  let doc: MotionDocument;
+  let recoveredFromCorruption = false;
+  try {
+    await noSymlinkPath(project.root, file);
+    const parsed = documentSchema.parse(JSON.parse(await readFile(file, "utf8")));
+    if (parsed.cursor > parsed.history.length) {
+      parsed.cursor = parsed.history.length;
+      parsed.sourceDiagnostics = [
+        "Повреждённый курсор истории motion был сброшен на последний коммит.",
+      ];
+    }
+    doc = parsed;
+  } catch {
+    const bakFile = path.join(project.root, "motion/motion.json.bak");
+    if (await exists(bakFile)) {
+      try {
+        await noSymlinkPath(project.root, bakFile);
+        doc = documentSchema.parse(JSON.parse(await readFile(bakFile, "utf8")));
+        recoveredFromCorruption = true;
+      } catch {
+        doc = {
+          documentVersion: "1.0.0",
+          revision: "initial",
+          sourceFingerprint: project.inspection.fingerprint,
+          state: defaultMotion(project),
+          cursor: 0,
+          history: [],
+        };
+        recoveredFromCorruption = true;
+      }
+    } else {
+      doc = {
+        documentVersion: "1.0.0",
+        revision: "initial",
+        sourceFingerprint: project.inspection.fingerprint,
+        state: defaultMotion(project),
+        cursor: 0,
+        history: [],
+      };
+      recoveredFromCorruption = true;
+    }
+  }
+  doc.sourceDiagnostics ??= [];
+  if (recoveredFromCorruption) {
+    doc.sourceDiagnostics.push(
+      "Файл motion.json был повреждён или имел неверный формат. Загружен безопасный снимок состояния.",
+    );
+  }
   try {
     validateMotion(doc.state, project);
   } catch (error) {
@@ -100,11 +149,15 @@ export async function changeMotion(
   projectPath: string,
   input: {
     expectedRevision: string;
+    signal?:AbortSignal;
+    checkpoint?:()=>void;
+    agentValidationMode?: AgentValidationMode;
     expectedSourceFingerprint?: string;
     operations?: unknown;
     operationBatches?: unknown[];
     expectedCandidate?: MotionState;
     transactionId?: string;
+    requestFingerprint?:string;
     action?: "undo" | "redo";
     request: string;
     origin?: z.infer<typeof entry>["origin"];
@@ -114,6 +167,7 @@ export async function changeMotion(
 ) {
   const unlock = await lockProject(projectPath);
   try {
+    input.signal?.throwIfAborted();input.checkpoint?.();
     const project = await loadProject(projectPath),
       doc = await readMotion(project);
     if (
@@ -129,11 +183,18 @@ export async function changeMotion(
       .digest("hex");
     if (
       input.transactionId &&
-      doc.lastCommit?.transactionId === input.transactionId
+      doc.lastCommit?.transactionId === input.transactionId && !doc.history.some(e=>e.transactionId===input.transactionId)
     ) {
       if (doc.lastCommit.operationsDigest !== operationsDigest)
         throw new Error("TRANSACTION_ID_REUSED_WITH_DIFFERENT_OPERATIONS");
       return { document: doc, diff: [], replayed: true };
+    }
+    const previousTransaction=input.transactionId?doc.history.findIndex(e=>e.transactionId===input.transactionId):-1;
+    if(previousTransaction>=0){
+      const entry=doc.history[previousTransaction];
+      if(entry.operationsDigest!==operationsDigest || entry.requestFingerprint!==input.requestFingerprint)throw Error('TRANSACTION_ID_REUSED_WITH_DIFFERENT_OPERATIONS');
+      if(previousTransaction>=doc.cursor)throw Error('TRANSACTION_ALREADY_UNDONE');
+      return {document:doc,diff:[],replayed:true};
     }
     if (input.expectedRevision !== doc.revision)
       throw Object.assign(
@@ -143,6 +204,7 @@ export async function changeMotion(
         { code: "STALE_PROJECT_REVISION" },
       );
     const before = structuredClone(doc.state);
+    let ruleQAReused=false;
     if (input.action) {
       if (input.action === "undo") {
         if (!doc.cursor) throw new Error("Нет изменений для отмены");
@@ -167,6 +229,7 @@ export async function changeMotion(
       doc.history = doc.history.slice(0, doc.cursor);
       doc.history.push({
         editId: randomUUID(),
+        ...(input.transactionId?{transactionId:input.transactionId,operationsDigest,requestFingerprint:input.requestFingerprint}:{}),
         createdAt: new Date().toISOString(),
         request: input.request.slice(0, 20000),
         origin: input.origin ?? "manual",
@@ -179,6 +242,11 @@ export async function changeMotion(
       doc.cursor = doc.history.length;
     }
     validateMotion(doc.state, project);
+    if(doc.state.skillApplications?.some(a=>a.enabled)){
+      const {prepareSkill}=await import("../motion-library/skills/runtime.js");
+      for(const app of doc.state.skillApplications.filter(a=>a.enabled))await prepareSkill(project,doc.state,app,{repair:false,signal:input.signal,beforeRender:input.checkpoint});
+    }
+    if((!input.agentValidationMode||agentPolicy(input.agentValidationMode).mandatoryQA)&&(doc.state.motionRules?.length||before.motionRules?.length)){const {ruleQA,hasVerifiedRuleQA}=await import("./rule-qa.js");ruleQAReused=hasVerifiedRuleQA(project,doc.state,before);if(!ruleQAReused){const qa=await ruleQA(project,doc.state,before,input.signal,input.checkpoint);if(qa.status!=="PASSED")throw Object.assign(Error("MOTION_RULE_QA_FAILED"),{report:qa});}}
     const previousRevision = doc.revision;
     doc.revision = randomUUID();
     if (input.transactionId)
@@ -195,10 +263,14 @@ export async function changeMotion(
     // Validate the persisted envelope too: aggregated batches must respect history limits.
     documentSchema.parse(doc);
     await safeDirectory(project.root, "motion");
+    input.signal?.throwIfAborted();input.checkpoint?.();
     try {
       await atomicJson(path.join(project.root, "motion/motion.json"), doc, {
         durable: true,
       });
+      await atomicJson(path.join(project.root, "motion/motion.json.bak"), doc, {
+        durable: false,
+      }).catch(() => {});
     } catch (error) {
       // A directory-sync failure after rename is not an uncommitted transaction.
       const persisted = documentSchema.parse(
@@ -213,7 +285,7 @@ export async function changeMotion(
         durabilityWarning: String(error),
       };
     }
-    return { document: doc, diff: motionDiff(before, doc.state) };
+    return { document: doc, diff: motionDiff(before, doc.state),ruleQAReused };
   } finally {
     await unlock();
   }

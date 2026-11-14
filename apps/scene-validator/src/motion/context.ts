@@ -1,3 +1,4 @@
+import {projectTime} from "./project-time.js";
 import { pathCapability } from "../motion-library/registry/path-capability.js";
 import { buildRegistry, resolveState } from "./registry.js";
 import type { LoadedProject, Scene } from "../types.js";
@@ -83,7 +84,7 @@ export function buildContext(
     project.inspection.fingerprint,
   );
   return {
-    project: { name: project.config.name, ...state.settings },
+    project: { name: project.config.name, ...state.settings, time: projectTime(state) },
     scenes,
     motion: state,
     selectedObjectId: selected[0]?.targetId ?? null,
@@ -135,6 +136,7 @@ export function buildContext(
           }),
       })),
     identityDiagnostics: registry.diagnostics,
+    time: projectTime(state),
     timing:
       "All animation frames are absolute project frames. Frames are integers; seconds multiply by FPS and round. Blocks use project time. Source node IDs are instances. Logical IDs match exact case-sensitive names across scenes. Use animateObjectStateTransition for state changes; endpoints are resolved from source, never invented.",
   };
@@ -144,6 +146,7 @@ export function defaultMotion(project: LoadedProject): MotionState {
   const durationFrames = Math.max(120, scenes.length * 60);
   return {
     schemaVersion: "1.0.0",
+    anchorDefault:"center",
     settings: {
       fps: 30,
       width: Math.ceil(scenes[0].width),

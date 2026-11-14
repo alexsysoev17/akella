@@ -1,4 +1,13 @@
+import {listBrands,searchBrand,brandMedia} from "./brands/library.js";
+import {createBannerProject,changeBannerProject,undoBannerProject,bannerFile,exportBannerBundle} from './banners/service.js';
+import {readProject as readBannerProject,listProjects as listBannerProjects,recoverBannerJobs} from './banners/storage.js';
+import { FigmaDrafts } from "./figma-drafts.js";
+import {skillsCatalog} from "./motion-library/skills/registry.js";
+import {skillDemoFrame} from "./motion-library/skills/demo.js";
+import {runtimeCode} from "./runtime-code.js";
+import {resumeProjectRecoveries} from "./motion/service.js";
 import { recoverInterruptedRuns } from "./harness/runtime.js";
+import { recoverMotionVariantBatches } from './motion/variants.js';
 import { motionApi } from "./motion/api.js";
 import { diagnosticRu } from "./localization.js";
 import { createWriteStream } from "node:fs";
@@ -38,11 +47,16 @@ async function body(request: IncomingMessage, limit: number) {
   return Buffer.concat(chunks);
 }
 export async function servePlatform(projectsRoot: string, port = 4173) {
+  await recoverBannerJobs();
   projectsRoot = path.resolve(projectsRoot);
   await mkdir(projectsRoot, { recursive: true });
   await noSymlinkPath(projectsRoot, projectsRoot);
-  for (const project of (await discoverProjects(projectsRoot)).projects)
+  for (const project of (await discoverProjects(projectsRoot)).projects) {
     await recoverInterruptedRuns(project.root);
+    await recoverMotionVariantBatches(project);
+  }
+  const drafts = new FigmaDrafts(projectsRoot, process.cwd());
+  await drafts.recover();
   const pending = new Map<
     string,
     {
@@ -76,6 +90,11 @@ export async function servePlatform(projectsRoot: string, port = 4173) {
         throw new Error("Foreign origin forbidden");
       const url = new URL(request.url ?? "/", `http://${host}`);
       const segments = url.pathname.split("/").filter(Boolean);
+      if(request.method==="GET" && url.pathname==="/api/runtime")return json(runtimeCode.status());
+      if(request.method==="GET"&&url.pathname==="/api/skills")return json(skillsCatalog());
+      if(request.method==="GET"&&url.pathname==="/api/skills/text.handoff.no-overlap/demo/frame"){
+        const image=await skillDemoFrame(Number(url.searchParams.get("frame")??0));response.writeHead(200,{"Content-Type":"image/png","Cache-Control":"no-store"});response.end(image.png);return;
+      }
       const sendFile = async (file: string, mime: string) => {
         const bytes = await readFile(file);
         response.writeHead(200, {
@@ -87,14 +106,54 @@ export async function servePlatform(projectsRoot: string, port = 4173) {
         });
         response.end(bytes);
       };
+      if(request.method==='GET'&&url.pathname==='/api/brands')return json(await listBrands());
+      if(url.pathname==='/api/banners'&&request.method==='GET')return json(await listBannerProjects());
+      if(url.pathname==='/api/banners'&&request.method==='POST')return json(await createBannerProject(JSON.parse((await body(request,20000)).toString())),202);
+      if(segments[0]==='api'&&segments[1]==='banners'&&segments.length>=3){
+        const id=segments[2];
+        if(segments.length===3&&request.method==='GET')return json(await readBannerProject(id));
+        if(segments.length===4&&segments[3]==='export'&&request.method==='GET'){
+          const zip=await exportBannerBundle(id);response.writeHead(200,{'Content-Type':'application/zip','Content-Disposition':'attachment; filename="akella-banners.zip"','Cache-Control':'no-store'});response.end(zip);return;
+        }
+        if(segments.length===4&&segments[3]==='chat'&&request.method==='POST')return json(await changeBannerProject(id,JSON.parse((await body(request,20000)).toString())),202);
+        if(segments.length===4&&segments[3]==='undo'&&request.method==='POST'){
+          const input=JSON.parse((await body(request,1000)).toString());return json(await undoBannerProject(id,input.revision));
+        }
+        if(segments.length===5&&request.method==='GET'){
+          const file=await bannerFile(id,segments[3],decodeURIComponent(segments[4]));
+          return await sendFile(file,file.endsWith('.png')?'image/png':file.endsWith('.svg')?'image/svg+xml':'application/json');
+        }
+      }
+      if(segments[0]==='api'&&segments[1]==='brands'&&segments.length===4&&segments[3]==='search'&&request.method==='POST'){
+        const input=JSON.parse((await body(request,10000)).toString());
+        if(typeof input.query!=='string'||input.kind!==undefined&&typeof input.kind!=='string')throw Error('Invalid search');
+        return json(await searchBrand(segments[2],input.query,input.kind));
+      }
+      if(segments[0]==='api'&&segments[1]==='brands'&&segments.length===5&&segments[3]==='media'&&request.method==='GET'){
+        const media=await brandMedia(segments[2],decodeURIComponent(segments[4]));return await sendFile(media.file,media.mime);
+      }
+      const brandFiles: Record<string, string> = {
+        "/brand/akella.svg": "image/svg+xml",
+        "/brand/akella_photo.png": "image/png",
+        "/brand/Inter-Regular.ttf": "font/ttf",
+        "/brand/Inter-Bold.ttf": "font/ttf",
+        "/brand/Inter-Light.ttf": "font/ttf",
+        "/brand/Inter-Medium.ttf": "font/ttf",
+      };
+      if (request.method === "GET" && Object.hasOwn(brandFiles, url.pathname)) {
+        return await sendFile(fileURLToPath(new URL(`./web${url.pathname}`, import.meta.url)), brandFiles[url.pathname]);
+      }
       if (
         request.method === "GET" &&
         [
           "/",
           "/main.js",
+          "/banners.js",
           "/styles.css",
           "/motion.js",
           "/inspector.js",
+          "/anchor-inspector.js",
+          "/skills.js",
           "/motion.css",
           "/easing-runtime.js",
           "/mentions.js",
@@ -112,10 +171,11 @@ export async function servePlatform(projectsRoot: string, port = 4173) {
               : "text/html",
         );
       }
+      if (request.method === "POST" && url.pathname === "/api/projects") return json(await drafts.create(),201);
       if (request.method === "GET" && url.pathname === "/api/projects") {
         const result = await discoverProjects(projectsRoot);
         return json({
-          projects: result.projects.map(summary),
+          projects: [...result.projects.map(summary), ...(await drafts.list()).filter(d=>!result.projects.some(p=>p.config.projectId===d.projectId))],
           errors: result.errors,
         });
       }
@@ -235,6 +295,12 @@ export async function servePlatform(projectsRoot: string, port = 4173) {
         }
       }
       if (segments[0] === "api" && segments[1] === "projects" && segments[2]) {
+        const draft = await drafts.get(segments[2]);
+        if (request.method === "POST" && segments[3] === "import-from-figma" && segments.length === 4) {
+          const input = JSON.parse((await body(request, 32000)).toString());
+          return json(await drafts.start(segments[2], input.prompt),202);
+        }
+        if (request.method === "GET" && segments.length === 3 && draft && draft.status !== "ready") return json(draft);
         const project = await findProject(projectsRoot, segments[2]);
         if (await motionApi(project, request, response, segments, body)) return;
         if (request.method === "GET" && segments.length === 3) {
@@ -244,6 +310,7 @@ export async function servePlatform(projectsRoot: string, port = 4173) {
           );
           return json({
             ...summary(project),
+            importMessages: draft?.messages ?? [],
             scenes: project.inspection.document.scenes.map((s) => ({
               ...s,
               objects: countNodes(s.children),
@@ -368,6 +435,7 @@ export async function servePlatform(projectsRoot: string, port = 4173) {
       resolve();
     });
   });
+  for(const project of (await discoverProjects(projectsRoot)).projects)void resumeProjectRecoveries(project).catch(error=>console.warn("Recovery continuation:",String(error)));
   return server;
 }
 function countNodes(children: unknown[]): number {

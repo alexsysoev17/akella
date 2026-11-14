@@ -1,11 +1,14 @@
+import {skillContracts} from "./skills/registry.js";
+import { motionToolCatalog } from "../motion/tools.js";
 import { capabilityCatalog } from "./registry/capabilities.js";
 import { retrieveTechniques } from "./techniques/registry.js";
 import { readFile } from "node:fs/promises";
 import { easingCatalog } from "./easings/registry.js";
 import { expressionRegistry } from "./expressions/registry.js";
 import { presetRegistry } from "./presets/registry.js";
-export async function motionKnowledge(request: string, textSelected: boolean) {
+export async function motionKnowledge(request: string, textSelected: boolean, requestedSkills: string[] = []) {
   const names = ["motion-timing"];
+  if(/инерц|затуха|overshoot|inertia|follow.?through|непрерывн.*движ/i.test(request)||requestedSkills.includes('inertia-continuity'))names.push('inertia-continuity');
   if (textSelected || /текст|надпис|text|typograph/i.test(request))
     names.push("kinetic-typography");
   else if (/отскок|инерц|spring|bounce|колеб|wiggle|overshoot/i.test(request))
@@ -23,7 +26,9 @@ export async function motionKnowledge(request: string, textSelected: boolean) {
     ].includes(e.id),
   );
   return {
-    version: "1.1.0",
+    version: "2.0.0",
+    skillContracts:textSelected||/текст|надпис|text|заголов/iu.test(request)?skillContracts.map(({semanticInstructions,...contract})=>contract):[],
+    agentTools: motionToolCatalog,
     techniques: retrieveTechniques(request),
     capabilities: capabilityCatalog().filter(
       (c) =>
@@ -63,7 +68,7 @@ export async function motionKnowledge(request: string, textSelected: boolean) {
       })),
     ),
     composition:
-      "Source base geometry + selected base property track + sum of expressions sorted by expressionId. Expressions sample only base tracks. No recursive expressions or JavaScript. Opacity clamps 0..1; scale stays positive.",
+      "Source base geometry + selected base property track + sum of expressions sorted by expressionId. Expressions sample only base tracks. No recursive expressions or JavaScript. Opacity clamps 0..1; scale is nonnegative; an exact zero endpoint is an invisible collapsed pose.",
     customCurvePolicy:
       "Create and edit structured cubicBezier or piecewise curves when appropriate. Presets are one-time expansion, not an ongoing constraint. Legacy easing strings remain valid.",
   };

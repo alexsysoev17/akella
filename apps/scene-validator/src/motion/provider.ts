@@ -1,4 +1,5 @@
 import { capabilityGuidance } from "../motion-library/guidance.js";
+import { objectEnvelope, validateProviderSchema,compactProviderSchema } from "../harness/providers/schema.js";
 import { createHash } from "node:crypto";
 import { redactSecrets } from "../harness/security.js";
 import {
@@ -32,6 +33,8 @@ export function compatibleSchema(value: unknown): unknown {
     if (key === "$schema" || key === "default") continue;
     result[key === "oneOf" ? "anyOf" : key] = compatibleSchema(item);
   }
+  if (result.type === "object" && !result.properties && result.additionalProperties && typeof result.additionalProperties === "object")
+    return { type: "array", items: { type:"object", properties:{key:result.propertyNames ?? {type:"string"},value:result.additionalProperties}, required:["key","value"], additionalProperties:false } };
   if (
     result.type === "object" &&
     result.properties &&
@@ -66,6 +69,35 @@ export function normalizeProviderOutput(
         part.replace(/~1/g, "/").replace(/~0/g, "~")
       ];
     return normalizeProviderOutput(value, resolved, root);
+  }
+  const variants = shape.oneOf ?? shape.anyOf;
+  if (Array.isArray(variants)) {
+    const resolved = variants.map(v => {
+      let branch = v as Record<string, unknown>;
+      if (typeof branch.$ref === "string") {
+        let target = root as Record<string, unknown>;
+        for (const key of branch.$ref.slice(2).split("/")) target = target[key] as Record<string, unknown>;
+        branch = target;
+      }
+      return branch;
+    });
+    const tagged = resolved.filter(b => Object.entries((b?.properties ?? {}) as Record<string, {const?:unknown}>).some(([key,p]) => "const" in p && value && typeof value === "object" && (value as Record<string,unknown>)[key] === p.const));
+    if (tagged.length === 1) return normalizeProviderOutput(value, tagged[0], root);
+    // Compact edits have no schemaVersion discriminator. Select a branch only
+    // when its object keys uniquely identify it, then reverse the wire's null
+    // adaptation. Final Zod validation still checks every value and refinement.
+    if(value && typeof value==='object' && !Array.isArray(value)){
+      const keys=Object.keys(value);
+      const matching=resolved.filter(b=>b?.type==='object'&&b.properties&&
+        keys.every(k=>k in (b.properties as object))&&
+        (Array.isArray(b.required)?b.required:[]).every(k=>Object.hasOwn(value,k as string)));
+      if(matching.length===1)return normalizeProviderOutput(value,matching[0],root);
+    }
+  }
+  if (Array.isArray(value) && shape.type === "object" && !shape.properties && shape.additionalProperties && typeof shape.additionalProperties === "object") {
+    const entries = value as {key?:unknown;value?:unknown}[];
+    if (entries.some(e => !e || typeof e.key !== "string") || new Set(entries.map(e => e.key)).size !== entries.length) throw new ProviderError("INVALID_OUTPUT", "Invalid or duplicate dictionary entries");
+    return Object.fromEntries(entries.map(e => [e.key as string, normalizeProviderOutput(e.value, shape.additionalProperties, root)]));
   }
   if (
     Array.isArray(shape.anyOf) &&
@@ -183,6 +215,8 @@ export class AIClient implements AIProvider {
       providerTimeoutMs: number;
       maxOutputTokens: number;
       privacy?: "full" | "metadata" | "off";
+      reasoningEffort?: "low" | "medium" | "high";
+      includeCapabilityGuidance?: boolean;
     },
   ) {
     this.settings = parseProviderSettings(settings, "AIClient");
@@ -211,10 +245,8 @@ export class AIClient implements AIProvider {
     mode = "semantic",
     nativeSchema?: z.ZodType,
   ): Promise<T> {
-    instructions += "\n" + capabilityGuidance();
+    if (mode!=="task-repair" && this.runtime?.includeCapabilityGuidance !== false && !(context as {incrementalEditHint?:boolean})?.incrementalEditHint) instructions += "\n" + capabilityGuidance();
     const compact = JSON.stringify({ mode, context, userRequest: request });
-    if (compact.length > 300000)
-      throw new Error("Контекст превышает 300 КБ; данные не обрезаны");
     const prompt = instructions + "\nCONTEXT JSON:\n" + compact;
     const runtimeSchema = z.toJSONSchema(schema, {
       io: "output",
@@ -233,9 +265,9 @@ export class AIClient implements AIProvider {
     const logicalSchema = nativeSchema
       ? z.toJSONSchema(nativeSchema, { io: "output", reused: "ref" })
       : runtimeSchema;
-    const responseSchema = strictWire
-      ? compatibleSchema(logicalSchema)
-      : logicalSchema;
+    const wire = strictWire ? objectEnvelope(compactProviderSchema(compatibleSchema(logicalSchema))) : { schema: logicalSchema, wrapped: false };
+    const responseSchema = wire.schema;
+    if (strictWire) validateProviderSchema(responseSchema);
     await writeFile(
       path.join(this.directory, "request.txt"),
       redactSecrets(prompt),
@@ -248,7 +280,7 @@ export class AIClient implements AIProvider {
       purpose:
         mode === "semantic" || mode === "semantic-planning"
           ? "semantic-planning"
-          : mode === "semantic-repair"
+          : mode === "semantic-recovery" ? "semantic-recovery" : mode === "semantic-repair"
             ? "semantic-repair"
             : "motion-repair",
       messages: [
@@ -257,6 +289,7 @@ export class AIClient implements AIProvider {
       ],
       responseSchema,
       model: this.settings.model || undefined,
+      reasoningEffort: this.runtime?.reasoningEffort,
       signal: this.runtime?.signal,
       timeoutMs: this.runtime?.providerTimeoutMs ?? 180000,
       maxOutputTokens: this.runtime?.maxOutputTokens ?? 16000,
@@ -269,9 +302,10 @@ export class AIClient implements AIProvider {
         "UNSUPPORTED_CAPABILITY",
         "Motion planning accepts structured intent, not provider tool execution",
       );
+    const payload = wire.wrapped ? (response.output as { response?: unknown })?.response : response.output;
     const normalized = strictWire
-      ? normalizeProviderOutput(response.output, runtimeSchema)
-      : response.output;
+      ? normalizeProviderOutput(payload, runtimeSchema)
+      : payload;
     const parsed = schema.safeParse(normalized);
     const fullDiagnostics = (this.runtime?.privacy ?? "full") === "full";
     const issues = parsed.success
@@ -326,12 +360,15 @@ export class AIClient implements AIProvider {
         ),
       ),
     );
+    const repairIssues:{code:string;path:PropertyKey[];message:string}[]=[];
+    const collect=(rows:readonly {code:string;path:PropertyKey[];message:string}[])=>{for(const issue of rows){if(repairIssues.length>=8)break;if('errors'in issue&&Array.isArray(issue.errors))collect(issue.errors.flat());else repairIssues.push({code:issue.code,path:issue.path,message:issue.message});}};
+    if(!parsed.success)collect(parsed.error.issues);
     try {
       return schema.parse(normalized);
     } catch (e) {
-      throw new Error(
+      throw Object.assign(new Error(
         `INVALID_OUTPUT: ответ не соответствует структурированному контракту. Подробности сохранены в contract-validation.json.`,
-      );
+      ),{code:'INVALID_OUTPUT',contractIssues:repairIssues});
     }
   }
 }

@@ -1,3 +1,4 @@
+import { handoffProgress, curveSlope, curveAcceleration, accelerationBridge, continuousArrival } from "./handoff.js";
 import { z } from "zod";
 import { standardEvaluators } from "./basic.js";
 import { cubicBezier } from "./cubic-bezier.js";
@@ -11,30 +12,30 @@ const standardSchema = z.enum(
 export const bezierParameters = z
   .object({
     x1: finite(0, 1),
-    y1: finite(-10, 10),
+    y1: finite(-1000, 1000),
     x2: finite(0, 1),
-    y2: finite(-10, 10),
+    y2: finite(-1000, 1000),
   })
   .strict();
 export const springParameters = z
   .object({
-    stiffness: finite(1, 1000),
-    damping: finite(0.01, 100),
-    mass: finite(0.1, 10),
+    stiffness: finite(0.001, 100000),
+    damping: finite(0.0001, 100000),
+    mass: finite(0.001, 100000),
   })
   .strict();
 export const elasticParameters = z
   .object({
-    amplitude: finite(0, 5),
-    frequency: finite(0.1, 20),
-    decay: finite(0, 30),
+    amplitude: finite(0, 100000),
+    frequency: finite(0.001, 10000),
+    decay: finite(0, 10000),
   })
   .strict();
-export const backParameters = z.object({ overshoot: finite(0, 10) }).strict();
+export const backParameters = z.object({ overshoot: finite(0, 10000) }).strict();
 export const bounceParameters = z
   .object({
     restitution: finite(0, 1),
-    bounceCount: z.number().int().min(1).max(12),
+    bounceCount: z.number().int().min(1).max(100),
   })
   .strict();
 export const piecewiseParameters = z
@@ -45,8 +46,8 @@ export const piecewiseParameters = z
         z
           .object({
             t: finite(0, 1),
-            value: finite(-10, 10),
-            slope: finite(-100, 100).nullable().optional(),
+            value: finite(-100000, 100000),
+            slope: finite(-100000, 100000).nullable().optional(),
           })
           .strict(),
       )
@@ -78,7 +79,7 @@ export const aeEaseParameters = z
     inInfluence: finite(0.1, 100).default(33.33),
   })
   .strict();
-export const easingSchema = z.union([
+const baseEasingSchema = z.union([
   z.literal("aeEasyEase"),
   z
     .object({ type: z.literal("aeEasyEase"), parameters: aeEaseParameters })
@@ -103,6 +104,19 @@ export const easingSchema = z.union([
   z
     .object({ type: z.literal("bounce"), parameters: bounceParameters })
     .strict(),
+]);
+export const handoffParameters = z.object({
+  base: baseEasingSchema,
+  join: finite(0, .95),
+  endSlope: finite(0, 1000),
+  endAcceleration: finite(-100000, 100000).optional(),
+  endJerk: finite(-1e9,1e9).optional(),
+  launchRest: z.boolean().optional(),
+  poseScaleBasis: z.literal('local').optional(),
+  response: z.object({approach:z.enum(['adapt','continuous']).optional(),expressionId:z.string().min(1),peakRatio:finite(0,.5),peakPerAmplitude:finite(0,1e12).optional(),amplitude:finite(0,100000),frequency:finite(.1,20),decay:finite(.1,30),durationSeconds:finite(.001,100000),tailSeconds:finite(.001,100000)}).strict().optional(),
+}).strict();
+export const easingSchema = z.union([baseEasingSchema,
+  z.object({type:z.literal("inertiaHandoff"),parameters:handoffParameters}).strict(),
 ]);
 export type Easing = z.infer<typeof easingSchema>;
 interface Entry {
@@ -131,6 +145,16 @@ const entry = (
 });
 const aeCurves = new Map<string, ReturnType<typeof cubicBezier>>();
 export const easingRegistry: Entry[] = [
+  entry("inertiaHandoff", "Versioned arrival adjustment: stored C1; endAcceleration selects C2; launchRest with endJerk rebuilds a single approach from rest with a scalar C3 join. Local adapt preserves the curve before join; whole-approach continuous changes it. Only the final keyframe segment is adjusted.",
+    handoffParameters, {base:"easeOutQuad",join:.5,endSlope:.5}, (t,p)=>{
+      const q=p as z.infer<typeof handoffParameters>;
+      if(q.launchRest&&q.endAcceleration!==undefined&&q.endJerk!==undefined)return continuousArrival(t,q.endSlope,q.endAcceleration,q.endJerk).value;
+      const sample=(u:number)=>evaluateEasing(u,q.base);
+      if(t<=q.join)return sample(t);
+      return q.endAcceleration===undefined
+        ? handoffProgress(t,q.join,sample(q.join),curveSlope(sample,q.join),q.endSlope)
+        : accelerationBridge(q.join,sample(q.join),curveSlope(sample,q.join),q.endSlope,curveAcceleration(sample,q.join),q.endAcceleration)(t).value;
+    }),
   entry(
     "aeEasyEase",
     "Zero endpoint speed temporal Bezier; outgoing/incoming influence in percent. Not piecewise easeInOutCubic.",

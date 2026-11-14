@@ -1,4 +1,12 @@
-import { retimeScenes, resolveTimingDependencies } from "./intent/retime.js";
+import {reconcileInertiaResponses} from './inertia-tuning.js';
+import {supportsSegmentedTextAnimation} from './text-segment.js';
+import {buildRegistry} from './registry.js';
+import {materializeRules} from "./rules.js";
+import {textLayoutContract} from "../motion-library/techniques/text.js";
+import {updateProjectTime,refreshTimingOrigins} from "./project-time.js";
+import { requiredProjectFrames, TimelineConstraintError } from "./constraints.js";
+import { intervalConflict } from "./intervals.js";
+import { retimeScenes, resolveTimingDependencies, reanchorExpressions } from "./intent/retime.js";
 import { instantiatePreset } from "../motion-library/presets/registry.js";
 import { validateExpressions } from "./validate-expressions.js";
 import { validateObjectTransitions } from "./transitions.js";
@@ -10,6 +18,7 @@ import {
 } from "./schema.js";
 import type { LoadedProject } from "../types.js";
 import { objectsIn } from "./context.js";
+import { staticObjectMembers, staticObjectReference, staticObjectTransitions } from "./static-object.js";
 export function channels(a: Animation): string[] {
   if (a.effect === "property") return [a.parameters.property];
   if (a.effect === "keyframes") return [a.parameters.property];
@@ -17,6 +26,7 @@ export function channels(a: Animation): string[] {
     return [a.parameters.property];
   if (a.effect.startsWith("fade")) return ["opacity"];
   if (a.effect.startsWith("scale")) return ["scale"];
+  if(["slideUp","slideDown","slideLeft","slideRight"].includes(a.effect)&&"vector" in a.parameters&&a.parameters.vector)return ["x","y"];
   if (a.effect === "slideUp" || a.effect === "slideDown") return ["y"];
   if (a.effect === "slideLeft" || a.effect === "slideRight") return ["x"];
   if (a.effect === "moveTo") return ["x", "y"];
@@ -28,6 +38,21 @@ export function validateMotion(
   project: LoadedProject,
 ): MotionState {
   const state = motionSchema.parse(input);
+  const frozen = new Set<string>();
+  const frozenMembers = new Set<string>();
+  for (const entry of state.staticObjects ?? []) {
+    if (frozen.has(entry.logicalObjectId)) throw new Error("DUPLICATE_STATIC_OBJECT");
+    frozen.add(entry.logicalObjectId);
+    staticObjectReference(project,entry);
+    const { object, members } = staticObjectMembers(project, entry.logicalObjectId);
+    if ([...members].some(id=>frozenMembers.has(id))) throw new Error("STATIC_SCOPE_OVERLAP");
+    members.forEach(id=>frozenMembers.add(id));
+    if (!object.sourceInstances.some(i => i.sceneId === entry.sceneId && i.sourceNodeId === entry.targetId)) throw new Error("STATIC_SOURCE_NOT_FOUND");
+    if (state.animations.some(a => members.has(`${a.sceneId}/${a.targetId}`)) || state.expressions?.some(e => members.has(`${e.sceneId}/${e.targetId}`)) || staticObjectTransitions(project,state,members).length) throw new Error("STATIC_OBJECT_HAS_MOTION");
+  }
+  for(const a of state.anchors??[]){const registry=buildRegistry(project.inspection.document,project.inspection.fingerprint);const o=registry.objects.find(o=>o.logicalObjectId===a.logicalObjectId);if(!o||a.sceneId&&!o.sourceInstances.some(i=>i.sceneId===a.sceneId))throw Error("ANCHOR_TARGET_NOT_FOUND");}
+  const anchorIds=new Set<string>();
+  for(const a of state.sceneAnchors ?? []) {if(anchorIds.has(a.sceneId)||!project.inspection.document.scenes.some(s=>s.sceneId===a.sceneId))throw new Error("INVALID_SCENE_ANCHOR");anchorIds.add(a.sceneId);}
   const ids = new Set<string>(),
     sceneIds = new Set(
       project.inspection.document.scenes.map((s) => s.sceneId),
@@ -53,20 +78,13 @@ export function validateMotion(
       if (o.type !== "TEXT") throw new Error("TEXT_NATIVE_LAYOUT_REQUIRED");
       if (
         a.text.segmentation !== "block" &&
-        ![
-          "slideUp",
-          "slideDown",
-          "slideLeft",
-          "slideRight",
-          "fadeIn",
-          "fadeOut",
-        ].includes(a.effect)
+        !supportsSegmentedTextAnimation(a)
       )
         throw new Error("TEXT_SEGMENT_EFFECT_UNSUPPORTED: " + a.effect);
     }
     if (o.mask) throw new Error("Анимация масок пока не поддерживается.");
-    if (a.startFrame + a.durationFrames > state.settings.durationFrames)
-      throw new Error(
+    if (intervalConflict(a, state.settings.durationFrames, "finite"))
+      throw new TimelineConstraintError(requiredProjectFrames(state), state.settings.durationFrames, [a.animationId],
         `Анимация ${a.animationId} выходит за длительность ролика.`,
       );
     if (channels(a).includes("trim") && !o.trimSupported)
@@ -79,9 +97,9 @@ export function validateMotion(
         throw new Error("Opacity endpoints must be 0..1");
       if (
         a.parameters.property.startsWith("scale") &&
-        Math.min(a.parameters.from, a.parameters.to) <= 0
+        Math.min(a.parameters.from, a.parameters.to) < 0
       )
-        throw new Error("Scale endpoints must be positive");
+        throw new Error("Scale endpoints must be nonnegative");
     }
     if (a.effect === "keyframes") {
       let previous = -1;
@@ -96,8 +114,8 @@ export function validateMotion(
           (k.value < 0 || k.value > 1)
         )
           throw new Error("Opacity и trim должны быть от 0 до 1.");
-        if (a.parameters.property === "scale" && k.value <= 0)
-          throw new Error("Scale должен быть положительным.");
+        if (a.parameters.property === "scale" && k.value < 0)
+          throw new Error("Scale должен быть неотрицательным.");
       }
       if (
         a.parameters.points[0].frame !== 0 ||
@@ -105,6 +123,11 @@ export function validateMotion(
       )
         throw new Error("Ключевые кадры должны включать 0 и durationFrames.");
     }
+  }
+  for(const app of state.skillApplications??[]){
+    if(!app.enabled)continue;
+    const ids=[...app.outgoing.animationIds,...app.incoming.animationIds];
+    if(ids.some(id=>!state.animations.some(a=>a.animationId===id&&a.enabled)))throw Error("SKILL_ANIMATION_REFERENCE_MISSING: "+app.applicationId);
   }
   const enabled = state.animations.filter((a) => a.enabled);
   for (const a of enabled.filter(
@@ -117,7 +140,7 @@ export function validateMotion(
         b.sceneId === a.sceneId &&
         b.text &&
         b.text.segmentation !== "block" &&
-        JSON.stringify(a.text) !== JSON.stringify(b.text),
+        textLayoutContract(a.text!) !== textLayoutContract(b.text),
     );
     if (other)
       throw new Error(
@@ -160,14 +183,14 @@ export function validateMotion(
     if (blockIds.has(b.blockId)) throw new Error("Повтор blockId");
     blockIds.add(b.blockId);
     if (!sceneIds.has(b.sceneId)) throw new Error("Неизвестная сцена блока");
-    if (b.startFrame + b.durationFrames > state.settings.durationFrames)
+    if (state.settings.timelineModel !== "independentOutput" && b.startFrame + b.durationFrames > state.settings.durationFrames)
       throw new Error("Блок выходит за длительность ролика");
     if (b.transition.type === "cut" && b.transition.durationFrames !== 0)
       throw new Error("Cut должен иметь длительность перехода 0");
     const next = blocks[i + 1];
     if (!next) {
       if (
-        b.startFrame + b.durationFrames !== state.settings.durationFrames ||
+        (state.settings.timelineModel !== "independentOutput" && (state.settings.tailPolicy === "holdLastScene" ? b.startFrame + b.durationFrames > state.settings.durationFrames : b.startFrame + b.durationFrames !== state.settings.durationFrames)) ||
         b.transition.durationFrames !== 0
       )
         throw new Error(
@@ -218,6 +241,14 @@ export function applyOperations(
 ): MotionState {
   const ops = operationsSchema.parse(input),
     state = structuredClone(previous);
+  // An owned compiled field must never be silently overwritten by rematerialization.
+  // Semantic rule editing emits setMotionRule; low-level clients must use that contract too.
+  for(const op of ops){
+    const entity=op.type==="setExpression"?op.expression.expressionId:op.type==="removeExpression"||op.type==="scaleExpressionParameter"?op.expressionId:undefined;
+    if(entity&&previous.ruleMaterializations?.some(m=>m.entity==="expression"&&m.id===entity))throw Error("RULE_OWNED_EFFECT: edit its rule or add an explicit object exception");
+    const animationId="animationId" in op?op.animationId:undefined;
+    if(animationId&&(op.type==="setEasing"||op.type==="updateAnimation")&&previous.ruleMaterializations?.some(m=>m.entity==="animation"&&m.id===animationId&&m.before&&"easing" in (m.before as object)))throw Error("RULE_OWNED_EASING: use a scoped motion rule override");
+  }
   for (const op of ops) {
     const animation =
       "animationId" in op
@@ -232,10 +263,32 @@ export function applyOperations(
     if ("blockId" in op && !block)
       throw new Error(`Блок не найден: ${op.blockId}`);
     switch (op.type) {
+      case "setAnchor": state.anchors=[...(state.anchors??[]).filter(a=>!(a.logicalObjectId===op.anchor.logicalObjectId&&a.sceneId===op.anchor.sceneId&&a.startFrame===op.anchor.startFrame)),op.anchor];break;
+      case "resetAnchor":state.anchors=state.anchors?.filter(a=>!(a.logicalObjectId===op.logicalObjectId&&a.sceneId===op.sceneId&&a.startFrame===op.startFrame));break;
+      case "setMotionRule": state.motionRules=[...(state.motionRules??[]).filter(r=>r.ruleId!==op.rule.ruleId),op.rule];break;
+      case "removeMotionRule":state.motionRules=state.motionRules?.filter(r=>r.ruleId!==op.ruleId);break;
+      case "setSkillApplication": state.skillApplications=[...(state.skillApplications??[]).filter(a=>a.applicationId!==op.application.applicationId),op.application];break;
+      case "removeSkillApplication": state.skillApplications=state.skillApplications?.filter(a=>a.applicationId!==op.applicationId);break;
+      case "setProjectTime":
+        updateProjectTime(state, op);
+        break;
+      case "setTimingOrigin":
+        state.timingOrigins=[...(state.timingOrigins??[]).filter(o=>o.entity!==op.origin.entity||o.id!==op.origin.id),op.origin];
+        break;
+      case "setStaticObject":
+        state.staticObjects = [...(state.staticObjects ?? []).filter(o => o.logicalObjectId !== op.object.logicalObjectId), op.object];
+        break;
+      case "removeStaticObject":
+        state.staticObjects = (state.staticObjects ?? []).filter(o => o.logicalObjectId !== op.logicalObjectId);
+        break;
       case "retimeScenes":
         retimeScenes(state, op.starts);
         break;
       case "setTimingDependency":
+        if (op.dependency.animationId === op.dependency.anchorAnimationId)
+          throw new Error(
+            `Timing dependency cycle: ${op.dependency.animationId} -> ${op.dependency.anchorAnimationId}`,
+          );
         state.timingDependencies = [
           ...(state.timingDependencies ?? []).filter(
             (d) =>
@@ -367,6 +420,21 @@ export function applyOperations(
       case "shiftAnimation":
         animation!.startFrame += op.deltaFrames;
         break;
+      case "shiftProjectOrigin": {
+        const delta = op.deltaFrames;
+        state.settings.durationFrames += delta;
+        if (state.blocks.length > 0) {
+          const sorted = [...state.blocks].sort((a, b) => a.startFrame - b.startFrame);
+          sorted[0].durationFrames += delta;
+          for (let i = 1; i < sorted.length; i++) {
+            sorted[i].startFrame += delta;
+          }
+        }
+        for (const a of state.animations) a.startFrame += delta;
+        for (const t of state.objectTransitions ?? []) t.startFrame += delta;
+        for (const e of state.expressions ?? []) e.startFrame += delta;
+        break;
+      }
       case "setStartFrame":
         animation!.startFrame = op.startFrame;
         break;
@@ -423,51 +491,34 @@ export function applyOperations(
         break;
     }
   }
-  resolveTimingDependencies(state);
-  for (const e of state.expressions ?? []) {
-    if (e.type !== "inertialOvershoot" || e.parameters.mode !== "ae") continue;
-    const old = previous.expressions?.find(
-      (p) => p.expressionId === e.expressionId,
-    );
-    if (
-      !old ||
-      old.type !== "inertialOvershoot" ||
-      old.sourceAnimationId !== e.sourceAnimationId ||
-      ops.some(
-        (op) =>
-          op.type === "setExpression" &&
-          op.expression.expressionId === e.expressionId &&
-          op.expression.startFrame !== old.startFrame,
-      )
-    )
-      continue;
-    const before = previous.animations.find(
-        (a) => a.animationId === e.sourceAnimationId,
-      ),
-      after = state.animations.find(
-        (a) => a.animationId === e.sourceAnimationId,
-      );
-    if (
-      before &&
-      after &&
-      old.startFrame >= before.startFrame + before.durationFrames
-    )
-      e.startFrame =
-        old.startFrame +
-        after.startFrame +
-        after.durationFrames -
-        (before.startFrame + before.durationFrames);
-  }
+  const explicitStarts = new Set(ops.flatMap(op => {
+    if (op.type === "updateAnimation") return op.animation.startFrame !== previous.animations.find(a=>a.animationId===op.animationId)?.startFrame ? [op.animationId] : [];
+    return op.type === "setStartFrame" || op.type === "shiftAnimation" ? [op.animationId] : op.type === "stagger" ? op.animationIds : [];
+  }));
+  const explicitEdges = new Set(ops.filter(op=>op.type==="setTimingDependency").map(op=>op.dependency.dependencyId));
+  const unscheduled = structuredClone(state);
+  resolveTimingDependencies(state, explicitStarts, explicitEdges);
+  const explicitEffects=new Set(ops.filter(op=>op.type==="setExpression").filter(op=>op.expression.startFrame!==previous.expressions?.find(e=>e.expressionId===op.expression.expressionId)?.startFrame).map(op=>op.expression.expressionId));
+  reanchorExpressions(state, ops.some(op=>op.type==="setProjectTime") ? unscheduled : previous, explicitEffects);
+  // Explicit effect timestamps were compiled against the unscheduled candidate.
+  // Account for any further transitive anchor movement exactly once.
+  const scheduledEffects = { ...state, expressions: state.expressions?.filter(e=>explicitEffects.has(e.expressionId)) };
+  reanchorExpressions(scheduledEffects, unscheduled);
   if (
     state.expressions?.some(
       (e) =>
-        "sourceAnimationId" in e &&
-        !state.animations.some((a) => a.animationId === e.sourceAnimationId),
+        (e.textBinding&&!state.animations.some(a=>a.animationId===e.textBinding!.animationId))||"sourceAnimationId" in e &&
+        !state.animations.some((a) => a.animationId === e.sourceAnimationId) &&
+        !(e.type === "inertialOvershoot" && state.objectTransitions?.some(t => t.transitionId === e.transitionId && t.transitionId === e.sourceAnimationId)),
     )
   )
     throw new Error(
       "ANIMATION_HAS_DEPENDENT_EXPRESSION: remove the expression explicitly first",
     );
+  if(!ops.some(op=>op.type==="setProjectTime"))refreshTimingOrigins(previous,state,new Set(ops.filter(op=>op.type==="setTimingOrigin").map(op=>op.origin.entity+":"+op.origin.id)));
+  for(const app of state.skillApplications??[])if(app.enabled&&[...app.outgoing.animationIds,...app.incoming.animationIds].some(id=>!state.animations.some(a=>a.animationId===id&&a.enabled)))app.enabled=false;
+  materializeRules(state,project);
+  reconcileInertiaResponses(state,previous);
   return validateMotion(state, project);
 }
 export function motionDiff(before: MotionState, after: MotionState) {
@@ -492,11 +543,18 @@ export function motionDiff(before: MotionState, after: MotionState) {
   diff(before.settings, after.settings, "settings");
   diff(before.blocks, after.blocks, "blocks");
   diff(before.visibility, after.visibility, "visibility");
+  diff(before.sceneAnchors ?? [], after.sceneAnchors ?? [], "sceneAnchors");
+  diff(before.anchors??[],after.anchors??[],"anchors");
+  diff(before.staticObjects ?? [], after.staticObjects ?? [], "staticObjects");
+  diff(before.timingDependencies ?? [], after.timingDependencies ?? [], "timingDependencies");
   diff(
     before.objectTransitions ?? [],
     after.objectTransitions ?? [],
     "objectTransitions",
   );
+  diff(before.motionRules??[],after.motionRules??[],"motionRules");
+  diff(before.ruleMaterializations??[],after.ruleMaterializations??[],"ruleMaterializations");
+  diff(before.skillApplications??[],after.skillApplications??[],"skillApplications");
   for (const id of new Set(
     [...before.animations, ...after.animations].map((a) => a.animationId),
   ))

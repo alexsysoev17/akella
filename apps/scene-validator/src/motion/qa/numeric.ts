@@ -1,6 +1,8 @@
+import { scopedExpressionValue } from "../transition-effects.js";
+import type { StatePresentation } from "../transition-runtime.js";
 import type { MotionState } from "../schema.js";
 import { evaluateAnimation, evaluateMotion } from "../engine.js";
-import { expressionValue } from "../expressions.js";
+
 export type Status = "PASSED" | "FAILED" | "WARNING" | "NOT_TESTED";
 export interface Check {
   name: string;
@@ -11,13 +13,16 @@ export interface Check {
   reason?: string;
   metrics?: unknown;
 }
-export function numericQA(state: MotionState, request = "") {
+export function numericQA(state: MotionState, request = "", presentation: StatePresentation = {}, options:{purpose?:'intent'|'export'}={}) {
   const checks: Check[] = [],
     frames = new Set<number>([0, state.settings.durationFrames - 1]);
   const add = (f: number) =>
     frames.add(
       Math.max(0, Math.min(state.settings.durationFrames - 1, Math.round(f))),
     );
+  if (state.expressions?.some(e => e.enabled && e.ownership?.scope === "logicalObject")) {
+    for (const b of state.blocks) for (const f of [b.startFrame - 1, b.startFrame, b.startFrame + 1, b.startFrame + b.durationFrames - 1]) add(f);
+  }
   for (const e of [
     ...state.animations.filter((a) => a.enabled),
     ...(state.expressions ?? []).filter((e) => e.enabled),
@@ -37,6 +42,17 @@ export function numericQA(state: MotionState, request = "") {
       add(f);
   }
   for (const e of state.expressions ?? []) {
+    if (!e.enabled || e.type !== "wiggle") continue;
+    const count = Math.min(4000, Math.max(32, Math.ceil(e.durationFrames / state.settings.fps * e.parameters.frequency * 16)));
+    const values = Array.from({ length: count }, (_, i) => scopedExpressionValue(state, e, e.startFrame + e.durationFrames * (i + .5) / count, presentation));
+    checks.push({ name: "wiggleBoundedDeterministic", target: e.expressionId, category: "mathematics", required: true,
+      status: values.every((v, i) => Number.isFinite(v) && Math.abs(v) <= e.parameters.amplitude + 1e-8 && v === scopedExpressionValue(state, e, e.startFrame + e.durationFrames * (i + .5) / count, presentation)) ? "PASSED" : "FAILED",
+      metrics: { samples: count, frequency: e.parameters.frequency, maximumOffset: Math.max(...values.map(Math.abs)), temporalMode: e.parameters.temporalMode ?? "legacyWindow" } });
+    if (e.parameters.temporalMode === "continuous") checks.push({ name: "wiggleContinuousInterval", target: e.expressionId, category: "mathematics", required: true,
+      status: Number.isSafeInteger(e.startFrame + e.durationFrames) ? "PASSED" : "FAILED" });
+  }
+  const checkedVectors=new Set<string>();
+  for (const e of state.expressions ?? []) {
     if (!e.enabled || e.type !== "inertialOvershoot") continue;
     const duration = e.durationFrames / state.settings.fps,
       hz = e.parameters.frequency;
@@ -46,13 +62,7 @@ export function numericQA(state: MotionState, request = "") {
       Math.max(e.durationFrames, Math.ceil(duration * hz * 24), 64),
     );
     const samples = Array.from({ length: count + 1 }, (_, i) =>
-      expressionValue(
-        e,
-        e.startFrame + (e.durationFrames * i) / count,
-        state.settings.fps,
-        state.animations,
-        evaluateAnimation,
-      ),
+      scopedExpressionValue(state, e, e.startFrame + (e.durationFrames * i) / count, presentation),
     );
     const peaks = samples
       .slice(1, -1)
@@ -68,19 +78,30 @@ export function numericQA(state: MotionState, request = "") {
       : e.property === "rotation"
         ? 0.01
         : 0.05;
+    const partner=(e.property==='x'||e.property==='y')?(state.expressions??[]).find(p=>p.enabled&&p.type==='inertialOvershoot'&&p.expressionId!==e.expressionId&&p.property===(e.property==='x'?'y':'x')&&p.sceneId===e.sceneId&&p.targetId===e.targetId&&p.sourceAnimationId===e.sourceAnimationId&&p.transitionId===e.transitionId&&p.startFrame===e.startFrame&&p.durationFrames===e.durationFrames&&JSON.stringify(p.parameters)===JSON.stringify(e.parameters)):undefined;
+    if(partner){
+      const key=[e.expressionId,partner.expressionId].sort().join('/');
+      if(!checkedVectors.has(key)){
+        checkedVectors.add(key);
+        const vectorMax=Math.max(...samples.map((v,i)=>Math.hypot(v,scopedExpressionValue(state,partner,e.startFrame+e.durationFrames*i/count,presentation))));
+        checks.push({name:'visiblePositionalInertia',target:e.sourceAnimationId,status:vectorMax>threshold?'PASSED':options.purpose==='export'&&Number.isFinite(vectorMax)?'WARNING':'FAILED',reason:vectorMax<=threshold?'Combined X/Y inertia is below the unchanged positional visibility threshold; export reproduces the saved strength, it does not require a new visible effect':undefined,metrics:{maximumOffset:vectorMax,threshold,expressionIds:[e.expressionId,partner.expressionId]}});
+      }
+      checks.push({name:'positionalInertiaComponent',target:e.expressionId,status:Number.isFinite(max)?'PASSED':'FAILED',reason:'Visibility is measured on the combined positional vector, not independently on each axis.',metrics:{maximumOffset:max,componentVisible:max>threshold}});
+    }else{
     checks.push({
       name: "visibleOscillation",
       target: e.expressionId,
-      status: max > threshold ? "PASSED" : "FAILED",
+      status: max > threshold ? "PASSED" : options.purpose==='export'&&Number.isFinite(max)?'WARNING':"FAILED",
       reason:
         max <= threshold
-          ? e.parameters.mode === "ae"
+          ? options.purpose==='export'?"Saved inertia is below the unchanged visibility threshold. Export reproduces its exact parameters; this is not a non-finite/continuity defect.":e.parameters.mode === "ae"
             ? "Insufficient instantaneous incoming velocity or zero amplitude; inspect base easing/distance. AE mode cannot substitute a lookback secant or impulse."
             : "Insufficient incoming velocity or zero amplitude; change lookback or explicit incomingImpulse"
           : undefined,
-      metrics: { maximumOffset: max },
+      metrics: { maximumOffset: max,threshold,peakFrame:e.startFrame+e.durationFrames*samples.findIndex(v=>Math.abs(v)===max)/count,startFrame:e.startFrame,endFrame:e.startFrame+e.durationFrames,purpose:options.purpose??'intent' },
     });
-    const periodic = hz * duration >= 1.5;
+    }
+    const periodic = hz * duration >= 1.5 && !(partner && max <= 1e-12) && !(options.purpose==='export'&&max<=1e-12);
     const halfPeriods = peaks
       .slice(1)
       .map((p, i) => p.time - peaks[i].time)
@@ -123,14 +144,14 @@ export function numericQA(state: MotionState, request = "") {
           ? "Frequency requires at least four output frames per cycle"
           : undefined,
     });
-    const aeMode = e.parameters.mode === "ae";
+    const aeMode = e.parameters.mode === "ae" && e.parameters.settlingEnvelope !== "smoothTail";
     checks.push({
       name: "expressionVelocityMode",
       target: e.expressionId,
       status: "PASSED",
       reason: aeMode
         ? "AE: instantaneous derivative at keyTime-frameDuration/10, unwindowed formula"
-        : "Legacy: explicit lookback secant and smooth settling window",
+        : e.parameters.mode === "ae" ? "Instantaneous incoming velocity with explicit finite smoothTail envelope" : "Legacy: explicit lookback secant and smooth settling window",
     });
     checks.push({
       name: "continuousEndpoints",
@@ -139,22 +160,10 @@ export function numericQA(state: MotionState, request = "") {
         samples[0] === 0 &&
         samples.at(-1) === 0 &&
         Math.abs(
-          expressionValue(
-            e,
-            e.startFrame + 1e-6,
-            state.settings.fps,
-            state.animations,
-            evaluateAnimation,
-          ),
+          scopedExpressionValue(state, e, e.startFrame + 1e-6, presentation),
         ) < Math.max(1e-3, max * 1e-3) &&
         Math.abs(
-          expressionValue(
-            e,
-            e.startFrame + e.durationFrames - 1e-6,
-            state.settings.fps,
-            state.animations,
-            evaluateAnimation,
-          ),
+          scopedExpressionValue(state, e, e.startFrame + e.durationFrames - 1e-6, presentation),
         ) < Math.max(1e-3, max * 1e-3)
           ? "PASSED"
           : aeMode
@@ -162,13 +171,7 @@ export function numericQA(state: MotionState, request = "") {
             : "FAILED",
     });
     if (aeMode) {
-      const residual = expressionValue(
-        e,
-        e.startFrame + e.durationFrames - 1e-6,
-        state.settings.fps,
-        state.animations,
-        evaluateAnimation,
-      );
+      const residual = scopedExpressionValue(state, e, e.startFrame + e.durationFrames - 1e-6, presentation);
       checks.push({
         name: "aeDurationCutoff",
         target: e.expressionId,
@@ -180,7 +183,7 @@ export function numericQA(state: MotionState, request = "") {
     }
     const key = JSON.stringify([e.sceneId, e.targetId]),
       end = e.startFrame + e.durationFrames;
-    const actual = evaluateMotion(state, end).nodes[key] ?? {};
+    const actual = evaluateMotion(state, end, presentation).nodes[key] ?? {};
     const without =
       evaluateMotion(
         {
@@ -190,6 +193,7 @@ export function numericQA(state: MotionState, request = "") {
           ),
         },
         end,
+        presentation,
       ).nodes[key] ?? {};
     const fallback = ["scaleX", "scaleY"].includes(e.property)
       ? 1
@@ -254,13 +258,13 @@ export function numericQA(state: MotionState, request = "") {
             ? "WARNING"
             : "FAILED",
           reason: "Consecutive base tracks have different end/start values",
-          metrics: { property, previousEnd: end, nextStart: start },
+          metrics: { property, frame: current.startFrame, previousEnd: end, nextStart: start },
         });
     }
   }
   const sequence = [...frames].sort((a, b) => a - b);
   for (const frame of sequence) {
-    const result = evaluateMotion(state, frame);
+    const result = evaluateMotion(state, frame, presentation);
     if (
       Object.values(result.nodes).some((n) =>
         Object.values(n).some((v) => !Number.isFinite(v)),

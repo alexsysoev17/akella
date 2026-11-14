@@ -83,3 +83,28 @@ export function parentLocalDelta(parent: Matrix, x: number, y: number) {
   const m = inverse(parent);
   return { x: m[0][0] * x + m[0][1] * y, y: m[1][0] * x + m[1][1] * y };
 }
+
+/** Canvas translation/rotation; scale uses the explicitly selected basis about the same origin. */
+export function transitionOffsetMatrix(base:Matrix,offset:{x?:number;y?:number;rotation?:number;scaleX?:number;scaleY?:number},origin?:{x:number;y:number},scaleBasis:'canvas'|'local'='canvas'):Matrix {
+ const angle=(offset.rotation??0)*Math.PI/180,c=Math.cos(angle),s=Math.sin(angle),sx=Math.max(.001,1+(offset.scaleX??0)),sy=Math.max(.001,1+(offset.scaleY??0));
+ const x=origin?.x??base[0][2],y=origin?.y??base[1][2];
+ // R(delta) * baseLinear * S(local), retaining the same world-space pivot.
+ // Scaling in canvas axes first gives the wrong corner velocity for rotated poses.
+ if(scaleBasis==='local'){
+  const determinant=base[0][0]*base[1][1]-base[0][1]*base[1][0];
+  if(Math.abs(determinant)>1e-12){
+   const dx=x-base[0][2],dy=y-base[1][2];
+   const ax=(base[1][1]*dx-base[0][1]*dy)/determinant,ay=(-base[1][0]*dx+base[0][0]*dy)/determinant;
+   const a=(c*base[0][0]-s*base[1][0])*sx,b=(c*base[0][1]-s*base[1][1])*sy;
+   const d=(s*base[0][0]+c*base[1][0])*sx,e=(s*base[0][1]+c*base[1][1])*sy;
+   return [[a,b,x+(offset.x??0)-a*ax-b*ay],[d,e,y+(offset.y??0)-d*ax-e*ay]];
+  }
+ }
+ return multiply([[c*sx,-s*sy,x+(offset.x??0)-c*sx*x+s*sy*y],[s*sx,c*sy,y+(offset.y??0)-s*sx*x-c*sy*y]],base);
+}
+
+/** Explicit version flag: old canvas-axis effect composition remains unchanged. */
+export function poseScaleBasis(easing:unknown):'canvas'|'local'{
+ const e=easing as {type?:string;parameters?:{poseScaleBasis?:string}}|undefined;
+ return e?.type==='inertiaHandoff'&&e.parameters?.poseScaleBasis==='local'?'local':'canvas';
+}

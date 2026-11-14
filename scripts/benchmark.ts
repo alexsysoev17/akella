@@ -97,6 +97,7 @@ const unregister = live
         const reference =
           current.turns?.find((t) => t.prompt === payload.userRequest)
             ?.referenceOutput ?? current.referenceOutput;
+        if(args.includes('--agent')){const turns=(reference as {agentTurns?:unknown[]})?.agentTurns;const value=turns?turns[Math.min((payload.taskHistory??[]).length,turns.length-1)]:reference;return {output:nativeWire(value,request.responseSchema),usage:null,estimatedCost:null,latencyMs:0,diagnostics:['scripted agent tools; semantic accuracy NOT_TESTED'],toolCalls:[]};}
         const normalized = normalizeSemanticGraph(
           reference,
           payload.context,
@@ -167,7 +168,8 @@ try {
     caseIds:
       arg("cases")?.split(",") ??
       (args.includes("--qualify") ? qualificationCases : undefined),
-    config: { maxLLMCalls: 1, maxRepairAttempts: 0 },
+    executionRuntime:args.includes("--agent")?"agent":"legacy",
+    config: { maxLLMCalls: args.includes("--agent")?Number(arg("calls","3")):1, maxRepairAttempts: 0 },
     onCase: (id, status) => {
       current = dataset.cases.find((c) => c.evalId === id)!;
       console.log(id, status);

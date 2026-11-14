@@ -1,3 +1,21 @@
+import {listDirectCheckpoints} from './direct-checkpoint.js';
+import {resumeDirectMotion} from './agent-runtime.js';
+import {executeProduction,listProductions,readProduction} from './production-runtime.js';
+import {commitAnchorChange} from './anchor-service.js';
+import {exportReports,exportReport} from './export-reports.js';
+import {handoffOperations,prepareHandoff} from "../motion-library/skills/runtime.js";
+import {compareFrameComposition} from "../native/composition-qa.js";
+import {projectTime} from "./project-time.js";
+import {runtimeCode} from "../runtime-code.js";
+import {recoveryJobs,cancelRecovery} from "../harness/recovery/jobs.js";
+import {reviewForApproval,approveCodeRepair,sourcePromotionBusy} from "../harness/recovery/promotion.js";
+import {verifyOriginalRun,publishOriginalReplay} from "../harness/recovery/replay.js";
+import { harnessConfig } from "../harness/config.js";
+import { recoveryPolicySchema } from "../harness/recovery/config.js";
+import { recoveryMemory } from "../harness/recovery/memory.js";
+import { renderProjectFrame, framePacket } from "../native/service.js";
+import { nativePreviewHtml } from "../native/preview.js";
+import { renderingMode, clearNativeCache } from "../native/client.js";
 import {
   saveProviderSettings,
   loadProviderSettings,
@@ -25,11 +43,12 @@ import { createReadStream } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 import type { LoadedProject } from "../types.js";
-import { within, noSymlinkPath } from "../files.js";
+import { atomicJson, safeDirectory, within, noSymlinkPath } from "../files.js";
 import { readMotion, changeMotion } from "./store.js";
 import { objectsIn } from "./context.js";
 import {
   executeMotion,
+  resumeProjectRecoveries,
   prepareMotionRequest,
   completeExecution,
   projectMotion,
@@ -39,6 +58,7 @@ import {
 import { providerStatus } from "./provider.js";
 import { motionHtml, sceneThumbnailHtml } from "./presentation.js";
 import { exportVideo } from "./video.js";
+import {startMotionVariants,listMotionVariantBatches,readMotionVariantBatch,cancelMotionVariantBatch,resumeMotionVariants,rerenderMotionVariant} from './variants.js';
 const jobs = new Map<
   string,
   {
@@ -49,10 +69,18 @@ const jobs = new Map<
     total?: number;
     result?: unknown;
     error?: string;
+    agentDisposition?:string;
+    errorCode?:string;
+    exportDiagnostics?:Record<string,unknown>;
   }
 >();
 const active = new Set<string>();
 const controllers = new Map<string, AbortController>();
+const deferredAliases=new Map<string,string>();
+async function deferredResult(project:LoadedProject,job:{result?:unknown}){
+ const id=(job.result as {runId?:string})?.runId;if(!id||!/^[a-f0-9-]{36}$/.test(id))return job.result;
+ const file=path.join(project.root,'motion/ai',id,'proposal.json');await noSymlinkPath(project.root,file);return JSON.parse(await readFile(file,'utf8'));
+}
 export async function motionApi(
   project: LoadedProject,
   request: IncomingMessage,
@@ -69,9 +97,93 @@ export async function motionApi(
     });
     response.end(JSON.stringify(value));
   };
+    if(action==="apply-skill"&&request.method==="POST"){
+      runtimeCode.assertCurrent();
+      const ref=z.object({sceneId:z.string(),targetId:z.string()}).strict();
+      const input=z.object({revision:z.string(),applicationId:z.string().min(1).max(100),outgoing:ref,incoming:ref,startFrame:z.number().int(),durationFrames:z.number().int().positive(),placement:z.enum(["reference","outgoingOrigin"]).optional(),overlapPolicy:z.enum(["avoid","allow","require"]).optional(),fixedIncomingStart:z.boolean().optional(),fixedOutgoingStart:z.boolean().optional(),maxDelaySeconds:z.number().min(0).max(5).optional()}).strict().parse(JSON.parse((await body(request,65536)).toString()));
+      const doc=await readMotion(project);if(doc.revision!==input.revision)throw Error("STALE_PROJECT_REVISION");
+      const operations=handoffOperations(project,input),candidate=applyOperations(doc.state,operations,project),prepared=await prepareHandoff(project,candidate,candidate.skillApplications!.find(a=>a.applicationId===input.applicationId)!,{repair:true});
+      const changed=await changeMotion(project.root,{expectedRevision:doc.revision,request:"Text Handoff",operations:[...operations,...prepared.operations],expectedCandidate:prepared.state});
+      json({document:changed,skill:prepared.report});return true;
+    }
   if (request.method === "GET") {
+    if (action === 'variants') { json(segments[5] ? await readMotionVariantBatch(project, segments[5]) : await listMotionVariantBatches(project)); return true; }
+    if(action==="skill-frame"&&request.method==="GET"){
+      const query=new URL(request.url!,"http://local").searchParams,doc=await readMotion(project),id=query.get("applicationId");
+      const app=doc.state.skillApplications?.find(a=>a.applicationId===id);if(!app)throw Error("SKILL_APPLICATION_NOT_FOUND");
+      const frame=z.coerce.number().int().nonnegative().parse(query.get("frame"));let state=doc.state;
+      if(query.get("phase")==="before"){
+        const operations=app.incoming.animationIds.map(animationId=>({type:"setStartFrame" as const,animationId,startFrame:doc.state.animations.find(a=>a.animationId===animationId)!.startFrame-Math.round(app.adjustments.filter(a=>a.animationId===animationId).reduce((sum,a)=>sum+a.delaySeconds,0)*doc.state.settings.fps)}));
+        state=applyOperations(state,operations,project);
+      }
+      if(frame>=state.settings.durationFrames)throw Error("FRAME_OUTSIDE_OUTPUT_WINDOW");
+      const {renderNativeFrame}=await import("../native/client.js");const image=await renderNativeFrame(project,state,frame,{scale:.5});response.writeHead(200,{"Content-Type":"image/png","Cache-Control":"no-store"});response.end(image.png);return true;
+    }
+
+    if(action==="inspect-frame"&&request.method==="GET"){
+      const query=new URL(request.url!,"http://local").searchParams;
+      const frame=z.coerce.number().int().nonnegative().parse(query.get("frame")??0);
+      const first=await renderProjectFrame(project,frame,{scale:.25,diagnostics:true,revision:query.get("revision")??undefined});
+      const other=query.has("compare")?await renderProjectFrame(project,z.coerce.number().int().nonnegative().parse(query.get("compare")),{scale:.25,diagnostics:true,revision:first.revision}):undefined;
+      json({frame,revision:first.revision,composition:first.composition,compare:other?{frame:other.frame,composition:other.composition,changes:compareFrameComposition(other,first)}:undefined});return true;
+    }
+
+    if (action === "frame") {
+      const query = new URL(request.url!, "http://127.0.0.1").searchParams;
+      const frame = z.coerce
+        .number()
+        .int()
+        .min(0)
+        .max(108000)
+        .parse(query.get("frame") ?? 0);
+      const scale = z.coerce
+        .number()
+        .positive()
+        .max(4)
+        .parse(query.get("scale") ?? 1);
+      const viewport=query.get('viewport')??undefined,sequence=query.has('sequence')?z.coerce.number().int().nonnegative().parse(query.get('sequence')):undefined;
+      if(viewport&&(!/^[a-zA-Z0-9-]{1,100}$/.test(viewport)||sequence===undefined))throw Error('INVALID_PREVIEW_SESSION');
+      if(query.get('fingerprint')&&query.get('fingerprint')!==project.inspection.fingerprint)throw Error('STALE_SOURCE_FINGERPRINT');
+      const controller = new AbortController();
+      response.on("close", () => controller.abort());
+      const result = await renderProjectFrame(project, frame, {
+        scale,
+        previewSession:viewport?project.config.projectId+':'+viewport:undefined,previewRequest:sequence,
+        encoding: query.get("transport") === "packet" ? "rgba" : "png",
+        revision: query.get("revision") ?? undefined,
+        signal: controller.signal,
+      });
+      const packet = query.get("transport") === "packet";
+      response.writeHead(200, {
+        "Content-Type": packet ? "application/x-akella-frame" : "image/png",
+        "Cache-Control": "no-store",
+        "X-Akella-Renderer": result.renderer,
+        "X-Akella-Frame": String(result.frame),
+        "X-Akella-Revision": result.revision,
+      });
+      response.end(packet ? framePacket(result) : result.png);
+      return true;
+    }
+
     if (!action) {
-      json(await projectMotion(project));
+      const activeJob = (() => {
+        for (const [id, job] of jobs) {
+          if (
+            job.projectId === project.config.projectId &&
+            job.status === "running"
+          ) {
+            return {
+              id,
+              stage: job.stage,
+              progress: job.progress,
+              total: job.total,
+            };
+          }
+        }
+        return null;
+      })();
+      const deferred=(await recoveryJobs(project)).find(j=>["PENDING","RUNNING"].includes(j.status));
+      json({ ...(await projectMotion(project)), variantBatches:await listMotionVariantBatches(project), productions:await listProductions(project), directCheckpoints:await listDirectCheckpoints(project), activeJob:activeJob??(deferred?{id:deferred.id,stage:"recovering-project"}:null) });
       return true;
     }
     if (action === "inspector") {
@@ -174,6 +286,8 @@ export async function motionApi(
       json(result);
       return true;
     }
+    if (action === "recovery-settings") { json((await harnessConfig(project.root)).recovery); return true; }
+    if (action === "recovery-memory") { json(await recoveryMemory(project.root)); return true; }
     if (action === "harness") {
       if (segments[5] === "improvements") {
         json(await candidates(project.root));
@@ -246,18 +360,61 @@ export async function motionApi(
       json(object);
       return true;
     }
+    if(action==="export-reports"){json(segments[5]?await exportReport(project.root,segments[5]):await exportReports(project.root));return true;}
     if (action === "jobs") {
       const job = jobs.get(segments[5]);
-      if (!job || job.projectId !== project.config.projectId)
-        throw new Error("Задание не найдено или сервер перезапущен");
+      if (!job || job.projectId !== project.config.projectId){
+        const deferred=(await recoveryJobs(project)).find(j=>j.id===segments[5]);
+        if(!deferred){try{const report=await exportReport(project.root,segments[5]);json({projectId:project.config.projectId,status:report.status==='COMPLETED'?'completed':'failed',stage:report.stage,exportDiagnostics:report,error:report.message??(report.status==='RUNNING'?'EXPORT_INTERRUPTED: server restarted':undefined)});return true;}catch(e){if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e;}throw new Error("Задание не найдено или сервер перезапущен");}
+        json({status:["PENDING","RUNNING"].includes(deferred.status)?"running":deferred.status==="COMPLETED"?"completed":"failed",stage:"recovering-project",result:deferred.status==="COMPLETED"?await deferredResult(project,deferred):undefined,error:deferred.reason});return true;
+      }
       json(job);
       return true;
     }
+    if (action === 'productions') {json(segments[5]?await readProduction(project,segments[5]):await listProductions(project));return true;}
+    if(action === 'selection-thumbnail') {
+      const sceneId=new URL(request.url!,'http://localhost').searchParams.get('sceneId')??'';
+      const targetId=decodeURIComponent(segments[5]??'');
+      const {selectionThumbnail}=await import('../native/selection-thumbnail.js');
+      const result=await selectionThumbnail(project,sceneId,targetId);
+      response.writeHead(200,{'Content-Type':'image/png','Cache-Control':'no-cache','X-Content-Type-Options':'nosniff'});
+      response.end(Buffer.from(result.png));return true;
+    }
     if (action === "thumbnail") {
-      const html = await sceneThumbnailHtml(
-        project,
-        decodeURIComponent(segments[5] ?? ""),
+      const sceneId = decodeURIComponent(segments[5] ?? "");
+      const scene = project.inspection.document.scenes.find(
+        (s) => s.sceneId === sceneId,
       );
+      if (!scene) throw new Error("Scene not found");
+      if (renderingMode() === "native") {
+        const { defaultMotion } = await import("./context.js");
+        const { renderNativeFrame } = await import("../native/client.js");
+        const state = defaultMotion(project);
+        state.blocks = [
+          {
+            ...state.blocks.find((b) => b.sceneId === sceneId)!,
+            startFrame: 0,
+          },
+        ];
+        state.settings.durationFrames = state.blocks[0].durationFrames;
+        state.settings.width = Math.ceil(scene.width);
+        state.settings.height = Math.ceil(scene.height);
+        const result = await renderNativeFrame(project, state, 0, {
+          scale: Math.min(1, 320 / scene.width),
+        });
+        response.writeHead(200, {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-cache",
+          "X-Akella-Renderer": result.renderer,
+          "Content-Security-Policy":
+            "default-src 'none'; img-src data:; style-src 'unsafe-inline'; frame-ancestors 'self'",
+        });
+        response.end(
+          `<!doctype html><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000}img{width:100%;height:100%;object-fit:contain}</style><img alt="" src="data:image/png;base64,${Buffer.from(result.png).toString("base64")}">`,
+        );
+        return true;
+      }
+      const html = await sceneThumbnailHtml(project, sceneId);
       response.writeHead(200, {
         "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": "no-cache",
@@ -269,12 +426,23 @@ export async function motionApi(
     }
     if (action === "preview") {
       const doc = await readMotion(project);
-      const built = await motionHtml(project, doc.state);
+      const native = renderingMode() === "native";
+      const built = native
+        ? {
+            html: nativePreviewHtml(
+              `/api/projects/${encodeURIComponent(project.config.projectId)}/motion`,
+              doc.state.settings.width,
+              doc.state.settings.height,
+              doc.revision,
+              {quality:z.enum(['auto','full','half','third','quarter']).parse(new URL(request.url!,'http://localhost').searchParams.get('quality')??'auto'),fps:doc.state.settings.fps,durationFrames:doc.state.settings.durationFrames,sourceFingerprint:project.inspection.fingerprint},
+            ),
+          }
+        : await motionHtml(project, doc.state);
       response.writeHead(200, {
         "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": "no-store",
         "Content-Security-Policy":
-          "default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'self'",
+          "default-src 'none'; connect-src 'self'; img-src data: blob: 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'self'",
       });
       response.end(built.html);
       return true;
@@ -285,7 +453,7 @@ export async function motionApi(
         try {
           await noSymlinkPath(project.root, path.join(project.root, "renders"));
           files = (await readdir(path.join(project.root, "renders")))
-            .filter((n) => /^motion-[a-f0-9-]+\.mp4$/.test(n))
+            .filter((n) => /^(?:motion|draft-(?:full|half|third|quarter))-[a-f0-9-]+\.mp4$/.test(n))
             .sort()
             .reverse();
         } catch (e) {
@@ -295,7 +463,7 @@ export async function motionApi(
         return true;
       }
       const name = segments[5];
-      if (!/^motion-[a-f0-9-]+\.mp4$/.test(name))
+      if (!/^(?:motion|draft-(?:full|half|third|quarter))-[a-f0-9-]+\.mp4$/.test(name))
         throw new Error("Некорректное имя видео");
       const file = within(project.root, `renders/${name}`);
       await noSymlinkPath(project.root, file);
@@ -321,11 +489,99 @@ export async function motionApi(
     }
   }
   if (request.method === "POST") {
+    if(sourcePromotionBusy && action!=="cancel")throw Error("Идёт применение проверенного исправления кода");
+    if(action==="code-repair-review"||action==="code-repair-approve"){
+      if(!request.headers["content-type"]?.startsWith("application/json"))throw Error("application/json required");
+      const value=z.object({runId:z.uuid(),patchIdentity:z.string().regex(/^[a-f0-9]{64}$/),approvalToken:z.string().optional(),allowLiveReplay:z.boolean().optional()}).strict().parse(JSON.parse((await body(request,4000)).toString()));
+      const file=path.join(project.root,"motion/ai",value.runId,"code-repair.json");await noSymlinkPath(project.root,file);
+      const proposal=JSON.parse(await readFile(file,"utf8"));
+      if(proposal.patchIdentity!==value.patchIdentity||proposal.status!=="AWAITING_APPROVAL")throw Error("PATCH_NOT_REVIEWABLE");
+      const repository=process.cwd();
+      if(action==="code-repair-review"){json(await reviewForApproval(repository,proposal.workspace,value.patchIdentity));return true;}
+      if([...jobs.values()].some(j=>j.status==="running"))throw Error("Дождитесь завершения текущих заданий");
+      const id=randomUUID();jobs.set(id,{projectId:project.config.projectId,status:"running",stage:"source-repair-verification"});json({jobId:id},202);
+      void approveCodeRepair(repository,proposal.workspace,value.patchIdentity,value.approvalToken??"",isolated=>verifyOriginalRun(isolated,project.root,value.runId,repository,value.allowLiveReplay===true)).then(async result=>{
+        const resumed=await publishOriginalReplay(repository,project.root,value.runId,result.replay);
+        const outcome={...result,resume:resumed,originalProjectChanged:resumed.status==="APPLIED"};
+        await atomicJson(file,{...proposal,...outcome});jobs.set(id,{projectId:project.config.projectId,status:"completed",result:outcome});
+      }).catch(error=>jobs.set(id,{projectId:project.config.projectId,status:"failed",error:String(error)}));
+      return true;
+    }
+    if (action === "recovery-settings") {
+      const policy=recoveryPolicySchema.parse(JSON.parse((await body(request,20000)).toString()));
+      const existing=await harnessConfig(project.root);
+      await safeDirectory(project.root,"motion/harness");
+      await atomicJson(path.join(project.root,"motion/harness/config.json"),{...existing,recovery:policy});
+      json(policy);return true;
+    }
+    if (action === "render-cache-clear") {
+      await clearNativeCache();
+      json({ cleared: true });
+      return true;
+    }
+    if (action === "render-sequence") {
+      const value = z
+        .object({
+          frames: z.array(z.number().int().min(0).max(108000)).min(1).max(30),
+          revision: z.string().optional(),
+        })
+        .strict()
+        .parse(JSON.parse((await body(request, 20000)).toString()));
+      const id = randomUUID(),
+        controller = new AbortController(),
+        job = {
+          projectId: project.config.projectId,
+          status: "running" as "running" | "completed" | "failed",
+          stage: "native-render",
+          progress: 0,
+          total: value.frames.length,
+          result: undefined as unknown,
+          error: undefined as string | undefined,
+        };
+      if (jobs.size > 200) {
+        for (const [key, v] of jobs)
+          if (v.status !== "running") {
+            jobs.delete(key);
+            break;
+          }
+      }
+      jobs.set(id, job);
+      controllers.set(id, controller);
+      json({ jobId: id }, 202);
+      void (async () => {
+        try {
+          for (const frame of value.frames) {
+            await renderProjectFrame(project, frame, {
+              revision: value.revision,
+              encoding: "rgba",
+              signal: controller.signal,
+            });
+            job.progress++;
+          }
+          job.status = "completed";
+          job.result = { frames: value.frames, renderer: "skia-cpu/1" };
+        } catch (e) {
+          job.status = "failed";
+          job.error = String(e);
+        } finally {
+          controllers.delete(id);
+        }
+      })();
+      return true;
+    }
+
     if (!request.headers["content-type"]?.startsWith("application/json"))
       throw new Error("application/json required");
     const input: unknown = JSON.parse(
       (await body(request, 1024 * 1024)).toString(),
     );
+    if (action === 'variants') {
+      if (segments[5] === 'cancel') { const value=z.object({batchId:z.string().uuid()}).strict().parse(input);json(await cancelMotionVariantBatch(project,value.batchId));return true; }
+      runtimeCode.assertCurrent();
+      if (segments[5] === 'resume') { const job=await resumeMotionVariants(project,input);json({batchId:job.batchId},202);return true; }
+      if (segments[5] === 'rerender') { const job=await rerenderMotionVariant(project,input);json({batchId:job.batchId},202);return true; }
+      const job = await startMotionVariants(project, input); json({batchId:job.batchId},202); return true;
+    }
     if (action === "provider-settings") {
       try {
         json(await saveProviderSettings(project, input, "api-settings"));
@@ -335,15 +591,29 @@ export async function motionApi(
       }
       return true;
     }
+    if(action==='direct-resume'){
+      const {runId}=z.object({runId:z.uuid()}).strict().parse(input);
+      if([...jobs.values()].some(j=>j.projectId===project.config.projectId&&j.status==='running'))throw Error('Дождитесь завершения текущего задания');
+      const id=randomUUID(),controller=new AbortController();controllers.set(id,controller);jobs.set(id,{projectId:project.config.projectId,status:'running',stage:'direct-resuming'});json({jobId:id},202);
+      void resumeDirectMotion(project,runId,stage=>jobs.set(id,{projectId:project.config.projectId,status:'running',stage}),{signal:controller.signal}).then(result=>jobs.set(id,{projectId:project.config.projectId,status:'completed',result})).catch(error=>jobs.set(id,{projectId:project.config.projectId,status:'failed',error:String(error)})).finally(()=>controllers.delete(id));return true;
+    }
+    if(action==='production-resume'){
+      if(process.env.AKELLA_ENABLE_EXPERIMENTAL_PRODUCTION!=='1')throw Error('EXPERIMENTAL_PRODUCTION_DISABLED: Direct runtime is the default');
+      const value=z.object({productionId:z.string().uuid()}).strict().parse(input),saved=await readProduction(project,value.productionId);
+      if([...jobs.values()].some(j=>j.projectId===project.config.projectId&&j.status==='running'))throw Error('Дождитесь завершения текущего задания');
+      const id=randomUUID(),controller=new AbortController();controllers.set(id,controller);jobs.set(id,{projectId:project.config.projectId,status:'running',stage:'production-resuming'});json({jobId:id},202);
+      void executeProduction(project,{request:saved.request,settings:saved.settings as import('./provider.js').ProviderSettings,expectedRevision:(await readMotion(project)).revision},stage=>jobs.set(id,{projectId:project.config.projectId,status:'running',stage}),{productionId:value.productionId,signal:controller.signal}).then(result=>jobs.set(id,{projectId:project.config.projectId,status:'completed',result})).catch(error=>jobs.set(id,error.resumable?{projectId:project.config.projectId,status:'completed',result:{status:'paused',productionId:value.productionId,resumable:true,summary:'Этапы сохранены. Продолжение доступно.'}}:{projectId:project.config.projectId,status:'failed',error:String(error)})).finally(()=>controllers.delete(id));return true;
+    }
     if (action === "cancel") {
       const { jobId } = z.object({ jobId: z.uuid() }).strict().parse(input);
       const job = jobs.get(jobId);
-      if (!job || job.projectId !== project.config.projectId)
-        throw new Error("Unknown project job");
+      if (!job || job.projectId !== project.config.projectId){await cancelRecovery(project,jobId);json({status:"CANCELLATION_REQUESTED"});return true;}
+      if(deferredAliases.has(jobId))await cancelRecovery(project,deferredAliases.get(jobId)!);
       controllers.get(jobId)?.abort(new Error("CANCELLED"));
       json({ status: "CANCELLATION_REQUESTED" });
       return true;
     }
+    if(action==="anchor"){json(await commitAnchorChange(project,input));return true;}
     if (action === "operations") {
       const data = z
         .object({
@@ -372,6 +642,13 @@ export async function motionApi(
       json(await changeMotion(project.root, data));
       return true;
     }
+    if(action === "settings") {
+      const settingsInput=z.object({expectedRevision:z.string(),fps:z.number().int().min(1).max(60),durationSeconds:z.number().positive().optional(),width:z.number().int().min(2).max(4096),height:z.number().int().min(2).max(4096),fpsPolicy:z.enum(["preserveSeconds","preserveFrames"]).optional()}).strict().parse(input);
+      const {expectedRevision,...change}=settingsInput;
+      const result=await changeMotion(project.root,{expectedRevision,request:"Изменить длительность/FPS",operations:[{type:"setProjectTime",...change}]});
+      const time=projectTime(result.document.state,result.document.revision);
+      json({...result,time,warnings:[...time.warnings,...(result.diff.some(d=>d.path==="settings.fps")&&time.migration.legacyOriginCount?["Для старых временных данных без исходных единиц сохранено время в секундах. Явно заданные покадровые задержки сохранены в кадрах."]:[])]});return true;
+    }
     if (action === "undo" || action === "redo") {
       const data = z
         .object({ expectedRevision: z.string() })
@@ -397,6 +674,7 @@ export async function motionApi(
       return true;
     }
     if (action === "execute" || action === "plan" || action === "render") {
+      try {runtimeCode.assertCurrent();} catch(error){json({error:String(error),errorCode:"SERVER_RESTART_REQUIRED"},409);return true;}
       if (action !== "render")
         try {
           await prepareMotionRequest(project, input);
@@ -405,6 +683,7 @@ export async function motionApi(
           json({ error: error.message, errorCode: error.code }, 400);
           return true;
         }
+      const draftInput=action==='render'?z.object({mode:z.enum(['final','draft']).default('final'),quality:z.enum(['full','half','third','quarter']).default('quarter')}).strict().parse(input):undefined;
       const key =
         project.config.projectId +
         ":" +
@@ -430,13 +709,17 @@ export async function motionApi(
                 { signal: controller.signal },
               )
           : () =>
-              exportVideo(project.root, (progress, total) =>
-                jobs.set(id, {
-                  projectId: project.config.projectId,
-                  status: "running",
-                  progress,
-                  total,
-                }),
+              exportVideo(
+                project.root,
+                (progress, total) =>
+                  jobs.set(id, {
+                    projectId: project.config.projectId,
+                    ...jobs.get(id),
+                    status: "running",stage:"encoding",
+                    progress,
+                    total,
+                  }),
+                { signal: controller.signal,exportJobId:id,onStage:(stage,diagnostics)=>jobs.set(id,{...jobs.get(id),projectId:project.config.projectId,status:'running',stage,exportDiagnostics:diagnostics}),...(draftInput?.mode==='draft'?{draftQuality:draftInput.quality}:{}) },
               );
       void work()
         .then((result) =>
@@ -446,16 +729,23 @@ export async function motionApi(
             result,
           }),
         )
-        .catch((e) =>
-          jobs.set(id, {
-            projectId: project.config.projectId,
-            status: "failed",
-            error: e instanceof ProviderSettingsError ? e.message : String(e),
-          }),
-        )
+        .catch(async(e) => {
+          if(e.resumable&&e.productionId){jobs.set(id,{projectId:project.config.projectId,status:'completed',result:{status:'paused',productionId:e.productionId,resumable:true,summary:'Соединение с моделью прервалось или этап требует продолжения. Выполненные этапы сохранены.'}});return;}
+          const deferredId=(e as {deferredJobId?:string}).deferredJobId;
+          if(deferredId){
+            deferredAliases.set(id,deferredId);jobs.set(id,{projectId:project.config.projectId,status:"running",stage:"recovering-project"});
+            try{
+              await resumeProjectRecoveries(project);const saved=(await recoveryJobs(project)).find(j=>j.id===deferredId);
+              if(saved?.status==="COMPLETED"){jobs.set(id,{projectId:project.config.projectId,status:"completed",result:await deferredResult(project,saved)});return;}
+              jobs.set(id,{projectId:project.config.projectId,status:"failed",error:saved?.reason??"Deferred recovery unavailable"});return;
+            }finally{deferredAliases.delete(id);}
+          }
+          jobs.set(id,{projectId:project.config.projectId,status:"failed",exportDiagnostics:(e as {exportDiagnostics?:Record<string,unknown>}).exportDiagnostics,agentDisposition:(e as {agentDisposition?:string}).agentDisposition,errorCode:(e as {code?:string}).code,error:e instanceof ProviderSettingsError||(e as {agentDisposition?:string}).agentDisposition?e.message:String(e)});
+        })
         .finally(() => {
           active.delete(key);
           controllers.delete(id);
+          if(action!=="render")void resumeProjectRecoveries(project).catch(e=>console.warn("Recovery continuation:",String(e)));
           if (jobs.size > 100)
             for (const [old, job] of jobs) {
               if (job.status !== "running") {

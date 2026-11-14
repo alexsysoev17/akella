@@ -5,12 +5,30 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { z } from "zod";
 import { AIClient } from "../src/motion/provider.js";
+import {incrementalEditSchema} from '../src/motion/incremental-edit.js';
+import {semanticGraphSchema} from '../src/motion/intent/graph.js';
+import {intentPlanSchema} from '../src/motion/intent/schema.js';
 import { providerSettingsSchema } from "../src/motion/provider-settings.js";
 import {
   registerProvider,
   type ProviderCapabilities,
   type ProviderRequest,
 } from "../src/harness/providers/index.js";
+
+test('compact edit branch reverses strict optional-null wire adaptation without discarding invalid values',async()=>{
+ const wire={edits:[{operation:'MODIFY_EFFECT',effect:'inertialOvershoot',ruleId:null,targets:['logo'],excludedTargets:[],scope:{selector:'objects',logicalObjectIds:['logo'],sceneId:null,startSeconds:null,endSeconds:null,phase:'all'},parameters:{amplitude:null,frequency:null,decay:null,durationSeconds:null,property:null,easing:null},amplitudeFactor:.25,frequencyFactor:.5,durationFactor:null}],assumptions:[]};
+ const schema=z.union([incrementalEditSchema,semanticGraphSchema,intentPlanSchema]);
+ for(const invalid of [false,true]){
+  const output=structuredClone(wire);if(invalid)output.edits[0].effect='invented';
+  const f=await fixture('strict-json-schema',output);
+  try{
+   const run=()=>f.client.structured({incrementalEditHint:true},'reduce logo amplitude and frequency','Return typed edits',schema,'semantic-planning',incrementalEditSchema);
+   if(invalid)await assert.rejects(run,/INVALID_OUTPUT/);
+   else{const parsed=await run();assert.ok('edits' in parsed);assert.equal(parsed.edits[0].amplitudeFactor,.25);assert.equal(parsed.edits[0].frequencyFactor,.5);assert.deepEqual(parsed.edits[0].parameters,{});assert.equal(parsed.edits[0].scope.sceneId,undefined);}
+   assert.equal(f.calls(),1);
+  }finally{await f.cleanup();}
+ }
+});
 
 test("provider model identifiers accept namespaces and local tags without accepting endpoints or credentials", () => {
   for (const model of [

@@ -1,3 +1,5 @@
+import { renderingMode } from "./native/client.js";
+import { reconstructNativeProject } from "./native/reconstruct.js";
 import { pathCapability } from "./motion-library/registry/path-capability.js";
 import { readFile, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
@@ -260,7 +262,8 @@ export async function buildSceneSvg(
       const color = brush(paint, node);
       const geometry = list(p.strokeGeometry);
       const trimAttributes =
-        options.motion && pathCapability(node.type, p).supported
+        options.motion &&
+        pathCapability(node.type, p, "browser-compat").supported
           ? ` data-motion-trim="true" data-motion-stroke-width="${num(p.strokeWeight, 1)}" data-motion-stroke-cap="${p.strokeCap === "ROUND" ? "round" : p.strokeCap === "SQUARE" ? "square" : "butt"}" data-motion-stroke-miterlimit="${num(p.strokeMiterLimit, 4)}" data-motion-stroke-join="${p.strokeJoin === "ROUND" ? "round" : p.strokeJoin === "BEVEL" ? "bevel" : "miter"}"${geometry.length ? ` data-motion-centerline="${escape(node.type === "LINE" ? `M0 0 L${w} ${h}` : obj(list(p.vectorPaths)[0]).data)}"` : ""}`
           : "";
 
@@ -503,7 +506,7 @@ export async function buildSceneSvg(
     const rendered = `<g data-node-id="${escape(node.figmaNodeId)}" transform="${svgMatrix(transform)}" opacity="${num(p.opacity, 1)}" style="${filter ? `filter:${filter};` : ""}${allowed.includes(blend) ? `mix-blend-mode:${blend};` : ""}"><g${clip}${clip ? ' data-clip-reason="source"' : ""}>${body}</g></g>`;
     if (!options.motion) return rendered;
     const motionBody = rendered;
-    return `<g data-motion-target="${escape(node.figmaNodeId)}" data-origin-x="${transform[0][2]}" data-origin-y="${transform[1][2]}" data-base-visible="${p.visible !== false}">${motionBody}</g>`;
+    return `<g data-motion-target="${escape(node.figmaNodeId)}" data-origin-x="${transform[0][2]}" data-origin-y="${transform[1][2]}" data-center-x="${transform[0][2]+transform[0][0]*num(p.width)/2+transform[0][1]*num(p.height)/2}" data-center-y="${transform[1][2]+transform[1][0]*num(p.width)/2+transform[1][1]*num(p.height)/2}" data-base-visible="${p.visible !== false}">${motionBody}</g>`;
   }
   const body = await render(scene as unknown as RenderNode, unit);
   const fontCss = stats.fonts
@@ -525,6 +528,8 @@ export async function reconstructProject(
 ): Promise<
   Map<string, { png: string; html: string; stats: RenderStats; error?: string }>
 > {
+  if (renderingMode() === "native")
+    return reconstructNativeProject(project, output);
   let browser;
   try {
     browser = await chromium.launch({ headless: true });

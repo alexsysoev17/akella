@@ -1,13 +1,21 @@
 {
   "extends": "./tsconfig.json",
   "include": [
+    "scripts/figma-mcp-runner.ts",
     "apps/scene-validator/src/**/*.ts",
     "apps/scene-validator/tests/**/*.ts",
     "scripts/benchmark.ts",
     "scripts/replay-agent-run.ts",
     "scripts/harness-fixtures.ts",
     "scripts/benchmark-report.ts",
-    "scripts/diagnose-text.ts"
+    "scripts/diagnose-text.ts",
+    "scripts/eval-motion-tools.ts",
+    "scripts/recovery.ts",
+    "scripts/eval-recovery.ts",
+    "scripts/eval-code-repair.ts",
+    "scripts/benchmark-preview.ts",
+    "scripts/benchmark-direct-stabilization.ts",
+    "scripts/replay-stabilization-benchmark.ts"
   ],
   "exclude": [],
   "compilerOptions": {

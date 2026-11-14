@@ -8,7 +8,7 @@ export const techniques = [
       "Explicit non-destructive text clipping reveal; never added to ordinary slide/fade",
     queries: ["mask reveal text", "текст через маску"],
     implementation:
-      "Cached SVG clip wrapper sized from source bounds and loaded HTML line boxes",
+      "Native shaped-text clip coverage in Skia; explicit browser compatibility uses SVG wrappers",
     properties: ["reveal"],
     parameters: ["from", "to", "direction"],
     limits: [
@@ -28,14 +28,14 @@ export const techniques = [
     id: "inertialOvershoot",
     name: "Инерционные затухающие колебания",
     implementationId: "inertialOvershoot",
-    description: "Velocity-based additive damped sine after arrival",
+    description: "Whole-object continuous approach and velocity-driven settling; tuneInertia continuous is the approved single rest-launch authoring method. See inertia-continuity guidance.",
     queries: [
       "инерция после движения",
       "затухающие колебания после остановки",
       "procedural overshoot",
     ],
     implementation:
-      "incomingVelocity × amplitude × sin(2π frequency t) × exp(-decay t); ae mode: derivative at keyTime-frameDuration/10, exact duration cutoff; legacy mode: lookback secant and smooth settling envelope",
+      "Existing damped sine evaluator. Uncoupled mode uses velocity × coefficient; coupled mode uses velocity/(2πf), with strength applied to a linked approach. tuneInertia continuous matches scalar derivatives through jerk and continues all pose channels. Stored legacy math is retained.",
     properties: ["x", "y", "scaleX", "scaleY", "rotation"],
     parameters: [
       "sourceAnimationId",
@@ -47,11 +47,11 @@ export const techniques = [
       "incomingImpulse",
     ],
     limits: [
-      "Needs source base track",
+      "Needs a finite source track or a unique cross-scene transition; whole-pose settling includes X/Y, rotation and scale, not just X. Continuous authoring is a single rest launch, not arbitrary multi-key reconstruction",
       "incomingImpulse is explicit additive velocity, not silently invented",
       "frame rate must resolve frequency",
     ],
-    examples: ["slideUp then setExpression inertialOvershoot"],
+    examples: ["create movement + linked inertialOvershoot, then tuneInertia approach=continuous; inspect achieved peak and rendered whole pose"],
     technicalChecks: [
       "source track",
       "procedural implementation",
@@ -72,7 +72,7 @@ export const techniques = [
     description: "Native path-length mask reveal preserving source paint",
     queries: ["Trim Paths", "прорисуй линию вдоль траектории", "path reveal"],
     implementation:
-      "getTotalLength + stroke-dasharray/dashoffset on centerline mask",
+      "Native CanvasKit PathMeasure contour segments on immutable centerline geometry; browser compatibility uses SVG dash masks",
     properties: ["trim"],
     parameters: ["from", "to", "direction", "durationFrames", "easing"],
     limits: [
@@ -99,12 +99,12 @@ export const techniques = [
     id: "wiggle",
     name: "Процедурное покачивание",
     implementationId: "wiggle",
-    description: "Seeded smooth noise",
+    description: "Deterministic smooth seeded additive X/Y noise. Continuous until scene end when requested; no settling endpoint. Existing expressions are parameter edits, not duplicates.",
     queries: ["wiggle", "случайное покачивание"],
     implementation: "seeded analytic noise",
     properties: ["x", "y", "rotation", "scaleX", "scaleY"],
     parameters: ["amplitude", "frequency", "seed"],
-    limits: ["finite interval"],
+    limits: ["bounded interval; continuous effects may reach final project frame"],
     examples: ["setExpression wiggle"],
     technicalChecks: ["seed", "finite evaluation"],
     visualChecks: ["visible contribution"],

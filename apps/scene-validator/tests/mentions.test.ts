@@ -237,7 +237,7 @@ test("viewport click → ghost → Space → structured request → fixture anim
     );
     await page.locator("#m-read-response").click();
     await page.waitForFunction(
-      () => document.querySelector("#m-play")?.textContent === "❚❚ Пауза",
+      () => document.querySelector("#m-play")?.textContent === "Пауза",
     );
     assert.equal(
       (await readMotion(f.project)).state.animations[0].targetId,

@@ -28,6 +28,7 @@ import {
 import { inspectSource } from "./source.js";
 import { readProject } from "./project.js";
 import type { ProjectConfig, SourceInspection } from "./types.js";
+import { assertFigmaSource, assertFigmaRefresh } from "./figma-source.js";
 export const slugify = (name: string): string =>
   name
     .normalize("NFKC")
@@ -115,6 +116,9 @@ async function resolveExportFolder(source: string): Promise<string> {
   );
 }
 export interface ImportOptions {
+  initialProjectId?: string;
+  figmaSource?: ProjectConfig["figmaSource"];
+  rejectInvalidMotionReferences?: boolean;
   name: string;
   source: string;
   projectsRoot: string;
@@ -132,6 +136,7 @@ export interface ImportResult {
 export async function createProject(
   options: ImportOptions,
 ): Promise<ImportResult> {
+  if (options.initialProjectId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(options.initialProjectId)) throw new Error("Invalid initial project ID");
   const slug = slugify(options.name);
   if (!slug) throw new Error("Project name must contain letters or numbers");
   const projectsRoot = path.resolve(options.projectsRoot);
@@ -188,6 +193,7 @@ export async function createProject(
         ],
       });
     const inspection = await inspectSource(path.join(staged, "source"));
+    if (options.figmaSource) assertFigmaSource(options.figmaSource, inspection.document);
     const timestamp = new Date().toISOString();
     const importId = randomUUID();
     let config: ProjectConfig;
@@ -200,6 +206,10 @@ export async function createProject(
       await noSymlinkPath(projectsRoot, destination);
       unlock = await lockProject(destination);
       const existing = await readProject(destination);
+      if (options.figmaSource) {
+        const old = await inspectSource(existing.sourceRoot);
+        assertFigmaRefresh(existing.config.figmaSource, options.figmaSource, old.document, inspection.document);
+      }
       if (
         options.expectedFingerprint &&
         options.expectedFingerprint !==
@@ -212,6 +222,7 @@ export async function createProject(
         );
       config = {
         ...existing.config,
+        figmaSource: options.figmaSource,
         source: {
           scene: "source/scene.json",
           exportReport: "source/export-report.json",
@@ -229,8 +240,9 @@ export async function createProject(
       };
     } else
       config = {
+        figmaSource: options.figmaSource,
         schemaVersion: "1.0.0",
-        projectId: randomUUID(),
+        projectId: options.initialProjectId ?? randomUUID(),
         name: options.name,
         createdAt: timestamp,
         updatedAt: timestamp,
@@ -280,6 +292,8 @@ export async function createProject(
       path.join(staged, "motion/source-reference-report.json"),
       referenceReport,
     );
+    if (options.rejectInvalidMotionReferences && referenceReport.diagnostics.length)
+      throw new Error(`Figma refresh would invalidate motion: ${referenceReport.diagnostics.join("; ")}`);
     if (!updated) {
       for (const directory of [
         "notes",

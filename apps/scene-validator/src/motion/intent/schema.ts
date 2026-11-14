@@ -1,3 +1,6 @@
+import {semanticEditSchema} from "../rule-contract.js";
+import {skillBindingSchema} from "../../motion-library/skills/contracts.js";
+import {coordinateSchema, MAX_FLOAT32} from "../time.js";
 import { textAnimationSchema } from "../schema.js";
 import { z } from "zod";
 import { easingSchema } from "../../motion-library/easings/registry.js";
@@ -46,7 +49,9 @@ export const temporalReferenceSchema = z
   .strict();
 export const intentRequirementSchema = z
   .object({
+    semanticEdit:semanticEditSchema.optional(),
     semanticActionId: z.string().optional(),
+    motionAction: z.enum(["freezeProject"]).optional(),
     sourceClauseId: z.string().optional(),
     requirementId: z.string().min(1).max(100),
     kind: z.enum([
@@ -109,25 +114,28 @@ export const intentRequirementSchema = z
       })
       .strict()
       .optional(),
+    targetScope: z.enum(["instance", "sceneInstance", "transition", "logicalObject"]).optional(),
     selectionRequirementId: z.string().optional(),
     expressionIds: z.array(z.string()).max(5000).optional(),
-    expressionAction: z.enum(["update", "remove"]).optional(),
+    expressionAction: z.enum(["update", "remove", "enable", "disable"]).optional(),
     effectOperation: z
       .discriminatedUnion("storage", [
+        z.object({ storage: z.literal("transition"), action: z.enum(["update", "remove", "updateTiming"]) }).strict(),
         z
           .object({
             storage: z.literal("animation"),
-            action: z.enum(["update", "remove", "updateTiming"]),
+            action: z.enum(["update", "remove", "updateTiming", "enable", "disable"]),
           })
           .strict(),
         z
           .object({
             storage: z.literal("expression"),
-            action: z.enum(["update", "remove"]),
+            action: z.enum(["update", "remove", "enable", "disable"]),
           })
           .strict(),
       ])
       .optional(),
+    dependentPolicy: z.enum(["reject", "removeDependents"]).optional(),
     animationIds: z.array(z.string()).max(5000).optional(),
     parameters: z
       .object({
@@ -137,30 +145,32 @@ export const intentRequirementSchema = z
           .enum(["x", "y", "rotation", "scaleX", "scaleY", "opacity"])
           .nullable()
           .optional(),
+        lifetime: z.enum(["scene", "transition", "project"]).nullable().optional(),
         seed: z.number().int().min(0).max(2147483647).nullable().optional(),
         fromSceneId: z.string().nullable().default(null),
         toSceneId: z.string().nullable().default(null),
         moveToCenter: z.boolean().nullable().default(null),
-        x: z.number().finite().min(-10000).max(10000).nullable().default(null),
-        y: z.number().finite().min(-10000).max(10000).nullable().default(null),
-        scaleFrom: z.number().positive().max(100).nullable().default(null),
-        scaleTo: z.number().positive().max(100).nullable().default(null),
+        x: coordinateSchema.nullable().default(null),
+        y: coordinateSchema.nullable().default(null),
+        scaleFrom: z.number().nonnegative().max(100000).nullable().default(null),
+        scaleTo: z.number().nonnegative().max(100000).nullable().default(null),
         durationSeconds: z.number().positive().max(3600).nullable(),
-        distance: z.number().positive().max(10000).nullable(),
+        distance: z.number().finite().min(0).max(MAX_FLOAT32).nullable(),
         direction: z
           .enum(["forward", "reverse", "leftToRight", "rightToLeft"])
           .nullable(),
-        amplitude: z.number().min(0).max(10000).nullable(),
+        amplitude: z.number().min(0).nullable(),
         intensity: z
-          .enum(["subtle", "normal", "strong"])
+          .enum(["subtle", "normal", "strong", "veryStrong"])
           .nullable()
           .default(null),
-        frequencyFactor: z.number().positive().max(10).nullable().default(null),
-        frequency: z.number().min(0.01).max(30).nullable(),
-        decay: z.number().min(0).max(30).nullable(),
+        frequencyFactor: z.number().positive().max(10000).nullable().default(null),
+        frequency: z.number().min(0.001).max(10000).nullable(),
+        decay: z.number().min(0).max(10000).nullable(),
+        decayFactor: z.number().min(0.0001).max(10000).nullable().optional(),
         easing: easingSchema.nullable(),
-        durationFactor: z.number().positive().max(10).nullable(),
-        amplitudeFactor: z.number().min(0).max(10).nullable(),
+        durationFactor: z.number().positive().max(10000).nullable(),
+        amplitudeFactor: z.number().min(0).max(10000).nullable(),
         relativeIntensity: z
           .enum([
             "slightlyWeaker",
@@ -175,7 +185,10 @@ export const intentRequirementSchema = z
       .strict(),
     timing: z
       .object({
-        startSeconds: z.number().min(0).max(3600).nullable(),
+        startSeconds: z.number().finite().nullable(),
+        startUnit: z.enum(["frames","seconds"]).optional(),
+        delayUnit: z.enum(["frames","seconds"]).optional(),
+        frameDelay: z.number().int().optional(),
         relation: z.enum([
           "sceneStart",
           "sceneEnd",
@@ -187,6 +200,9 @@ export const intentRequirementSchema = z
         anchorRequirementId: z.string().nullable(),
         reference: temporalReferenceSchema.optional(),
         offsetFrames: z.number().int().optional(),
+        offsetPolicy: z.enum(["slightlyLater"]).optional(),
+        // Endpoint of THIS animation, not the anchor. afterRequirement + start = follows anchor end.
+        align: z.enum(["start", "end"]).optional(),
         delaySeconds: z.number().min(-3600).max(3600),
       })
       .strict(),
@@ -199,6 +215,9 @@ export const intentRequirementSchema = z
 export const intentPlanSchema = z
   .object({
     schemaVersion: z.literal("1.0.0"),
+    timelineExtension: z.enum(["safeExtend", "fixed"]).optional(),
+    timelineConstraintSource: z.string().min(1).max(2000).optional(),
+    skillBindings:z.array(skillBindingSchema).max(50).optional(),
     sourceClauses: z
       .array(
         z

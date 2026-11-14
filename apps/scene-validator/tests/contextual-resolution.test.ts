@@ -350,7 +350,7 @@ test("absence of committed referent is ambiguous; undo/redo and project switch r
     await f.cleanup();
   }
 });
-test("multi-turn production selector execution: one mock call per turn, real selective QA, diagnostic ZIP, no unrelated changes", async () => {
+test("multi-turn production selector execution: local implicit edits, one explicit-global mock call, real selective QA and diagnostic ZIP", async () => {
   const f = await fixture();
   let calls = 0;
   const stop = registerProvider("context-mock", () => ({
@@ -417,7 +417,7 @@ test("multi-turn production selector execution: one mock call per turn, real sel
               : 1),
         );
     }
-    assert.equal(calls, 3);
+    assert.equal(calls, 1, "two implicit parameter edits are local; explicit global selector uses provider");
     const view = await inspectorRun(f.project.root, result!.id);
     assert.ok(
       JSON.stringify(view.targetResolution).includes(

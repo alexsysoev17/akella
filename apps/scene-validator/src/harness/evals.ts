@@ -1,7 +1,8 @@
+import {WorkingRevision,requirementCheckSchema} from '../motion/working-revision.js';
 import { expandInheritance } from "../motion/intent/compiler.js";
 import { evaluateVideoConsistency } from "./video-eval.js";
 import { z } from "zod";
-import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { readFile, mkdir, writeFile,copyFile } from "node:fs/promises";
 import path from "node:path";
 import type { LoadedProject } from "../types.js";
 import type { MotionState } from "../motion/schema.js";
@@ -23,6 +24,7 @@ const evalCaseSchema = z
     scene: z.string(),
     expectedCapabilities: z.array(z.string()),
     checks: z.array(z.string()),
+    expectedResultChecks:z.array(requirementCheckSchema).optional(),
     expectedFailure: z.boolean().optional(),
     expectedStatus: z.enum(["SUCCESS", "PARTIAL_SUCCESS", "FAILED"]).optional(),
     referenceOutput: z.unknown().optional(),
@@ -73,6 +75,7 @@ export async function runAgentEvals(options: {
   model?: string;
   caseIds?: string[];
   config?: Partial<HarnessConfig>;
+  executionRuntime?:"agent"|"legacy";
   fixture: (c: AgentEval) => Promise<EvalFixture>;
   keepFixtures?: boolean;
   verifyVideo?: boolean;
@@ -140,6 +143,7 @@ export async function runAgentEvals(options: {
             () => {},
             {
               config: options.config,
+              executionRuntime:options.executionRuntime??"legacy",
               evalContext: { evalId: c.evalId, datasetVersion },
             },
           );
@@ -168,7 +172,7 @@ export async function runAgentEvals(options: {
               },
               turnBefore.state,
               turnAfter.state,
-              response,
+              response,fixture.project,
             ).map((check) => ({
               ...check,
               name: `turn ${turnNumber}: ${check.name}`,
@@ -181,6 +185,7 @@ export async function runAgentEvals(options: {
       const after = await readMotion(fixture.project);
       const recorded = await readRuns(fixture.project.root);
       runs.push(...recorded);
+      if(options.executionRuntime==='agent'){await mkdir(path.dirname(options.output),{recursive:true});for(const r of recorded){try{await copyFile(path.join(fixture.project.root,'motion/ai',String(r.runId),'agent-runtime.json'),options.output+'.'+c.evalId+'.'+String(r.runId)+'.agent.json');}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}}}
       const checks = c.expectedFailure
         ? [
             {
@@ -193,9 +198,10 @@ export async function runAgentEvals(options: {
             },
           ]
         : [
-            ...evalChecks(c, before.state, after.state, response),
+            ...evalChecks(c, before.state, after.state, response,fixture.project),
             ...turnChecks,
           ];
+      if(c.expectedResultChecks?.some(c=>c.assertion.kind==='renderedDelta')&&!c.expectedFailure){const w=new WorkingRevision(fixture.project,'independent-render-eval',before.state,c.prompt);w.state=after.state;w.checks=c.expectedResultChecks.filter(c=>c.assertion.kind==='renderedDelta');const report=await w.validate();for(const check of report.checks)checks.push({name:'independent native '+check.checkId,status:check.status});}
       const videoQA =
         options.verifyVideo &&
         !c.expectedFailure &&
@@ -272,7 +278,7 @@ export async function runAgentEvals(options: {
                 : response?.reconciliation?.status === "SUCCESS"
                   ? "PASSED_NO_STATE_DIFF"
                   : "NO_CHANGE",
-          visual: response?.requirements?.length
+          visual:options.executionRuntime==="agent"?"NOT_TESTED": response?.requirements?.length
             ? response.requirements.every(
                 (r: { qaResult?: unknown }) =>
                   (r.qaResult as { status?: string })?.status === "PASSED",
@@ -343,13 +349,15 @@ export function evalChecks(
   before: MotionState,
   after: MotionState,
   response?: Awaited<ReturnType<typeof executeMotion>>,
+  project?:LoadedProject,
 ) {
   const checks: { name: string; status: string }[] = [];
   const add = (name: string, ok: boolean) =>
     checks.push({ name, status: ok ? "PASSED" : "FAILED" });
   const own = (a: { targetId: string }) => a.targetId === c.target;
   for (const name of c.checks) {
-    if (name === "qa")
+    if(name==="agentResultChecks"){if(!project||!c.expectedResultChecks?.length)add(name,false);else{const w=new WorkingRevision(project,"eval",before,c.prompt);w.checks=c.expectedResultChecks.filter(c=>c.assertion.kind!=='renderedDelta');w.state=after;for(const check of w.evaluate())add(name+":"+check.checkId,check.status==="PASSED");}}
+    else if (name === "qa")
       add(
         name,
         !!response?.requirements?.length &&

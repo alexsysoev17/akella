@@ -3,12 +3,13 @@ import type { MotionState, Animation } from "../schema.js";
 import type { IntentRequirement, IntentPlan } from "./schema.js";
 import type { RecentAction } from "../contextual-resolution.js";
 import { resolveObjectReference } from "../object-resolution.js";
+import { channels } from "../operations.js";
 export function resolveTemporalReference(
   project: LoadedProject,
   state: MotionState,
   r: IntentRequirement,
   recentActions?: RecentAction[],
-): Animation | undefined {
+): Pick<Animation, "animationId" | "sceneId" | "targetId" | "startFrame" | "durationFrames"> | undefined {
   const ref = r.timing.reference;
   if (!ref) return undefined;
   if (
@@ -57,14 +58,30 @@ export function resolveTemporalReference(
         ? "AMBIGUOUS_TEMPORAL_ANCHOR_OBJECT"
         : "MISSING_TEMPORAL_ANCHOR_OBJECT",
     );
-  const candidates = state.animations.filter(
+  let candidates = state.animations.filter(
     (a) =>
       a.sceneId === found.target!.sceneId &&
       a.targetId === found.target!.sourceNodeId &&
       (!ref.effect || a.effect === ref.effect) &&
       (!ref.animationId || a.animationId === ref.animationId),
   );
-  if (!candidates.length)
+  if (candidates.length > 1 && !ref.animationId && !ref.effect) {
+    const enabled = candidates.filter(a=>a.enabled);
+    if (enabled.length) candidates = enabled;
+    // An object's compound entrance normally has a base movement plus Fade.
+    // Select the unique base role; synchronized X/Y bases share one boundary.
+    const primary = candidates.filter(a=>channels(a).some(c=>c!=="opacity"));
+    if (primary.length) candidates = primary;
+    const written = candidates.flatMap(channels);
+    if (new Set(candidates.map(a=>`${a.startFrame}:${a.durationFrames}`)).size === 1 && new Set(written).size === written.length)
+      candidates = [[...candidates].sort((a,b)=>a.animationId.localeCompare(b.animationId))[0]];
+  }
+  if (!candidates.length) {
+    const transitions = state.objectTransitions?.filter(t => t.logicalObjectId === found.target!.logicalObjectId && (!ref.animationId || t.transitionId === ref.animationId) && (!ref.effect || ref.effect === "objectStateTransition"));
+    if (transitions?.length === 1) {
+      const t = transitions[0]; ref.resolvedAnimationId = t.transitionId;
+      return { animationId: t.transitionId, sceneId: found.target.sceneId, targetId: found.target.sourceNodeId, startFrame: t.startFrame, durationFrames: t.durationFrames };
+    }
     throw new Error(
       "MISSING_TEMPORAL_ANCHOR: " +
         JSON.stringify({
@@ -74,6 +91,7 @@ export function resolveTemporalReference(
           animationId: ref.animationId,
         }),
     );
+  }
   if (candidates.length !== 1)
     throw new Error(
       "AMBIGUOUS_TEMPORAL_ANCHOR: " +
@@ -98,6 +116,6 @@ export function referenceDiagnostics(plan: IntentPlan, state: MotionState) {
       reference: r.timing.reference,
       projectAnimationPresent: state.animations.some(
         (a) => a.animationId === r.timing.reference!.resolvedAnimationId,
-      ),
+      ) || Boolean(state.objectTransitions?.some(t => t.transitionId === r.timing.reference!.resolvedAnimationId)),
     }));
 }

@@ -1,3 +1,4 @@
+import {handoffContract} from "../skills/handoff.js";
 import { textMotionDefaults } from "../techniques/text.js";
 import { semanticBindings } from "../techniques/registry.js";
 import { z } from "zod";
@@ -7,7 +8,7 @@ import {
   objectTransitionSchema,
 } from "../../motion/schema.js";
 import { evaluateAnimation } from "../../motion/engine.js";
-import { expressionSchema, propertySchema } from "../expressions/registry.js";
+import { expressionSchema, propertySchema, expressionLifecycles } from "../expressions/registry.js";
 import { expressionValue } from "../../motion/expressions.js";
 import { easingRegistry } from "../easings/registry.js";
 import { pathReveal } from "../../motion/path-reveal.js";
@@ -34,7 +35,7 @@ export const capabilityRegistry = [
         "total duration includes stagger",
         "matching segmentation settings for compound tracks",
       ],
-      implementationReference: "motion/text-animation.ts",
+      implementationReference: "native/text.ts + native/renderer.ts (browser compatibility: motion/text-animation.ts)",
     },
     evaluator: evaluateAnimation,
     supportedProperties:
@@ -51,18 +52,19 @@ export const capabilityRegistry = [
             "forward/reverse",
             "all paths reveal simultaneously",
           ]
-        : ["validateMotion"],
+        : s.shape.effect.value === "maskReveal" ? ["Native TEXT target only; arbitrary image/group masking is not implemented", "validateMotion"] : ["validateMotion"],
     validation: ["validateMotion", "rendered frames"],
     ...(s.shape.effect.value === "trimPath" ? { renderer: pathReveal } : {}),
   })),
   ...expressionSchema.options.map((s) => ({
     id: s.shape.type.value,
     kind: "expression",
+    temporalLifecycle: expressionLifecycles[s.shape.type.value],
     parameterSchema: z.toJSONSchema(s.shape.parameters),
     evaluator: expressionValue,
     supportedProperties: propertySchema.options,
     constraints: [
-      "finite interval",
+      expressionLifecycles[s.shape.type.value] === "continuous" ? "bounded continuous interval; final project frame allowed" : "finite settling interval; global time may extend beyond the visible output",
       "base source for inertia/loop",
       "no recursive expressions",
     ],
@@ -83,6 +85,7 @@ export const capabilityRegistry = [
   })),
 ];
 const catalog = [
+  {id:handoffContract.id,kind:"skill" as const,supportedObjectTypes:handoffContract.supportedObjects,semanticTechniques:[] as string[],lifecycle:{storage:"skill",create:"skillBindings",update:"existing typed operations",remove:"removeSkillApplication"},parameterSchema:handoffContract.inputParameters,supportedProperties:["text replacement"],constraints:handoffContract.constraints,validation:handoffContract.qa,implementationReference:handoffContract.implementation.execute},
   ...capabilityRegistry.map(({ evaluator, ...entry }) => {
     const { renderer, ...data } = entry as typeof entry & {
       renderer?: unknown;
@@ -97,6 +100,8 @@ const catalog = [
                 data.kind === "animation" ? "addAnimation" : "setExpression",
               update:
                 data.kind === "animation" ? "updateAnimation" : "setExpression",
+              enable: data.kind === "animation" ? "updateAnimation.enabled" : "setExpression.enabled",
+              disable: data.kind === "animation" ? "updateAnimation.enabled" : "setExpression.enabled",
               remove:
                 data.kind === "animation"
                   ? "removeAnimation"
@@ -161,7 +166,8 @@ const catalog = [
     kind: "transition",
     parameterSchema: z.toJSONSchema(objectTransitionSchema),
     description:
-      "One logical object transitions between its immutable source states",
+      "One logical object transitions between immutable Figma reference states, independently of video-block boundaries. Update existing easing/timing through updateAnimation without replacement.",
+    lifecycle: { storage: "transition", remove: undefined, create: "createStateTransition", update: "updateAnimation", semanticSupport: "objectStateTransition; effectOperation storage transition/action update" },
     supportedObjectTypes: [
       "TEXT",
       "RECTANGLE",

@@ -1,3 +1,9 @@
+# Codex Model Selection
+
+Use the model selected by the user in the current chat. Do not automatically
+spawn subagents or route development work to other models. The previous
+delegation authorization is revoked; delegate only on a new explicit request.
+
 # Architecture Documentation Policy
 
 The canonical architecture handoff is `docs/architecture-handoff.md`; source code remains the technical source of truth.

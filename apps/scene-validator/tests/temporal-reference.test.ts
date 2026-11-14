@@ -266,7 +266,9 @@ test("missing/ambiguous references never fall back to another effect; real/self 
     assert.throws(() => plan(f.project, missing), /MISSING_TEMPORAL_ANCHOR/);
     const ambiguous = applyOperations(
       f.state,
-      [{ type: "addAnimation", animation: anim("A2", "a", "fadeIn", 0, 8) }],
+      // Synchronized Slide+Fade now has an objective primary movement role.
+      // Two independent motion intervals remain genuinely ambiguous.
+      [{ type: "addAnimation", animation: anim("A2", "a", "rotation", 3, 8) }],
       f.project,
     );
     assert.throws(
@@ -431,7 +433,8 @@ test("absolute project frames and cross-scene end references use current FPS wit
         absolute.animations.find((a) => a.animationId === "B2")!.startFrame,
         boundary + 15,
       );
-      assert.equal(absolute.timingDependencies?.length, 0);
+      assert.equal(absolute.timingDependencies?.length, 1);
+      assert.equal(absolute.timingDependencies?.[0].offsetFrames,15);
     }
     const b = state.animations.find((a) => a.animationId === "B2")!;
     assert.equal(evaluateAnimation(b, b.startFrame).opacity, 0);

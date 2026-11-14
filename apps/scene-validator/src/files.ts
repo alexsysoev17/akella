@@ -2,6 +2,7 @@ import { hostname } from "node:os";
 import { createHash, randomUUID } from "node:crypto";
 import {
   lstat,
+  stat,
   readdir,
   readFile,
   realpath,
@@ -182,7 +183,7 @@ async function lockOwner(lock: string): Promise<LockOwner | null> {
     return null;
   }
 }
-export async function lockProject(root: string): Promise<() => Promise<void>> {
+export async function lockProject(root: string, options: {neverExpireLiveOwner?:boolean} = {}): Promise<() => Promise<void>> {
   const lock = path.join(root, ".project-lock");
   const owner: LockOwner = {
     token: randomUUID(),
@@ -200,24 +201,48 @@ export async function lockProject(root: string): Promise<() => Promise<void>> {
       if (await exists(lock)) {
         await noSymlinkPath(root, lock);
         const old = await lockOwner(lock);
-        if (!old || old.host !== owner.host)
-          throw new Error(
-            "Project is busy; PROJECT_LOCK_OWNER_UNKNOWN: legacy or foreign lock requires inspection",
-          );
+        const isSameHost = Boolean(
+          old &&
+            (old.host === owner.host ||
+              old.host.split(".")[0] === owner.host.split(".")[0] ||
+              old.host === "localhost" ||
+              owner.host === "localhost"),
+        );
         let dead = false;
-        try {
-          process.kill(old.pid, 0);
-        } catch (error) {
-          dead = (error as NodeJS.ErrnoException).code === "ESRCH";
+        if (old) {
+          try {
+            process.kill(old.pid, 0);
+          } catch (error) {
+            dead = (error as NodeJS.ErrnoException).code === "ESRCH";
+          }
         }
-        if (!dead)
+        const statAgeMs = await stat(lock)
+          .then((s) => Date.now() - s.mtimeMs)
+          .catch(() => 0);
+        const lockAgeMs = old?.createdAt
+          ? Date.now() - new Date(old.createdAt).getTime()
+          : statAgeMs;
+        const canReclaim =
+          dead || (!options.neverExpireLiveOwner && (
+          (isSameHost && lockAgeMs > 60000) ||
+          (!old && statAgeMs > 30000) ||
+          lockAgeMs > 300000));
+        if (!canReclaim) {
+          if (!old || !isSameHost)
+            throw new Error(
+              "Project is busy; PROJECT_LOCK_OWNER_UNKNOWN: legacy or foreign lock requires inspection",
+            );
           throw new Error("PROJECT_BUSY: owner process is still running");
+        }
         // A retained nonempty tombstone makes a second stale reclaimer's rename fail
         // instead of moving a newly acquired lock. Never age-expire a live owner.
         try {
           await rename(
             lock,
-            path.join(root, `.project-lock-recovered-${old.token}`),
+            path.join(
+              root,
+              `.project-lock-recovered-${old?.token ?? randomUUID()}`,
+            ),
           );
         } catch (error) {
           if (

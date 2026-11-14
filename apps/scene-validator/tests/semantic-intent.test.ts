@@ -182,7 +182,7 @@ test("explicit request scope permits fade and scene timing while target repair r
     await f.cleanup();
   }
 });
-test("retiming shifts existing tracks/inertia, compresses shortened scene and preserves identity", async () => {
+test("retiming shifts tracks/inertia without compression; organizational anchors can cross presentation markers", async () => {
   const f = await intentFixture();
   try {
     const doc = await readMotion(f.project);
@@ -215,20 +215,13 @@ test("retiming shifts existing tracks/inertia, compresses shortened scene and pr
       moved.expressions![0].startFrame,
       populated.expressions![0].startFrame - 30,
     );
-    assert.throws(
-      () =>
-        applyOperations(
-          moved,
-          [
-            {
-              type: "retimeScenes",
-              starts: [{ sceneId: "s2", startFrame: 20 }],
-            },
-          ],
-          f.project,
-        ),
-      /order/,
-    );
+    const organized=applyOperations(moved,[{type:"retimeScenes",starts:[{sceneId:"s2",startFrame:20}]}],f.project);
+    assert.equal(organized.sceneAnchors!.find(a=>a.sceneId==="s2")!.startFrame,20);
+    assert.deepEqual(organized.blocks,moved.blocks);
+    assert.deepEqual(organized.settings,moved.settings);
+    assert.equal(moved.animations[0].durationFrames,populated.animations[0].durationFrames);
+    assert.throws(()=>applyOperations(moved,[{type:"retimeScenes",starts:[{sceneId:"s2",startFrame:20},{sceneId:"s2",startFrame:30}]}],f.project),/Duplicate scene timing/);
+
   } finally {
     await f.cleanup();
   }

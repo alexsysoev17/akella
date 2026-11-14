@@ -103,8 +103,8 @@ test("full request budget includes schema/tools and model reserve; tokenizer/pro
   assert.equal(request.maxOutputTokens, 1000);
   assert.equal(
     providerBudget(adapter, { ...request, model: "other" }, 10000, [profile])
-      .profile,
-    null,
+      .profileStatus,
+    "UNKNOWN_MODEL_CONSERVATIVE",
   );
 });
 test("provider health follows registered adapter and missing health stays UNKNOWN without Codex probe", async () => {

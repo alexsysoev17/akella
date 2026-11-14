@@ -7,6 +7,23 @@ import type { IntentPlan, IntentRequirement } from "./intent/schema.js";
 import { objectsIn } from "./context.js";
 import { objectMentionRanges } from "./object-aliases.js";
 import { resolveObjectReference } from "./object-resolution.js";
+import { channels } from "./operations.js";
+/** A single synchronized action may span independent property tracks (e.g. slide + fade).
+ * Distinct intervals or competing writers still require an explicit effect selection. */
+export function isSynchronizedTrackSet(tracks: MotionState["animations"]): boolean {
+  if (!tracks.length) return false;
+  const first = tracks[0], written = new Set<string>();
+  return tracks.every(track => {
+    if (track.sceneId !== first.sceneId || track.targetId !== first.targetId ||
+        track.startFrame !== first.startFrame ||
+        track.durationFrames !== first.durationFrames ||
+        track.enabled !== first.enabled) return false;
+    const properties = channels(track);
+    if (!properties.length || properties.some(property => written.has(property))) return false;
+    properties.forEach(property => written.add(property));
+    return true;
+  });
+}
 export interface RecentAction {
   actionId: string;
   editIds: string[];
@@ -70,7 +87,7 @@ export function recentSuccessfulActions(
           ? [op.expression.expressionId]
           : op.type === "scaleExpressionParameter"
             ? [op.expressionId]
-            : [];
+            : op.type==='setMotionRule' ? (entry.after.expressions??[]).filter(e=>entry.after.ruleMaterializations?.some(m=>m.ruleId===op.rule.ruleId&&m.id===e.expressionId)).map(e=>e.expressionId) : [];
       for (const id of ids) {
         const e = entry.after.expressions?.find((e) => e.expressionId === id);
         if (!e) continue;
@@ -176,6 +193,7 @@ export function resolveIntentSelectors(
     objects = project.inspection.document.scenes.flatMap(objectsIn);
   const replacements = new Map<string, string[]>();
   for (const r of plan.requirements) {
+    if (r.motionAction === "freezeProject") { expanded.push(r); continue; }
     const trackMembers = resolveTrackLifecycle(
       project,
       state,
@@ -205,6 +223,25 @@ export function resolveIntentSelectors(
     if (selector && !selector.property && r.parameters.property)
       selector = { ...selector, property: r.parameters.property };
     const requestedSelector = r.selector;
+    if (selector?.type === "explicitObject" && !selector.targetIds?.length &&
+        (r.target.sourceNodeId || r.target.logicalObjectId || r.target.name)) {
+      const found = resolveObjectReference(project, state, {
+        referenceText: r.sourceText, name: r.target.name, sourceNodeId: r.target.sourceNodeId,
+        logicalObjectId: r.target.logicalObjectId, sceneId: selector.sceneId ?? r.sceneId,
+        selectedObjectId: context.selectedObjectId, activeSceneId: context.activeSceneId,
+        techniques: r.techniques, preferExisting: true,
+      });
+      if (!found.target) {
+        r.kind = "unsupported";
+        r.unresolvedReason = found.status;
+        expanded.push(r);
+        onResolution?.({ event: "EXPLICIT_SELECTOR_BINDING", requirementId: r.requirementId, ...found });
+        continue;
+      }
+      selector = { ...selector, sceneId: found.target.sceneId, targetIds: [found.target.sourceNodeId] };
+      onResolution?.({ event: "EXPLICIT_SELECTOR_BINDING", requirementId: r.requirementId, ...found });
+    }
+
     if (
       selector &&
       explicitProjectFilter(r.sourceText) &&
@@ -284,7 +321,7 @@ export function resolveIntentSelectors(
     }
     let matches = (state.expressions ?? []).filter(
       (e) =>
-        e.enabled &&
+        (e.enabled || r.effectOperation?.storage === "expression") &&
         r.techniques.includes(
           e.type as IntentRequirement["techniques"][number],
         ) &&
@@ -522,6 +559,13 @@ function resolveTrackLifecycle(
   onResolution?: (v: unknown) => void,
 ): IntentRequirement[] | false {
   const kinds = new Set(r.techniques.map((t) => semanticBindings[t]));
+  // A logical state transition is a canonical animation entry, not a node animation track.
+  if (kinds.has("transition") && !kinds.has("animation")) {
+    if (r.effectOperation?.action === "update" && r.effectOperation.storage === "animation")
+      r.effectOperation = { storage: "transition", action: "update" };
+    if (r.effectOperation?.storage === "transition") return false;
+  }
+
   if (r.effectOperation?.storage === "expression") {
     if (kinds.has("animation")) {
       r.kind = "unsupported";
@@ -711,7 +755,9 @@ function resolveTrackLifecycle(
     )
       return fail("AMBIGUOUS_EFFECT_MATCH");
     if (!r.techniques.length) {
-      if (tracks.length !== 1) return fail("AMBIGUOUS_EFFECT_MATCH");
+      if (tracks.length !== 1 &&
+          !(r.effectOperation?.action === "updateTiming" && isSynchronizedTrackSet(tracks)))
+        return fail("AMBIGUOUS_EFFECT_MATCH");
       if (
         !(tracks[0].effect in semanticBindings) &&
         r.effectOperation?.action !== "updateTiming"
@@ -719,10 +765,10 @@ function resolveTrackLifecycle(
         return fail("UNSUPPORTED_EFFECT_OPERATION");
     }
     const member = structuredClone(r);
-    if (!member.techniques.length && tracks[0].effect in semanticBindings)
-      member.techniques = [
-        tracks[0].effect as IntentRequirement["techniques"][number],
-      ];
+    if (!member.techniques.length)
+      member.techniques = [...new Set(tracks
+        .filter(track => track.effect in semanticBindings)
+        .map(track => track.effect as IntentRequirement["techniques"][number]))];
     member.kind = "editAnimation";
     member.unresolvedReason = null;
     member.sceneId = target.sceneId;
